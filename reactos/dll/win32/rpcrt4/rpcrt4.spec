@@ -124,7 +124,7 @@
 124 stub NDRcopy
 125 stdcall NdrAllocate(ptr long)
 126 varargs NdrAsyncClientCall(ptr ptr)
-127 stub NdrAsyncServerCall
+127 stdcall NdrAsyncServerCall(ptr)
 128 stdcall NdrByteCountPointerBufferSize(ptr ptr ptr)
 129 stdcall NdrByteCountPointerFree(ptr ptr ptr)
 130 stdcall NdrByteCountPointerMarshall(ptr ptr ptr)
@@ -345,7 +345,7 @@
 345 stdcall RpcBindingInqObject(ptr ptr)
 346 stub RpcBindingInqOption
 347 stdcall RpcBindingReset(ptr)
-348 stub RpcBindingServerFromClient
+348 stdcall RpcBindingServerFromClient(ptr ptr)
 349 stdcall RpcBindingSetAuthInfoA(ptr str long long ptr long)
 350 stdcall RpcBindingSetAuthInfoExA(ptr str long long ptr long ptr)
 351 stdcall RpcBindingSetAuthInfoExW(ptr wstr long long ptr long ptr)

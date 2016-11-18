@@ -60,7 +60,7 @@ UrbCompletion(
 }
 
 NTSTATUS
-FowardUrbToRootHub(
+ForwardUrbToRootHub(
     PDEVICE_OBJECT RootHubDeviceObject,
     IN ULONG IoControlCode,
     PIRP Irp,
@@ -300,7 +300,7 @@ USBHUB_PdoHandleInternalDeviceControl(
             //
             // Send the request to RootHub
             //
-            Status = FowardUrbToRootHub(RootHubDeviceObject, IOCTL_INTERNAL_USB_SUBMIT_URB, Irp, Urb, NULL);
+            Status = ForwardUrbToRootHub(RootHubDeviceObject, IOCTL_INTERNAL_USB_SUBMIT_URB, Irp, Urb, NULL);
             return Status;
         }
         //
@@ -703,7 +703,7 @@ USBHUB_PdoHandlePnp(
             }
 
             /* allocate device relations */
-            DeviceRelation = (PDEVICE_RELATIONS)ExAllocatePool(NonPagedPool, sizeof(DEVICE_RELATIONS));
+            DeviceRelation = (PDEVICE_RELATIONS)ExAllocatePool(PagedPool, sizeof(DEVICE_RELATIONS));
             if (!DeviceRelation)
             {
                 /* no memory */
@@ -717,7 +717,7 @@ USBHUB_PdoHandlePnp(
             ObReferenceObject(DeviceRelation->Objects[0]);
 
             /* store result */
-            Irp->IoStatus.Information = (ULONG_PTR)DeviceRelation;
+            Information = (ULONG_PTR)DeviceRelation;
             Status = STATUS_SUCCESS;
             break;
         }

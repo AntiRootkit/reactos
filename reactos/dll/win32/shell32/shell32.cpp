@@ -196,6 +196,7 @@ BEGIN_OBJECT_MAP(ObjectMap)
     OBJECT_ENTRY(CLSID_ShellDesktop, CDesktopFolder)
     OBJECT_ENTRY(CLSID_ShellItem, CShellItem)
     OBJECT_ENTRY(CLSID_ShellLink, CShellLink)
+    OBJECT_ENTRY(CLSID_Shell, CShellDispatch)
     OBJECT_ENTRY(CLSID_DragDropHelper, CDropTargetHelper)
     OBJECT_ENTRY(CLSID_ControlPanel, CControlPanelFolder)
     OBJECT_ENTRY(CLSID_MyDocuments, CMyDocsFolder)
@@ -203,6 +204,7 @@ BEGIN_OBJECT_MAP(ObjectMap)
     OBJECT_ENTRY(CLSID_FontsFolderShortcut, CFontsFolder)
     OBJECT_ENTRY(CLSID_Printers, CPrinterFolder)
     OBJECT_ENTRY(CLSID_AdminFolderShortcut, CAdminToolsFolder)
+    OBJECT_ENTRY(CLSID_ShellFldSetExt, CFolderOptions)
     OBJECT_ENTRY(CLSID_RecycleBin, CRecycleBin)
     OBJECT_ENTRY(CLSID_OpenWithMenu, COpenWithMenu)
     OBJECT_ENTRY(CLSID_NewMenu, CNewMenu)
@@ -291,7 +293,7 @@ STDAPI_(BOOL) DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID fImpLoad)
     if (dwReason == DLL_PROCESS_ATTACH)
     {
         shell32_hInstance = hInstance;
-        gModule.Init(ObjectMap, hInstance, NULL);
+        gModule.Init(ObjectMap, hInstance, &LIBID_Shell32);
 
         DisableThreadLibraryCalls (hInstance);
 
@@ -349,7 +351,7 @@ STDAPI DllRegisterServer()
 {
     HRESULT hr;
 
-    hr = gModule.DllRegisterServer(FALSE);
+    hr = gModule.DllRegisterServer(TRUE);
     if (FAILED(hr))
         return hr;
 
@@ -371,7 +373,7 @@ STDAPI DllUnregisterServer()
 {
     HRESULT hr;
 
-    hr = gModule.DllUnregisterServer(FALSE);
+    hr = gModule.DllUnregisterServer(TRUE);
     if (FAILED(hr))
         return hr;
 

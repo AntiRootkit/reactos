@@ -479,6 +479,7 @@ static MUI_ENTRY itITRepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY itITComputerPageEntries[] =
 {
     {
@@ -832,24 +833,24 @@ static MUI_ENTRY itITSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY itITConfirmDeletePartitionEntries[] =
+static MUI_ENTRY itITConfirmDeleteSystemPartitionEntries[] =
 {
     {
-        4,
+        4, 
         3,
-        " ReactOS " KERNEL_VERSION_STR " Setup ",
+        " Installazione di ReactOS " KERNEL_VERSION_STR " ",
         TEXT_STYLE_UNDERLINE
     },
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "You have chosen to delete the system partition.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -873,7 +874,7 @@ static MUI_ENTRY itITConfirmDeletePartitionEntries[] =
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "programs on the partition, or when you are sure you want to delete them.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1308,7 +1309,7 @@ static MUI_ENTRY itITDeletePartitionEntries[] =
     {
         11,
         19,
-		"ATTENZIONE: Tutti i dati di questa partizione saranno persi!!",
+        "ATTENZIONE: Tutti i dati di questa partizione saranno persi!!",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1374,7 +1375,7 @@ MUI_ERROR itITErrorEntries[] =
         "\n"
         "  \x07  Premere INVIO per continuare il setup.\n"
         "  \x07  Premere F3 per uscire.",
-        "F3= Uscire INVIO = Continuare"
+        "F3 = Uscire INVIO = Continuare"
     },
     {
         //ERROR_NO_HDD
@@ -1440,7 +1441,7 @@ MUI_ERROR itITErrorEntries[] =
         "\n"
         "  \x07  Premere F3 per uscire dal Setup.\n"
         "  \x07  Premere INVIO per continuare.",
-        "F3= Uscire  INVIO = Continuare"
+        "F3 = Uscire  INVIO = Continuare"
     },
     {
         //ERROR_NEW_PARTITION,
@@ -1610,7 +1611,6 @@ MUI_ERROR itITErrorEntries[] =
     }
 };
 
-
 MUI_PAGE itITPages[] =
 {
     {
@@ -1655,7 +1655,7 @@ MUI_PAGE itITPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        itITConfirmDeletePartitionEntries
+        itITConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1753,8 +1753,10 @@ MUI_STRING itITStrings[] =
     "Setup installer… ReactOS sulla partitione"},
     {STRING_CHECKINGPART,
     "Setup sta controllando la partizione selezionata."},
+    {STRING_CONTINUE,
+    "INVIO = Continua"},
     {STRING_QUITCONTINUE,
-    "F3= Esci  INVIO = Continua"},
+    "F3 = Esci  INVIO = Continua"},
     {STRING_REBOOTCOMPUTER,
     "INVIO = Riavvia il computer"},
     {STRING_TXTSETUPFAILED,
@@ -1800,7 +1802,7 @@ MUI_STRING itITStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  Harddisk %lu  (Port=%hu, Bus=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  Tipo %lu    %I64u %s"},
+    "   %c%c  Tipo 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "su %I64u %s  Harddisk %lu  (Port=%hu, Bus=%hu, Id=%hu) su %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1808,7 +1810,7 @@ MUI_STRING itITStrings[] =
     {STRING_HDINFOPARTZEROED,
     "Harddisk %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  Tipo %lu    %I64u %s"},
+    "%c%c  Tipo 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "su Harddisk %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,
@@ -1823,6 +1825,8 @@ MUI_STRING itITStrings[] =
     "    %sSpazio non partizionato%s             %6lu %s"},
     {STRING_MAXSIZE,
     "MB (max. %lu MB)"},
+    {STRING_EXTENDED_PARTITION,
+    "Partizione estesa"},
     {STRING_UNFORMATTED,
     "Nuova (Non formattata)"},
     {STRING_FORMATUNUSED,

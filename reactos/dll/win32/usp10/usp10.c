@@ -26,6 +26,7 @@
 
 #include "usp10_internal.h"
 
+#include <math.h>
 #include <winuser.h>
 #include <winreg.h>
 
@@ -288,7 +289,7 @@ static const scriptRange scriptRanges[] = {
     { SCRIPT_UNDEFINED,  0, 0, 0}
 };
 
-/* the must be in order so that the index matches the Script value */
+/* this must be in order so that the index matches the Script value */
 const scriptData scriptInformation[] = {
     {{SCRIPT_UNDEFINED, 0, 0, 0, 0, 0, 0, { 0,0,0,0,0,0,0,0,0,0,0}},
      {LANG_NEUTRAL, 0, 0, 0, 0, ANSI_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -318,7 +319,7 @@ const scriptData scriptInformation[] = {
      {LANG_ARABIC, 0, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 1, 1, 0},
      MS_MAKE_TAG('a','r','a','b'),
      {'M','i','c','r','o','s','o','f','t',' ','S','a','n','s',' ','S','e','r','i','f',0}},
-    {{Script_Arabic_Numeric, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
+    {{Script_Arabic_Numeric, 0, 1, 0, 0, 0, 0, { 2,0,0,0,0,0,0,0,0,0,0}},
      {LANG_ARABIC, 1, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 1, 0, 0},
      MS_MAKE_TAG('a','r','a','b'),
      {'M','i','c','r','o','s','o','f','t',' ','S','a','n','s',' ','S','e','r','i','f',0}},
@@ -330,10 +331,10 @@ const scriptData scriptInformation[] = {
      {LANG_SYRIAC, 0, 1, 0, 0, DEFAULT_CHARSET, 0, 0, 0, 0, 1, 0, 0, 1, 0},
      MS_MAKE_TAG('s','y','r','c'),
      {'E','s','t','r','a','n','g','e','l','o',' ','E','d','e','s','s','a',0}},
-    {{Script_Persian, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
+    {{Script_Persian, 0, 1, 0, 0, 0, 0, { 2,0,0,0,0,0,0,0,0,0,0}},
      {LANG_PERSIAN, 1, 1, 0, 0, ARABIC_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-     MS_MAKE_TAG('s','y','r','c'),
-     {'E','s','t','r','a','n','g','e','l','o',' ','E','d','e','s','s','a',0}},
+     MS_MAKE_TAG('a','r','a','b'),
+     {'M','i','c','r','o','s','o','f','t',' ','S','a','n','s',' ','S','e','r','i','f',0}},
     {{Script_Thaana, 1, 1, 0, 0, 0, 0, { 1,0,0,0,0,0,0,0,0,0,0}},
      {LANG_DIVEHI, 0, 1, 0, 1, DEFAULT_CHARSET, 0, 0, 0, 0, 0, 0, 0, 0, 0},
      MS_MAKE_TAG('t','h','a','a'),
@@ -708,11 +709,6 @@ static inline void *heap_alloc_zero(SIZE_T size)
     return HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, size);
 }
 
-static inline void *heap_realloc_zero(LPVOID mem, SIZE_T size)
-{
-    return HeapReAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, mem, size);
-}
-
 static inline BOOL heap_free(LPVOID mem)
 {
     return HeapFree(GetProcessHeap(), 0, mem);
@@ -734,7 +730,7 @@ static inline BOOL set_cache_font_properties(const HDC hdc, ScriptCache *sc)
         static const WCHAR chars[4] = {0x0020, 0x200B, 0xF71B, 0x0640};
         /* U+0020: numeric space
            U+200B: zero width space
-           U+F71B: unknow char found by black box testing
+           U+F71B: unknown char found by black box testing
            U+0640: kashida */
         WORD gi[4];
 
@@ -866,7 +862,7 @@ static HRESULT init_script_cache(const HDC hdc, SCRIPT_CACHE *psc)
 
 static WCHAR mirror_char( WCHAR ch )
 {
-    extern const WCHAR wine_mirror_map[];
+    extern const WCHAR wine_mirror_map[] DECLSPEC_HIDDEN;
     return ch + wine_mirror_map[wine_mirror_map[ch >> 8] + (ch & 0xff)];
 }
 
@@ -884,7 +880,7 @@ static inline DWORD decode_surrogate_pair(LPCWSTR str, INT index, INT end)
 static WORD get_char_script( LPCWSTR str, INT index, INT end, INT *consumed)
 {
     static const WCHAR latin_punc[] = {'#','$','&','\'',',',';','<','>','?','@','\\','^','_','`','{','|','}','~', 0x00a0, 0};
-    WORD type = 0;
+    WORD type = 0, type2 = 0;
     DWORD ch;
     int i;
 
@@ -901,7 +897,7 @@ static WORD get_char_script( LPCWSTR str, INT index, INT end, INT *consumed)
     if (str[index] == 0x2212 || str[index] == 0x2044)
         return Script_Punctuation;
 
-    /* Currency Symboles by Unicode point */
+    /* Currency Symbols by Unicode point */
     switch (str[index])
     {
         case 0x09f2:
@@ -914,6 +910,7 @@ static WORD get_char_script( LPCWSTR str, INT index, INT end, INT *consumed)
     }
 
     GetStringTypeW(CT_CTYPE1, &str[index], 1, &type);
+    GetStringTypeW(CT_CTYPE2, &str[index], 1, &type2);
 
     if (type == 0)
         return SCRIPT_UNDEFINED;
@@ -935,7 +932,7 @@ static WORD get_char_script( LPCWSTR str, INT index, INT end, INT *consumed)
 
         if (ch >= scriptRanges[i].rangeFirst && ch <= scriptRanges[i].rangeLast)
         {
-            if (scriptRanges[i].numericScript && type & C1_DIGIT)
+            if (scriptRanges[i].numericScript && (type & C1_DIGIT || type2 == C2_ARABICNUMBER))
                 return scriptRanges[i].numericScript;
             if (scriptRanges[i].punctScript && type & C1_PUNCT)
                 return scriptRanges[i].punctScript;
@@ -1246,6 +1243,10 @@ static inline WORD base_indic(WORD script)
     };
 }
 
+static BOOL script_is_numeric(WORD script)
+{
+    return scriptInformation[script].props.fNumeric;
+}
 
 static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
                 int cMaxItems, const SCRIPT_CONTROL *psControl,
@@ -1254,6 +1255,7 @@ static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
 {
 
 #define Numeric_space 0x0020
+#define ZWSP 0x200B
 #define ZWNJ 0x200C
 #define ZWJ  0x200D
 
@@ -1261,9 +1263,12 @@ static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
     int   New_Script = -1;
     int   i;
     WORD  *levels = NULL;
+    WORD  *layout_levels = NULL;
+    WORD  *overrides = NULL;
     WORD  *strength = NULL;
     WORD  *scripts = NULL;
     WORD  baselevel = 0;
+    WORD  baselayout = 0;
     BOOL  new_run;
     WORD  last_indic = -1;
     WORD layoutRTL = 0;
@@ -1300,9 +1305,15 @@ static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
         else if (is_indic(scripts[i]))
             last_indic = base_indic(scripts[i]);
 
-        /* Some unicode points (Zero Width Space U+200B -
-           Right-to-Left Mark U+200F) will force us into bidi mode */
-        if (!forceLevels && pwcInChars[i] >= 0x200B && pwcInChars[i] <= 0x200F)
+        /* Some unicode points :
+           (Zero Width Space U+200B - Right-to-Left Mark U+200F)
+           (Left Right Embed U+202A - Left Right Override U+202D)
+           (Left Right Isolate U+2066 - Pop Directional Isolate U+2069)
+           will force us into bidi mode */
+        if (!forceLevels && ((pwcInChars[i] >= 0x200B && pwcInChars[i] <= 0x200F) ||
+            (pwcInChars[i] >= 0x202A && pwcInChars[i] <= 0x202E) ||
+            (pwcInChars[i] >= 0x2066 && pwcInChars[i] <= 0x2069)))
+
             forceLevels = TRUE;
 
         /* Diacritical marks merge with other scripts */
@@ -1366,20 +1377,56 @@ static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
         if (!levels)
             goto nomemory;
 
-        BIDI_DetermineLevels(pwcInChars, cInChars, psState, psControl, levels);
+        overrides = heap_alloc_zero(cInChars * sizeof(WORD));
+        if (!overrides)
+            goto nomemory;
+
+        layout_levels = heap_alloc_zero(cInChars * sizeof(WORD));
+        if (!layout_levels)
+            goto nomemory;
+
+        if (psState->fOverrideDirection)
+        {
+            if (!forceLevels)
+            {
+                SCRIPT_STATE s = *psState;
+                s.fOverrideDirection = FALSE;
+                BIDI_DetermineLevels(pwcInChars, cInChars, &s, psControl, layout_levels, overrides);
+                if (odd(layout_levels[0]))
+                    forceLevels = TRUE;
+                else for (i = 0; i < cInChars; i++)
+                    if (layout_levels[i]!=layout_levels[0])
+                    {
+                        forceLevels = TRUE;
+                        break;
+                    }
+            }
+
+            BIDI_DetermineLevels(pwcInChars, cInChars, psState, psControl, levels, overrides);
+        }
+        else
+        {
+            BIDI_DetermineLevels(pwcInChars, cInChars, psState, psControl, levels, overrides);
+            memcpy(layout_levels, levels, cInChars * sizeof(WORD));
+        }
         baselevel = levels[0];
+        baselayout = layout_levels[0];
         for (i = 0; i < cInChars; i++)
             if (levels[i]!=levels[0])
                 break;
         if (i >= cInChars && !odd(baselevel) && !odd(psState->uBidiLevel) && !forceLevels)
         {
             heap_free(levels);
+            heap_free(overrides);
+            heap_free(layout_levels);
+            overrides = NULL;
             levels = NULL;
+            layout_levels = NULL;
         }
         else
         {
-            BOOL inNumber = FALSE;
             static const WCHAR math_punc[] = {'#','$','%','+',',','-','.','/',':',0x2212, 0x2044, 0x00a0,0};
+            static const WCHAR repeatable_math_punc[] = {'#','$','%','+','-','/',0x2212, 0x2044,0};
 
             strength = heap_alloc_zero(cInChars * sizeof(WORD));
             if (!strength)
@@ -1394,21 +1441,49 @@ static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
                     strength[i] = BIDI_STRONG;
                 }
 
+            /* Math punctuation bordered on both sides by numbers can be
+               merged into the number */
             for (i = 0; i < cInChars; i++)
             {
-                /* Script_Numeric and select puncuation at level 0 get bumped to level 2 */
-                if ((levels[i] == 0 || (odd(psState->uBidiLevel) && levels[i] == psState->uBidiLevel+1)) && inNumber && strchrW(math_punc,pwcInChars[i]))
+                if (i > 0 && i < cInChars-1 &&
+                    script_is_numeric(scripts[i-1]) &&
+                    strchrW(math_punc, pwcInChars[i]))
                 {
-                    scripts[i] = Script_Numeric;
+                    if (script_is_numeric(scripts[i+1]))
+                    {
+                        scripts[i] = scripts[i+1];
+                        levels[i] = levels[i-1];
+                        strength[i] = strength[i-1];
+                        i++;
+                    }
+                    else if (strchrW(repeatable_math_punc, pwcInChars[i]))
+                    {
+                        int j;
+                        for (j = i+1; j < cInChars; j++)
+                        {
+                            if (script_is_numeric(scripts[j]))
+                            {
+                                for(;i<j; i++)
+                                {
+                                    scripts[i] = scripts[j];
+                                    levels[i] = levels[i-1];
+                                    strength[i] = strength[i-1];
+                                }
+                            }
+                            else if (pwcInChars[i] != pwcInChars[j]) break;
+                        }
+                    }
+                }
+            }
+
+            for (i = 0; i < cInChars; i++)
+            {
+                /* Numerics at level 0 get bumped to level 2 */
+                if (!overrides[i] && (levels[i] == 0 || (odd(psState->uBidiLevel)
+                        && levels[i] == psState->uBidiLevel + 1)) && script_is_numeric(scripts[i]))
+                {
                     levels[i] = 2;
                 }
-                else if ((levels[i] == 0 || (odd(psState->uBidiLevel) && levels[i] == psState->uBidiLevel+1)) && scripts[i] == Script_Numeric)
-                {
-                    levels[i] = 2;
-                    inNumber = TRUE;
-                }
-                else
-                    inNumber = FALSE;
 
                 /* Joiners get merged preferencially right */
                 if (i > 0 && (pwcInChars[i] == ZWJ || pwcInChars[i] == ZWNJ))
@@ -1491,19 +1566,29 @@ static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
     if (levels)
     {
         if (strength[cnt] == BIDI_STRONG)
-            layoutRTL = (odd(levels[cnt]))?1:0;
+            layoutRTL = odd(layout_levels[cnt]);
         else
-            layoutRTL = (psState->uBidiLevel || odd(levels[cnt]))?1:0;
+            layoutRTL = (psState->uBidiLevel || odd(layout_levels[cnt]));
+        if (overrides)
+            pItems[index].a.s.fOverrideDirection = (overrides[cnt] != 0);
         pItems[index].a.fRTL = odd(levels[cnt]);
-        pItems[index].a.fLayoutRTL = layoutRTL;
+        if (script_is_numeric(pItems[index].a.eScript))
+            pItems[index].a.fLayoutRTL = layoutRTL;
+        else
+            pItems[index].a.fLayoutRTL = pItems[index].a.fRTL;
         pItems[index].a.s.uBidiLevel = levels[cnt];
     }
-    else if (!pItems[index].a.s.uBidiLevel)
+    else if (!pItems[index].a.s.uBidiLevel || (overrides && overrides[cnt]))
     {
-        layoutRTL = (odd(baselevel))?1:0;
+        if (pItems[index].a.s.uBidiLevel != baselevel)
+            pItems[index].a.s.fOverrideDirection = TRUE;
+        layoutRTL = odd(baselayout);
         pItems[index].a.s.uBidiLevel = baselevel;
-        pItems[index].a.fLayoutRTL = odd(baselevel);
         pItems[index].a.fRTL = odd(baselevel);
+        if (script_is_numeric(pItems[index].a.eScript))
+            pItems[index].a.fLayoutRTL = odd(baselayout);
+        else
+            pItems[index].a.fLayoutRTL = pItems[index].a.fRTL;
     }
 
     TRACE("New_Level=%i New_Strength=%i New_Script=%d, eScript=%d index=%d cnt=%d iCharPos=%d\n",
@@ -1554,8 +1639,9 @@ static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
 
         if (!new_run && strength && str == BIDI_STRONG)
         {
-            layoutRTL = odd(levels[cnt])?1:0;
-            pItems[index].a.fLayoutRTL = layoutRTL;
+            layoutRTL = odd(layout_levels[cnt]);
+            if (script_is_numeric(pItems[index].a.eScript))
+                pItems[index].a.fLayoutRTL = layoutRTL;
         }
 
         if (new_run)
@@ -1577,19 +1663,29 @@ static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
                 pScriptTags[index] = scriptInformation[New_Script].scriptTag;
             if (levels)
             {
-                if (levels[cnt] == 0)
+                if (overrides)
+                    pItems[index].a.s.fOverrideDirection = (overrides[cnt] != 0);
+                if (layout_levels[cnt] == 0)
                     layoutRTL = 0;
                 else
-                    layoutRTL = (layoutRTL || odd(levels[cnt]))?1:0;
+                    layoutRTL = (layoutRTL || odd(layout_levels[cnt]));
                 pItems[index].a.fRTL = odd(levels[cnt]);
-                pItems[index].a.fLayoutRTL = layoutRTL;
+                if (script_is_numeric(pItems[index].a.eScript))
+                    pItems[index].a.fLayoutRTL = layoutRTL;
+                else
+                    pItems[index].a.fLayoutRTL = pItems[index].a.fRTL;
                 pItems[index].a.s.uBidiLevel = levels[cnt];
             }
-            else if (!pItems[index].a.s.uBidiLevel)
+            else if (!pItems[index].a.s.uBidiLevel || (overrides && overrides[cnt]))
             {
+                if (pItems[index].a.s.uBidiLevel != baselevel)
+                    pItems[index].a.s.fOverrideDirection = TRUE;
                 pItems[index].a.s.uBidiLevel = baselevel;
-                pItems[index].a.fLayoutRTL = layoutRTL;
                 pItems[index].a.fRTL = odd(baselevel);
+                if (script_is_numeric(pItems[index].a.eScript))
+                    pItems[index].a.fLayoutRTL = layoutRTL;
+                else
+                    pItems[index].a.fLayoutRTL = pItems[index].a.fRTL;
             }
 
             TRACE("index=%d cnt=%d iCharPos=%d\n", index, cnt, pItems[index].iCharPos);
@@ -1613,6 +1709,8 @@ static HRESULT _ItemizeInternal(const WCHAR *pwcInChars, int cInChars,
     res = S_OK;
 nomemory:
     heap_free(levels);
+    heap_free(overrides);
+    heap_free(layout_levels);
     heap_free(strength);
     heap_free(scripts);
     return res;
@@ -2185,8 +2283,8 @@ HRESULT WINAPI ScriptStringOut(SCRIPT_STRING_ANALYSIS ssa,
     int   item;
     HRESULT hr;
 
-    TRACE("(%p,%d,%d,0x%1x,%p,%d,%d,%d)\n",
-         ssa, iX, iY, uOptions, prc, iMinSel, iMaxSel, fDisabled);
+    TRACE("(%p,%d,%d,0x%08x,%s,%d,%d,%d)\n",
+         ssa, iX, iY, uOptions, wine_dbgstr_rect(prc), iMinSel, iMaxSel, fDisabled);
 
     if (!(analysis = ssa)) return E_INVALIDARG;
     if (!(analysis->dwFlags & SSA_GLYPHS)) return E_INVALIDARG;
@@ -2567,9 +2665,100 @@ HRESULT WINAPI ScriptCPtoX(int iCP,
     return S_OK;
 }
 
+/* Count the number of characters in a cluster and its starting index*/
+static inline BOOL get_cluster_data(const WORD *pwLogClust, int cChars, int cluster_index, int *cluster_size, int *start_index)
+{
+    int size = 0;
+    int i;
+
+    for (i = 0; i < cChars; i++)
+    {
+        if (pwLogClust[i] == cluster_index)
+        {
+            if (!size && start_index)
+            {
+                *start_index = i;
+                if (!cluster_size)
+                    return TRUE;
+            }
+            size++;
+        }
+        else if (size) break;
+    }
+    if (cluster_size)
+        *cluster_size = size;
+
+    return (size > 0);
+}
+
+/*
+    To handle multi-glyph clusters we need to find all the glyphs that are
+    represented in the cluster. This involves finding the glyph whose
+    index is the cluster index as well as whose glyph indices are greater than
+    our cluster index but not part of a new cluster.
+
+    Then we sum all those glyphs' advances.
+*/
+static inline int get_cluster_advance(const int* piAdvance,
+                                      const SCRIPT_VISATTR *psva,
+                                      const WORD *pwLogClust, int cGlyphs,
+                                      int cChars, int cluster, int direction)
+{
+    int glyph_start;
+    int glyph_end;
+    int i, advance;
+
+    if (direction > 0)
+        i = 0;
+    else
+        i = (cChars - 1);
+
+    for (glyph_start = -1, glyph_end = -1; i < cChars && i >= 0 && (glyph_start < 0 || glyph_end < 0); i+=direction)
+    {
+        if (glyph_start < 0 && pwLogClust[i] != cluster) continue;
+        if (pwLogClust[i] == cluster && glyph_start < 0) glyph_start = pwLogClust[i];
+        if (glyph_start >= 0 && glyph_end < 0 && pwLogClust[i] != cluster) glyph_end = pwLogClust[i];
+    }
+    if (glyph_end < 0)
+    {
+        if (direction > 0)
+            glyph_end = cGlyphs;
+        else
+        {
+            /* Don't fully understand multi-glyph reversed clusters yet,
+             * do they occur for real or just in our test? */
+            FIXME("multi-glyph reversed clusters found\n");
+            glyph_end = glyph_start + 1;
+        }
+    }
+
+    /* Check for fClusterStart, finding this generally would mean a malformed set of data */
+    for (i = glyph_start+1; i< glyph_end; i++)
+    {
+        if (psva[i].fClusterStart)
+        {
+            glyph_end = i;
+            break;
+        }
+    }
+
+    for (advance = 0, i = glyph_start; i < glyph_end; i++)
+        advance += piAdvance[i];
+
+    return advance;
+}
+
+
 /***********************************************************************
  *      ScriptXtoCP (USP10.@)
  *
+ * Basic algorithm :
+ *  Use piAdvance to find the cluster we are looking at.
+ *  Find the character that is the first character of the cluster.
+ *  That is our base piCP.
+ *  If the script snaps to cluster boundaries (Hebrew, Indic, Thai) then we
+ *  are good. Otherwise if the cluster is larger than 1 glyph we need to
+ *  determine how far through the cluster to advance the cursor.
  */
 HRESULT WINAPI ScriptXtoCP(int iX,
                            int cChars,
@@ -2581,16 +2770,11 @@ HRESULT WINAPI ScriptXtoCP(int iX,
                            int *piCP,
                            int *piTrailing)
 {
-    int item;
-    float iPosX;
-    float iLastPosX;
-    int iSpecial = -1;
-    int iCluster = -1;
-    int clust_size = 1;
-    int cjump = 0;
-    int advance;
-    float special_size = 0.0;
     int direction = 1;
+    int iPosX;
+    int i;
+    int glyph_index, cluster_index;
+    int cluster_size;
 
     TRACE("(%d,%d,%d,%p,%p,%p,%p,%p,%p)\n",
           iX, cChars, cGlyphs, pwLogClust, psva, piAdvance,
@@ -2599,128 +2783,156 @@ HRESULT WINAPI ScriptXtoCP(int iX,
     if (psa->fRTL && ! psa->fLogicalOrder)
         direction = -1;
 
-    if (direction<0)
+    /* Handle an iX < 0 */
+    if (iX < 0)
     {
-        int max_clust = pwLogClust[0];
-
-        if (iX < 0)
+        if (direction < 0)
         {
             *piCP = cChars;
             *piTrailing = 0;
-            return S_OK;
         }
+        else
+        {
+            *piCP = -1;
+            *piTrailing = 1;
+        }
+        return S_OK;
+    }
 
-        for (item=0; item < cChars; item++)
-            if (pwLogClust[item] > max_clust)
+    /* Looking for non-reversed clusters in a reversed string */
+    if (direction < 0)
+    {
+        int max_clust = pwLogClust[0];
+        for (i=0; i< cChars; i++)
+            if (pwLogClust[i] > max_clust)
             {
-                ERR("We do not handle non reversed clusters properly\n");
+                FIXME("We do not handle non reversed clusters properly\n");
                 break;
             }
     }
 
-    if (iX < 0)
+    /* find the glyph_index based in iX */
+    if (direction > 0)
     {
-        *piCP = -1;
-        *piTrailing = 1;
-        return S_OK;
+        for (glyph_index = -1, iPosX = iX; iPosX >=0 && glyph_index < cGlyphs; iPosX -= piAdvance[glyph_index+1], glyph_index++)
+            ;
+    }
+    else
+    {
+        for (glyph_index = -1, iPosX = iX; iPosX > 0 && glyph_index < cGlyphs; iPosX -= piAdvance[glyph_index+1], glyph_index++)
+            ;
     }
 
-    iPosX = iLastPosX = 0;
-    if (direction > 0)
-        item = 0;
-    else
-        item = cChars - 1;
-    for (; iPosX <= iX && item < cChars && item >= 0; item+=direction)
+    TRACE("iPosX %i ->  glyph_index %i (%i)\n", iPosX, glyph_index, cGlyphs);
+
+    *piTrailing = 0;
+    if (glyph_index >= 0 && glyph_index < cGlyphs)
     {
-        iLastPosX = iPosX;
-        if (iSpecial == -1 &&
-             (iCluster == -1 ||
-              (iCluster != -1 &&
-                 ((direction > 0 && iCluster+clust_size <= item) ||
-                  (direction < 0 && iCluster-clust_size >= item))
-              )
-             )
-            )
+        /* find the cluster */
+        if (direction > 0 )
+            for (i = 0, cluster_index = pwLogClust[0]; i < cChars && pwLogClust[i] <= glyph_index; cluster_index=pwLogClust[i++])
+                ;
+        else
+            for (i = 0, cluster_index = pwLogClust[0]; i < cChars && pwLogClust[i] >= glyph_index; cluster_index=pwLogClust[i++])
+                ;
+
+        TRACE("cluster_index %i\n", cluster_index);
+
+        if (direction < 0 && iPosX >= 0 && glyph_index != cluster_index)
         {
-            int check;
-            int clust = pwLogClust[item];
+            /* We are off the end of the string */
+            *piCP = -1;
+            *piTrailing = 1;
+            return S_OK;
+        }
 
-            iCluster = -1;
-            cjump = 0;
-            clust_size = get_cluster_size(pwLogClust, cChars, item, direction,
-                                          &iCluster, &check);
-            advance = get_glyph_cluster_advance(piAdvance, psva, pwLogClust, cGlyphs, cChars, clust, direction);
+        get_cluster_data(pwLogClust, cChars, cluster_index, &cluster_size, &i);
 
-            if (check >= cChars && direction > 0)
+        TRACE("first char index %i\n",i);
+        if (scriptInformation[psa->eScript].props.fNeedsCaretInfo)
+        {
+            /* Check trailing */
+            if (glyph_index != cluster_index ||
+                (direction > 0 && abs(iPosX) <= (piAdvance[glyph_index] / 2)) ||
+                (direction < 0 && abs(iPosX) >= (piAdvance[glyph_index] / 2)))
+                *piTrailing = cluster_size;
+        }
+        else
+        {
+            if (cluster_size > 1)
             {
-                int glyph;
-                for (glyph = clust; glyph < cGlyphs; glyph++)
-                    special_size += get_glyph_cluster_advance(piAdvance, psva, pwLogClust, cGlyphs, cChars, glyph, direction);
-                iSpecial = item;
-                special_size /= (cChars - item);
-                iPosX += special_size;
-            }
-            else
-            {
-                if (scriptInformation[psa->eScript].props.fNeedsCaretInfo)
+                /* Be part way through the glyph cluster based on size and position */
+                int cluster_advance = get_cluster_advance(piAdvance, psva, pwLogClust, cGlyphs, cChars, cluster_index, direction);
+                double cluster_part_width = cluster_advance / (float)cluster_size;
+                double adv;
+                int part_index;
+
+                /* back up to the beginning of the cluster */
+                for (adv = iPosX, part_index = cluster_index; part_index <= glyph_index; part_index++)
+                    adv += piAdvance[part_index];
+                if (adv > iX) adv = iX;
+
+                TRACE("Multi-char cluster, no snap\n");
+                TRACE("cluster size %i, pre-cluster iPosX %f\n",cluster_size, adv);
+                TRACE("advance %i divides into %f per char\n", cluster_advance, cluster_part_width);
+                if (direction > 0)
                 {
-                    if (!cjump)
-                        iPosX += advance;
-                    cjump++;
+                    for (part_index = 0; adv >= 0; adv-=cluster_part_width, part_index++)
+                        ;
+                    if (part_index) part_index--;
                 }
                 else
-                    iPosX += advance / (float)clust_size;
-            }
-        }
-        else if (iSpecial != -1)
-            iPosX += special_size;
-        else /* (iCluster != -1) */
-        {
-            int adv = get_glyph_cluster_advance(piAdvance, psva, pwLogClust, cGlyphs, cChars, pwLogClust[iCluster], direction);
-            if (scriptInformation[psa->eScript].props.fNeedsCaretInfo)
-            {
-                if (!cjump)
-                    iPosX += adv;
-                cjump++;
+                {
+                    for (part_index = 0; adv > 0; adv-=cluster_part_width, part_index++)
+                        ;
+                    if (part_index > cluster_size)
+                    {
+                        adv += cluster_part_width;
+                        part_index=cluster_size;
+                    }
+                }
+
+                TRACE("base_char %i part_index %i, leftover advance %f\n",i, part_index, adv);
+
+                if (direction > 0)
+                    i += part_index;
+                else
+                    i += (cluster_size - part_index);
+
+                /* Check trailing */
+                if ((direction > 0 && fabs(adv) <= (cluster_part_width / 2.0)) ||
+                    (direction < 0 && adv && fabs(adv) >= (cluster_part_width / 2.0)))
+                    *piTrailing = 1;
             }
             else
-                iPosX += adv / (float)clust_size;
+            {
+                /* Check trailing */
+                if ((direction > 0 && abs(iPosX) <= (piAdvance[glyph_index] / 2)) ||
+                    (direction < 0 && abs(iPosX) >= (piAdvance[glyph_index] / 2)))
+                    *piTrailing = 1;
+            }
         }
-    }
-
-    if (direction > 0)
-    {
-        if (iPosX > iX)
-            item--;
-        if (item < cChars && ((iPosX - iLastPosX) / 2.0) + iX >= iPosX)
-        {
-            if (scriptInformation[psa->eScript].props.fNeedsCaretInfo && clust_size > 1)
-                item+=(clust_size-1);
-            *piTrailing = 1;
-        }
-        else
-            *piTrailing = 0;
     }
     else
     {
-        if (iX == iLastPosX)
-            item++;
-        if (iX >= iLastPosX && iX <= iPosX)
-            item++;
+        TRACE("Point falls outside of string\n");
+        if (glyph_index < 0)
+            i = cChars-1;
+        else /* (glyph_index >= cGlyphs) */
+            i = cChars;
 
-        if (iLastPosX == iX)
-            *piTrailing = 0;
-        else if (item < 0 || ((iLastPosX - iPosX) / 2.0) + iX <= iLastPosX)
+        /* If not snaping in the reverse direction (such as Hebrew) Then 0
+           point flow to the next character */
+        if (direction < 0)
         {
-            if (scriptInformation[psa->eScript].props.fNeedsCaretInfo && clust_size > 1)
-                item-=(clust_size-1);
-            *piTrailing = 1;
+            if (!scriptInformation[psa->eScript].props.fNeedsCaretInfo && abs(iPosX) == piAdvance[glyph_index])
+                i++;
+            else
+                *piTrailing = 1;
         }
-        else
-            *piTrailing = 0;
     }
 
-    *piCP = item;
+    *piCP = i;
 
     TRACE("*piCP=%d\n", *piCP);
     TRACE("*piTrailing=%d\n", *piTrailing);
@@ -2734,7 +2946,7 @@ HRESULT WINAPI ScriptXtoCP(int iX,
  *
  *  PARAMS
  *   chars [I] Array of characters.
- *   sa    [I] String analysis.
+ *   sa    [I] Script analysis.
  *   la    [I] Array of logical attribute structures.
  *
  *  RETURNS
@@ -2859,10 +3071,6 @@ HRESULT WINAPI ScriptShapeOpenType( HDC hdc, SCRIPT_CACHE *psc,
     ((ScriptCache *)*psc)->userScript = tagScript;
     ((ScriptCache *)*psc)->userLang = tagLangSys;
 
-    /* set fNoGlyphIndex non truetype/opentype fonts */
-    if (psa && !psa->fNoGlyphIndex && !((ScriptCache *)*psc)->sfnt)
-        psa->fNoGlyphIndex = TRUE;
-
     /* Initialize a SCRIPT_VISATTR and LogClust for each char in this run */
     for (i = 0; i < cChars; i++)
     {
@@ -2882,7 +3090,7 @@ HRESULT WINAPI ScriptShapeOpenType( HDC hdc, SCRIPT_CACHE *psc,
         pwLogClust[i] = idx;
     }
 
-    if (psa && !psa->fNoGlyphIndex)
+    if (psa && !psa->fNoGlyphIndex && ((ScriptCache *)*psc)->sfnt)
     {
         WCHAR *rChars;
         if ((hr = SHAPE_CheckFontForRequiredFeatures(hdc, (ScriptCache *)*psc, psa)) != S_OK) return hr;
@@ -2958,13 +3166,26 @@ HRESULT WINAPI ScriptShapeOpenType( HDC hdc, SCRIPT_CACHE *psc,
             if (rtl) idx = cChars - 1 - i;
             pwOutGlyphs[i] = pwcChars[idx];
 
+            if (!psa)
+                continue;
+
             /* overwrite some basic control glyphs to blank */
-            if (psa && psa->eScript == Script_Control &&
-                pwcChars[idx] < ((ScriptCache *)*psc)->tm.tmFirstChar)
+            if (psa->fNoGlyphIndex)
+            {
+                if (pwcChars[idx] == ZWSP || pwcChars[idx] == ZWNJ || pwcChars[idx] == ZWJ)
+                {
+                    pwOutGlyphs[i] = 0x20;
+                    pOutGlyphProps[i].sva.fZeroWidth = 1;
+                }
+            }
+            else if (psa->eScript == Script_Control)
             {
                 if (pwcChars[idx] == 0x0009 || pwcChars[idx] == 0x000A ||
                     pwcChars[idx] == 0x000D || pwcChars[idx] >= 0x001C)
+                {
                     pwOutGlyphs[i] = ((ScriptCache *)*psc)->sfp.wgBlank;
+                    pOutGlyphProps[i].sva.fZeroWidth = 1;
+                }
             }
         }
     }
@@ -3038,7 +3259,7 @@ HRESULT WINAPI ScriptShape(HDC hdc, SCRIPT_CACHE *psc, const WCHAR *pwcChars,
  * PARAMS
  *  hdc       [I]   Device context.
  *  psc       [I/O] Opaque pointer to a script cache.
- *  psa       [I/O] String analysis.
+ *  psa       [I/O] Script analysis.
  *  tagScript   [I]   The OpenType tag for the Script
  *  tagLangSys  [I]   The OpenType tag for the Language
  *  rcRangeChars[I]   Array of Character counts in each range
@@ -3095,7 +3316,11 @@ HRESULT WINAPI ScriptPlaceOpenType( HDC hdc, SCRIPT_CACHE *psc, SCRIPT_ANALYSIS 
     for (i = 0; i < cGlyphs; i++)
     {
         ABC abc;
-        if (!get_cache_glyph_widths(psc, pwGlyphs[i], &abc))
+        if (pGlyphProps[i].sva.fZeroWidth)
+        {
+            abc.abcA = abc.abcB = abc.abcC = 0;
+        }
+        else if (!get_cache_glyph_widths(psc, pwGlyphs[i], &abc))
         {
             if (!hdc) return E_PENDING;
             if ((get_cache_pitch_family(psc) & TMPF_TRUETYPE) && !psa->fNoGlyphIndex)
@@ -3258,8 +3483,8 @@ HRESULT WINAPI ScriptTextOut(const HDC hdc, SCRIPT_CACHE *psc, int x, int y, UIN
     INT *lpDx;
     WORD *reordered_glyphs = (WORD *)pwGlyphs;
 
-    TRACE("(%p, %p, %d, %d, %04x, %p, %p, %p, %d, %p, %d, %p, %p, %p)\n",
-         hdc, psc, x, y, fuOptions, lprc, psa, pwcReserved, iReserved, pwGlyphs, cGlyphs,
+    TRACE("(%p, %p, %d, %d, %08x, %s, %p, %p, %d, %p, %d, %p, %p, %p)\n",
+         hdc, psc, x, y, fuOptions, wine_dbgstr_rect(lprc), psa, pwcReserved, iReserved, pwGlyphs, cGlyphs,
          piAdvance, piJustify, pGoffset);
 
     if (!hdc || !psc) return E_INVALIDARG;
@@ -3420,7 +3645,6 @@ HRESULT WINAPI ScriptLayout(int runs, const BYTE *level, int *vistolog, int *log
     if (!indexs)
         return E_OUTOFMEMORY;
 
-
     if (vistolog)
     {
         for( ich = 0; ich < runs; ich++)
@@ -3429,10 +3653,8 @@ HRESULT WINAPI ScriptLayout(int runs, const BYTE *level, int *vistolog, int *log
         ich = 0;
         while (ich < runs)
             ich += BIDI_ReorderV2lLevel(0, indexs+ich, level+ich, runs - ich, FALSE);
-        for (ich = 0; ich < runs; ich++)
-            vistolog[ich] = indexs[ich];
+        memcpy(vistolog, indexs, runs * sizeof(*vistolog));
     }
-
 
     if (logtovis)
     {
@@ -3442,8 +3664,7 @@ HRESULT WINAPI ScriptLayout(int runs, const BYTE *level, int *vistolog, int *log
         ich = 0;
         while (ich < runs)
             ich += BIDI_ReorderL2vLevel(0, indexs+ich, level+ich, runs - ich, FALSE);
-        for (ich = 0; ich < runs; ich++)
-            logtovis[ich] = indexs[ich];
+        memcpy(logtovis, indexs, runs * sizeof(*logtovis));
     }
     heap_free(indexs);
 

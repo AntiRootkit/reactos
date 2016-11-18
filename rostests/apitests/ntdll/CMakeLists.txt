@@ -5,6 +5,7 @@ list(APPEND SOURCE
     NtApphelpCacheControl.c
     NtContinue.c
     NtCreateFile.c
+    NtCreateKey.c
     NtCreateThread.c
     NtDeleteKey.c
     NtFreeVirtualMemory.c
@@ -13,18 +14,24 @@ list(APPEND SOURCE
     NtOpenProcessToken.c
     NtOpenThreadToken.c
     NtProtectVirtualMemory.c
+    NtQueryInformationProcess.c
     NtQueryKey.c
     NtQuerySystemEnvironmentValue.c
     NtQueryVolumeInformationFile.c
+    NtReadFile.c
     NtSaveKey.c
+    NtSetValueKey.c
+    NtWriteFile.c
     RtlAllocateHeap.c
     RtlBitmap.c
     RtlCopyMappedMemory.c
+    RtlDeleteAce.c
     RtlDetermineDosPathNameType.c
     RtlDoesFileExists.c
     RtlDosPathNameToNtPathName_U.c
     RtlDosSearchPath_U.c
     RtlDosSearchPath_Ustr.c
+    RtlFirstFreeAce.c
     RtlGenerate8dot3Name.c
     RtlGetFullPathName_U.c
     RtlGetFullPathName_Ustr.c
@@ -33,8 +40,10 @@ list(APPEND SOURCE
     RtlGetLongestNtPathLength.c
     RtlImageRvaToVa.c
     RtlInitializeBitMap.c
+    RtlIsNameLegalDOS8Dot3.c
     RtlMemoryStream.c
     RtlReAllocateHeap.c
+    RtlUpcaseUnicodeStringToCountedOemString.c
     StackOverflow.c
     SystemInfo.c
     Timer.c

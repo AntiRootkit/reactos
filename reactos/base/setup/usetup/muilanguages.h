@@ -520,7 +520,7 @@ const MUI_LANGUAGE LanguageList[] =
     {L"00000405", L"1250", L"852", L"10029", L"Czech", L"75", csCZPages, csCZErrorEntries, csCZStrings, LatinFonts, csCZLayouts },
 #endif
 #ifdef LANGUAGE_DA_DK
-    {L"00000406", L"1252", L"850", L"10000", L"Danish", L"61", enUSPages, enUSErrorEntries, enUSStrings, LatinFonts, daDKLayouts },
+    {L"00000406", L"1252", L"850", L"10000", L"Danish", L"61", daDKPages, daDKErrorEntries, daDKStrings, LatinFonts, daDKLayouts },
 #endif
 #ifdef LANGUAGE_DV_MV
     {L"00000465", L"0", L"1", L"2", L"Dhivehi (Maldives)", L"165", enUSPages, enUSErrorEntries, enUSStrings, UnicodeFonts, dvMVLayouts },
@@ -709,7 +709,7 @@ const MUI_LANGUAGE LanguageList[] =
     {L"00000446", L"0", L"1", L"2", L"Punjabi (India)", L"113", enUSPages, enUSErrorEntries, enUSStrings, UnicodeFonts, paINLayouts },
 #endif
 #ifdef LANGUAGE_RO_RO
-    {L"00000418", L"1250", L"852", L"10029", L"Romanian", L"200", roROPages, roROErrorEntries, roROStrings, LatinFonts, roROLayouts },
+    {L"00000418", L"28606", L"28606", L"10029", L"Romanian", L"200", roROPages, roROErrorEntries, roROStrings, LatinFonts, roROLayouts },
 #endif
 #ifdef LANGUAGE_RM_CH
     {L"00000417", L"1252", L"850", L"10000", L"Romansh", L"223", enUSPages, enUSErrorEntries, enUSStrings, LatinFonts, rmCHLayouts },

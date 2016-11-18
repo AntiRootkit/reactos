@@ -2,19 +2,13 @@
  * PROJECT:         ReactOS DiskPart
  * LICENSE:         GPL - See COPYING in the top level directory
  * FILE:            base/system/diskpart/partlist.c
- * PURPOSE:         Manages all the partitions of the OS in an interactive way
+ * PURPOSE:         Manages all the partitions of the OS in an interactive way.
  * PROGRAMMERS:     Eric Kohl
  */
 
 /* INCLUDES *******************************************************************/
 
 #include "diskpart.h"
-
-#include <stdlib.h>
-#include <winbase.h>
-#include <wincon.h>
-#include <winuser.h>
-
 #include <ntddscsi.h>
 
 #define NDEBUG
@@ -604,7 +598,7 @@ ScanForUnpartitionedDiskSpace(
     {
         LastUnusedSectorCount = AlignDown(DiskEntry->SectorCount.QuadPart - (LastStartSector + LastSectorCount), DiskEntry->SectorAlignment);
 
-        if (LastUnusedSectorCount >= (ULONGLONG)DiskEntry->CylinderAlignment)
+        if (LastUnusedSectorCount >= (ULONGLONG)DiskEntry->SectorAlignment)
         {
             DPRINT1("Unpartitioned disk space: %I64u sectors\n", LastUnusedSectorCount);
 
@@ -1015,12 +1009,12 @@ AddDiskToList(
         }
         else
         {
-            DPRINT1("No matching aligment found! Partiton 1 starts at %I64u\n", DiskEntry->LayoutBuffer->PartitionEntry[0].StartingOffset.QuadPart);
+            DPRINT1("No matching alignment found! Partition 1 starts at %I64u\n", DiskEntry->LayoutBuffer->PartitionEntry[0].StartingOffset.QuadPart);
         }
     }
     else
     {
-        DPRINT1("No valid partiton table found! Use megabyte (%lu Sectors) alignment!\n", (1024 * 1024) / DiskEntry->BytesPerSector);
+        DPRINT1("No valid partition table found! Use megabyte (%lu Sectors) alignment!\n", (1024 * 1024) / DiskEntry->BytesPerSector);
     }
 
 
@@ -1036,18 +1030,12 @@ AddDiskToList(
     {
         for (i = 0; i < 4; i++)
         {
-            AddPartitionToDisk(DiskNumber,
-                               DiskEntry,
-                               i,
-                               FALSE);
+            AddPartitionToDisk(DiskNumber, DiskEntry, i, FALSE);
         }
 
         for (i = 4; i < DiskEntry->LayoutBuffer->PartitionCount; i += 4)
         {
-            AddPartitionToDisk(DiskNumber,
-                               DiskEntry,
-                               i,
-                               TRUE);
+            AddPartitionToDisk(DiskNumber, DiskEntry, i, TRUE);
         }
     }
 
@@ -1114,8 +1102,7 @@ CreatePartitionList(VOID)
                             FILE_SYNCHRONOUS_IO_NONALERT);
         if (NT_SUCCESS(Status))
         {
-            AddDiskToList(FileHandle,
-                          DiskNumber);
+            AddDiskToList(FileHandle, DiskNumber);
 
             NtClose(FileHandle);
         }
@@ -1177,7 +1164,7 @@ DestroyPartitionList(VOID)
     }
 
     /* Release the bios disk info */
-    while(!IsListEmpty(&BiosDiskListHead))
+    while (!IsListEmpty(&BiosDiskListHead))
     {
         Entry = RemoveHeadList(&BiosDiskListHead);
         BiosDiskEntry = CONTAINING_RECORD(Entry, BIOSDISKENTRY, ListEntry);

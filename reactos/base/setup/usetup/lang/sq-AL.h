@@ -476,6 +476,7 @@ static MUI_ENTRY sqALRepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY sqALComputerPageEntries[] =
 {
     {
@@ -829,24 +830,24 @@ static MUI_ENTRY sqALSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY sqALConfirmDeletePartitionEntries[] =
+static MUI_ENTRY sqALConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
         3,
-        " ReactOS " KERNEL_VERSION_STR " Setup ",
+        " Instalimi i ReactOS " KERNEL_VERSION_STR " ",
         TEXT_STYLE_UNDERLINE
     },
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "You have chosen to delete the system partition.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -870,7 +871,7 @@ static MUI_ENTRY sqALConfirmDeletePartitionEntries[] =
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "programs on the partition, or when you are sure you want to delete them.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1437,7 +1438,7 @@ MUI_ERROR sqALErrorEntries[] =
           "\n"
           "  \x07  Kliko F3 p‰r daljen nga instalimi.\n"
           "  \x07  Kliko ENTER p‰r t‰ vazhduar.",
-          "F3= Dil  ENTER = Vazhdo"
+          "F3 = Dil  ENTER = Vazhdo"
     },
     {
         //ERROR_NEW_PARTITION,
@@ -1651,7 +1652,7 @@ MUI_PAGE sqALPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        sqALConfirmDeletePartitionEntries
+        sqALConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1749,8 +1750,10 @@ MUI_STRING sqALStrings[] =
     "Instalimi i ReactOS ne Particion"},
     {STRING_CHECKINGPART,
     "Instalimi tani ‰sht‰ duke kontrolluar particionin e p‰rzgjedhur."},
+    {STRING_CONTINUE,
+    "ENTER = Vazhdo"},
     {STRING_QUITCONTINUE,
-    "F3= Dil  ENTER = Vazhdo"},
+    "F3 = Dil  ENTER = Vazhdo"},
     {STRING_REBOOTCOMPUTER,
     "ENTER = Ristarto kompjuterin"},
     {STRING_TXTSETUPFAILED,
@@ -1796,7 +1799,7 @@ MUI_STRING sqALStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  Harddisku %lu  (Port=%hu, Bus=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  Tipi %lu    %I64u %s"},
+    "   %c%c  Tipi 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "on %I64u %s  Harddisku %lu  (Port=%hu, Bus=%hu, Id=%hu) on %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1804,7 +1807,7 @@ MUI_STRING sqALStrings[] =
     {STRING_HDINFOPARTZEROED,
     "Harddisku %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  Tipi %lu    %I64u %s"},
+    "%c%c  Tipi 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "on Harddisku %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

@@ -3,6 +3,7 @@
 #include <winbase.h>
 #include <wingdi.h>
 #include <winreg.h>
+#include <shellapi.h>
 
 #define HTMLHELP_PATH(_pt)  TEXT("%systemroot%\\Help\\calc.chm::") TEXT(_pt)
 
@@ -434,7 +435,7 @@ KeyboardHookProc(int nCode, WPARAM wParam, LPARAM lParam)
 static void update_lcd_display(HWND hwnd)
 {
     /*
-     * muliply size of calc.buffer by 2 because it may
+     * multiply size of calc.buffer by 2 because it may
      * happen that separator is used between each digit.
      * Also added little additional space for dot and '\0'.
      */
@@ -1338,8 +1339,14 @@ static INT_PTR CALLBACK DlgMainProc(HWND hWnd, UINT msg, WPARAM wp, LPARAM lp)
             SetFocus(GetDlgItem(hWnd, IDC_BUTTON_FOCUS));
         switch (LOWORD(wp)) {
         case IDM_HELP_ABOUT:
-            DialogBox(calc.hInstance,MAKEINTRESOURCE(IDD_DIALOG_ABOUT), hWnd, AboutDlgProc);
+        {
+            TCHAR infotitle[100];
+            TCHAR infotext[200];
+            LoadString(calc.hInstance, IDS_CALC_NAME, infotitle, SIZEOF(infotitle));
+            LoadString(calc.hInstance, IDS_AUTHOR, infotext, SIZEOF(infotext));
+            ShellAbout(hWnd, infotitle, infotext, (HICON)LoadIcon(calc.hInstance, MAKEINTRESOURCE(IDI_CALC_BIG)));
             return TRUE;
+        }
         case IDM_HELP_HELP:
 #ifndef DISABLE_HTMLHELP_SUPPORT
             HtmlHelp(hWnd, HTMLHELP_PATH("/general_information.htm"), HH_DISPLAY_TOPIC, (DWORD_PTR)NULL);

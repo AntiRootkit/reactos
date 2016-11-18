@@ -1035,6 +1035,9 @@ CreateDeviceIds(
         {
             // construct instance id buffer
             Index = swprintf(Buffer, L"%04d&%s", HubDeviceExtension->InstanceCount, SerialBuffer) + 1;
+
+            ExFreePool(SerialBuffer);
+
             UsbChildExtension->usInstanceId.Buffer = (LPWSTR)ExAllocatePool(NonPagedPool, Index * sizeof(WCHAR));
             if (UsbChildExtension->usInstanceId.Buffer == NULL)
             {
@@ -1047,7 +1050,6 @@ CreateDeviceIds(
             //
             RtlCopyMemory(UsbChildExtension->usInstanceId.Buffer, Buffer, Index * sizeof(WCHAR));
             UsbChildExtension->usInstanceId.Length = UsbChildExtension->usInstanceId.MaximumLength = Index * sizeof(WCHAR);
-            ExFreePool(SerialBuffer);
 
             DPRINT("Usb InstanceId %wZ InstanceCount %x\n", &UsbChildExtension->usInstanceId, HubDeviceExtension->InstanceCount);
             return Status;
@@ -1356,6 +1358,21 @@ Cleanup:
     //
     if (UsbChildExtension->FullConfigDesc)
         ExFreePool(UsbChildExtension->FullConfigDesc);
+
+    //
+    // Free ID buffers if they were allocated in CreateDeviceIds()
+    //
+    if (UsbChildExtension->usCompatibleIds.Buffer)
+        ExFreePool(UsbChildExtension->usCompatibleIds.Buffer);
+
+    if (UsbChildExtension->usDeviceId.Buffer)
+        ExFreePool(UsbChildExtension->usDeviceId.Buffer);
+
+    if (UsbChildExtension->usHardwareIds.Buffer)
+        ExFreePool(UsbChildExtension->usHardwareIds.Buffer);
+
+    if (UsbChildExtension->usInstanceId.Buffer)
+        ExFreePool(UsbChildExtension->usInstanceId.Buffer);
 
     //
     // Delete the device object

@@ -47,7 +47,7 @@
 
 #include "usp10_internal.h"
 
-extern const unsigned short bidi_bracket_table[];
+extern const unsigned short bidi_bracket_table[] DECLSPEC_HIDDEN;
 
 WINE_DEFAULT_DEBUG_CHANNEL(bidi);
 
@@ -258,7 +258,7 @@ typedef struct tagStackItem {
 
 #define valid_level(x) (x <= MAX_DEPTH && overflow_isolate_count == 0 && overflow_embedding_count == 0)
 
-static void resolveExplicit(int level, WORD *pclass, WORD *poutLevel, int count)
+static void resolveExplicit(int level, WORD *pclass, WORD *poutLevel, WORD *poutOverrides, int count, BOOL initialOverride)
 {
     /* X1 */
     int overflow_isolate_count = 0;
@@ -273,8 +273,18 @@ static void resolveExplicit(int level, WORD *pclass, WORD *poutLevel, int count)
     stack[stack_top].override = NI;
     stack[stack_top].isolate = FALSE;
 
+    if (initialOverride)
+    {
+        if (odd(level))
+            push_stack(level, R, FALSE);
+        else
+            push_stack(level, L, FALSE);
+    }
+
     for (i = 0; i < count; i++)
     {
+        poutOverrides[i] = stack[stack_top].override;
+
         /* X2 */
         if (pclass[i] == RLE)
         {
@@ -950,6 +960,11 @@ static void resolveResolved(unsigned baselevel, const WORD * pcls, WORD *plevel,
                 plevel[j--] = baselevel;
             plevel[i] = baselevel;
         }
+        else if (pcls[i] == LRE || pcls[i] == RLE || pcls[i] == LRO || pcls[i] == RLO ||
+                 pcls[i] == PDF || pcls[i] == BN)
+        {
+            plevel[i] = i ? plevel[i - 1] : baselevel;
+        }
         if (i == eos &&
             (pcls[i] == WS || pcls[i] == FSI || pcls[i] == LRI || pcls[i] == RLI ||
              pcls[i] == PDI || pcls[i] == LRE || pcls[i] == RLE || pcls[i] == LRO ||
@@ -1106,7 +1121,8 @@ BOOL BIDI_DetermineLevels(
                 INT uCount,     /* [in] Number of WCHARs in string. */
                 const SCRIPT_STATE *s,
                 const SCRIPT_CONTROL *c,
-                WORD *lpOutLevels /* [out] final string levels */
+                WORD *lpOutLevels, /* [out] final string levels */
+                WORD *lpOutOverrides /* [out] final string overrides */
     )
 {
     WORD *chartype;
@@ -1128,8 +1144,10 @@ BOOL BIDI_DetermineLevels(
     classify(lpString, chartype, uCount, c);
     if (TRACE_ON(bidi)) dump_types("Start ", chartype, 0, uCount);
 
+    memset(lpOutOverrides, 0, sizeof(WORD) * uCount);
+
     /* resolve explicit */
-    resolveExplicit(baselevel, chartype, lpOutLevels, uCount);
+    resolveExplicit(baselevel, chartype, lpOutLevels, lpOutOverrides, uCount, s->fOverrideDirection);
     if (TRACE_ON(bidi)) dump_types("After Explicit", chartype, 0, uCount);
 
     /* X10/BD13: Computer Isolating runs */

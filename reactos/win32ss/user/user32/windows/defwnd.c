@@ -16,8 +16,6 @@
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(user32);
 
-LRESULT DefWndNCHitTest(HWND hWnd, POINT Point);
-
 /* GLOBALS *******************************************************************/
 
 /* FUNCTIONS *****************************************************************/
@@ -86,57 +84,6 @@ DefSetText(HWND hWnd, PCWSTR String, BOOL Ansi)
   Ret = NtUserDefSetText(hWnd, (String ? &lsString : NULL));
 
   return Ret;
-}
-
-void
-UserGetInsideRectNC(PWND Wnd, RECT *rect)
-{
-    ULONG Style;
-    ULONG ExStyle;
-
-    Style = Wnd->style;
-    ExStyle = Wnd->ExStyle;
-
-    rect->top    = rect->left = 0;
-    rect->right  = Wnd->rcWindow.right - Wnd->rcWindow.left;
-    rect->bottom = Wnd->rcWindow.bottom - Wnd->rcWindow.top;
-
-    if (Style & WS_ICONIC)
-    {
-        return;
-    }
-
-    /* Remove frame from rectangle */
-    if (UserHasThickFrameStyle(Style, ExStyle ))
-    {
-        InflateRect(rect, -GetSystemMetrics(SM_CXFRAME), -GetSystemMetrics(SM_CYFRAME));
-    }
-    else
-    {
-        if (UserHasDlgFrameStyle(Style, ExStyle ))
-        {
-            InflateRect(rect, -GetSystemMetrics(SM_CXDLGFRAME), -GetSystemMetrics(SM_CYDLGFRAME));
-            /* FIXME: this isn't in NC_AdjustRect? why not? */
-            if (ExStyle & WS_EX_DLGMODALFRAME)
-	            InflateRect( rect, -1, 0 );
-        }
-        else
-        {
-            if (UserHasThinFrameStyle(Style, ExStyle))
-            {
-                InflateRect(rect, -GetSystemMetrics(SM_CXBORDER), -GetSystemMetrics(SM_CYBORDER));
-            }
-        }
-    }
-    /* We have additional border information if the window
-     * is a child (but not an MDI child) */
-    if ((Style & WS_CHILD) && !(ExStyle & WS_EX_MDICHILD))
-    {
-       if (ExStyle & WS_EX_CLIENTEDGE)
-          InflateRect (rect, -GetSystemMetrics(SM_CXEDGE), -GetSystemMetrics(SM_CYEDGE));
-       if (ExStyle & WS_EX_STATICEDGE)
-          InflateRect (rect, -GetSystemMetrics(SM_CXBORDER), -GetSystemMetrics(SM_CYBORDER));
-    }
 }
 
 HWND FASTCALL
@@ -216,6 +163,11 @@ DefWndHandleSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam)
       case SC_MOUSEMENU:
       case SC_KEYMENU:
       case SC_SCREENSAVE:
+      case SC_MINIMIZE:
+      case SC_MAXIMIZE:
+      case SC_RESTORE:
+      case SC_CLOSE:
+      case SC_HOTKEY:
         NtUserMessageCall( hWnd, WM_SYSCOMMAND, wParam, lParam, (ULONG_PTR)&lResult, FNID_DEFWINDOWPROC, FALSE);
         return 0;
 
@@ -231,27 +183,6 @@ DefWndHandleSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam)
 
   switch (wParam & 0xfff0)
     {
-
-    case SC_MINIMIZE:
-        if (hWnd == GetActiveWindow())
-            ShowOwnedPopups(hWnd,FALSE);
-        ShowWindow( hWnd, SW_MINIMIZE );
-        break;
-
-    case SC_MAXIMIZE:
-        if (IsIconic(hWnd) && hWnd == GetActiveWindow())
-            ShowOwnedPopups(hWnd,TRUE);
-        ShowWindow( hWnd, SW_MAXIMIZE );
-        break;
-
-    case SC_RESTORE:
-        if (IsIconic(hWnd) && hWnd == GetActiveWindow())
-            ShowOwnedPopups(hWnd,TRUE);
-        ShowWindow( hWnd, SW_RESTORE );
-        break;
-
-      case SC_CLOSE:
-        return SendMessageW(hWnd, WM_CLOSE, 0, 0);
 
       case SC_VSCROLL:
       case SC_HSCROLL:
@@ -270,30 +201,6 @@ DefWndHandleSysCommand(HWND hWnd, WPARAM wParam, LPARAM lParam)
       case SC_NEXTWINDOW:
       case SC_PREVWINDOW:
         DoAppSwitch( wParam, lParam);
-        break;
-
-      case SC_HOTKEY:
-        {
-           HWND hwnd, hWndLastActive;
-           PWND pWnd;
-
-           hwnd = (HWND)lParam;
-           pWnd = ValidateHwnd(hwnd);
-           if (pWnd)
-           {
-              hWndLastActive = GetLastActivePopup(hwnd);
-              if (hWndLastActive)
-              {
-                 hwnd = hWndLastActive;
-                 pWnd = ValidateHwnd(hwnd);
-              }
-              SetForegroundWindow(hwnd);
-              if (pWnd->style & WS_MINIMIZE)
-              {
-                 PostMessage(hwnd, WM_SYSCOMMAND, SC_RESTORE, 0);
-              }
-           }
-        }
         break;
 
       default:
@@ -352,6 +259,9 @@ UserSendUiUpdateMsg(HWND hwnd, LPARAM lParam)
     return TRUE;
 }
 
+/* WARNING: Redundant with /ntuser/defwnd.c!UserPaintCaption !!
+   Use TWOPARAM_ROUTINE_REDRAWTITLE/REDRAWFRAME or HWNDLOCK_ROUTINE_REDRAWFRAMEANDHOOK .
+ */
 static void
 UserPaintCaption(PWND pwnd, INT Flags)
 {
@@ -362,7 +272,7 @@ UserPaintCaption(PWND pwnd, INT Flags)
     /* 
      * When themes are not enabled we can go on and paint the non client area.
      * However if we do that with themes enabled we will draw a classic frame.
-     * This is sovled by sending a themes specific message to notify the themes
+     * This is solved by sending a themes specific message to notify the themes
      * engine that the caption needs to be redrawn 
      */
     if(gpsi->dwSRVIFlags & SRVINFO_APIHOOK)
@@ -412,10 +322,10 @@ DefWndGetIcon(PWND pWnd, WPARAM wParam, LPARAM lParam)
 
 LRESULT WINAPI
 User32DefWindowProc(HWND hWnd,
-		    UINT Msg,
-		    WPARAM wParam,
-		    LPARAM lParam,
-		    BOOL bUnicode)
+                    UINT Msg,
+                    WPARAM wParam,
+                    LPARAM lParam,
+                    BOOL bUnicode)
 {
     PWND pWnd = NULL;
     if (hWnd)
@@ -436,14 +346,6 @@ User32DefWindowProc(HWND hWnd,
                 TrackPopupMenu(menu, TPM_LEFTBUTTON|TPM_RIGHTBUTTON|TPM_SYSTEM_MENU,
                                LOWORD(lParam), HIWORD(lParam), 0, hWnd, NULL);
             return 0;
-        }
-
-        case WM_NCHITTEST:
-        {
-            POINT Point;
-            Point.x = GET_X_LPARAM(lParam);
-            Point.y = GET_Y_LPARAM(lParam);
-            return (DefWndNCHitTest(hWnd, Point));
         }
 
         case WM_RBUTTONUP:
@@ -489,7 +391,7 @@ User32DefWindowProc(HWND hWnd,
             }
             else
             {
-               goto GoSS;            
+               goto GoSS;
             }
             break;
         }
@@ -553,7 +455,7 @@ User32DefWindowProc(HWND hWnd,
         case WM_CTLCOLORDLG:
         case WM_CTLCOLORSTATIC:
         case WM_CTLCOLORSCROLLBAR:
-	    return (LRESULT) DefWndControlColor((HDC)wParam, Msg - WM_CTLCOLORMSGBOX);
+            return (LRESULT) DefWndControlColor((HDC)wParam, Msg - WM_CTLCOLORMSGBOX);
 
         case WM_CTLCOLOR:
             return (LRESULT) DefWndControlColor((HDC)wParam, HIWORD(lParam));
@@ -852,9 +754,9 @@ User32DefWindowProc(HWND hWnd,
         case WM_RBUTTONDOWN:
         case WM_MBUTTONDOWN:
         case WM_NCLBUTTONDOWN:
+        case WM_NCRBUTTONDOWN:
         case WM_LBUTTONDBLCLK:
         case WM_NCLBUTTONDBLCLK:
-        case WM_NCRBUTTONDOWN:
         case WM_KEYF1:
         case WM_KEYUP:
         case WM_SYSKEYUP:
@@ -872,6 +774,7 @@ User32DefWindowProc(HWND hWnd,
         case WM_NCPAINT:
         case WM_NCACTIVATE:
         case WM_NCCALCSIZE:
+        case WM_NCHITTEST:
         case WM_SYNCPAINT:
         case WM_SETREDRAW:
         case WM_CLIENTSHUTDOWN:

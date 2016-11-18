@@ -472,6 +472,7 @@ static MUI_ENTRY msMYRepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY msMYComputerPageEntries[] =
 {
     {
@@ -1332,7 +1333,7 @@ MUI_ERROR msMYErrorEntries[] =
           "\n"
           "  \x07  Tekan F3 untuk keluar persediaan.\n"
           "  \x07  Tekan ENTER untuk teruskan.",
-          "F3= Keluar  ENTER = Teruskan"
+          "F3 = Keluar  ENTER = Teruskan"
     },
     {
         //ERROR_NEW_PARTITION,
@@ -1631,8 +1632,10 @@ MUI_STRING msMYStrings[] =
     "Persediaan memasang ReactOS ke Partition"},
     {STRING_CHECKINGPART,
     "Persediaan kini sedang menyemak sekatan yang dipilih."},
+    {STRING_CONTINUE,
+    "ENTER = Teruskan"},
     {STRING_QUITCONTINUE,
-    "F3= Keluar  ENTER = Teruskan"},
+    "F3 = Keluar  ENTER = Teruskan"},
     {STRING_REBOOTCOMPUTER,
     "ENTER = Memulakan semuala komputer"},
     {STRING_TXTSETUPFAILED,
@@ -1678,7 +1681,7 @@ MUI_STRING msMYStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  Harddisk %lu  (Port=%hu, Bus=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  Type %lu    %I64u %s"},
+    "   %c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "on %I64u %s  Harddisk %lu  (Port=%hu, Bus=%hu, Id=%hu) on %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1686,7 +1689,7 @@ MUI_STRING msMYStrings[] =
     {STRING_HDINFOPARTZEROED,
     "Harddisk %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  Type %lu    %I64u %s"},
+    "%c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "on Harddisk %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

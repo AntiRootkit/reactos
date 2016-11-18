@@ -314,14 +314,13 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
 
     PLIST_ENTRY CurrentEntry;
     ConsoleInput *Input;
-    ULONG i;
+    ULONG i = 0;
 
     /* Validity checks */
     // ASSERT(Console == InputBuffer->Header.Console);
     ASSERT((Buffer != NULL) || (Buffer == NULL && NumCharsToRead == 0));
 
     /* We haven't read anything (yet) */
-    i = ReadControl->nInitialChars;
 
     if (InputBuffer->Mode & ENABLE_LINE_INPUT)
     {
@@ -329,8 +328,15 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
 
         if (Console->LineBuffer == NULL)
         {
-            /* Starting a new line */
+            /* Start a new line */
             Console->LineMaxSize = max(256, NumCharsToRead);
+
+            /*
+             * Fixup ReadControl->nInitialChars in case the number of initial
+             * characters is bigger than the number of characters to be read.
+             * It will always be, lesser than or equal to Console->LineMaxSize.
+             */
+            ReadControl->nInitialChars = min(ReadControl->nInitialChars, NumCharsToRead);
 
             Console->LineBuffer = ConsoleAllocHeap(0, Console->LineMaxSize * sizeof(WCHAR));
             if (Console->LineBuffer == NULL) return STATUS_NO_MEMORY;
@@ -341,11 +347,12 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
             Console->LineWakeupMask = ReadControl->dwCtrlWakeupMask;
 
             /*
-             * Pre-filling the buffer is only allowed in the Unicode API,
-             * so we don't need to worry about ANSI <-> Unicode conversion.
+             * Pre-fill the buffer with the nInitialChars from the user buffer.
+             * Since pre-filling is only allowed in Unicode, we don't need to
+             * worry about ANSI <-> Unicode conversion.
              */
             memcpy(Console->LineBuffer, Buffer, Console->LineSize * sizeof(WCHAR));
-            if (Console->LineSize == Console->LineMaxSize)
+            if (Console->LineSize >= Console->LineMaxSize)
             {
                 Console->LineComplete = TRUE;
                 Console->LinePos = 0;
@@ -355,7 +362,7 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
         /* If we don't have a complete line yet, process the pending input */
         while (!Console->LineComplete && !IsListEmpty(&InputBuffer->InputEvents))
         {
-            /* Remove input event from queue */
+            /* Remove an input event from the queue */
             CurrentEntry = RemoveHeadList(&InputBuffer->InputEvents);
             if (IsListEmpty(&InputBuffer->InputEvents))
             {
@@ -377,7 +384,14 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
         /* Check if we have a complete line to read from */
         if (Console->LineComplete)
         {
-            while (i < NumCharsToRead && Console->LinePos != Console->LineSize)
+            /*
+             * Console->LinePos keeps the next position of the character to read
+             * in the line buffer across the different calls of the function,
+             * so that the line buffer can be read by chunks after all the input
+             * has been buffered.
+             */
+
+            while (i < NumCharsToRead && Console->LinePos < Console->LineSize)
             {
                 WCHAR Char = Console->LineBuffer[Console->LinePos++];
 
@@ -392,11 +406,14 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
                 ++i;
             }
 
-            if (Console->LinePos == Console->LineSize)
+            if (Console->LinePos >= Console->LineSize)
             {
-                /* Entire line has been read */
+                /* The entire line has been read */
                 ConsoleFreeHeap(Console->LineBuffer);
                 Console->LineBuffer = NULL;
+                Console->LinePos = Console->LineMaxSize = Console->LineSize = 0;
+                // Console->LineComplete = Console->LineUpPressed = FALSE;
+                Console->LineComplete = FALSE;
             }
 
             Status = STATUS_SUCCESS;
@@ -409,7 +426,7 @@ ConSrvTermReadStream(IN OUT PTERMINAL This,
         /* Character input */
         while (i < NumCharsToRead && !IsListEmpty(&InputBuffer->InputEvents))
         {
-            /* Remove input event from queue */
+            /* Remove an input event from the queue */
             CurrentEntry = RemoveHeadList(&InputBuffer->InputEvents);
             if (IsListEmpty(&InputBuffer->InputEvents))
             {

@@ -4,7 +4,7 @@
  * FILE:             Ext2fs.h
  * PURPOSE:          Header file: ext2 structures
  * PROGRAMMER:       Matt Wu <mattwu@163.com>
- * HOMEPAGE:         http://ext2.yeah.net
+ * HOMEPAGE:         http://www.ext2fsd.com
  * UPDATE HISTORY:
  */
 
@@ -18,7 +18,8 @@
 #include <ndk/rtlfuncs.h>
 #include <pseh/pseh2.h>
 #endif
-#include "stdio.h"
+#include <stdio.h>
+#include <time.h>
 #include <string.h>
 #include <linux/ext2_fs.h>
 #include <linux/ext3_fs.h>
@@ -46,8 +47,13 @@
 
 /* STRUCTS & CONSTS******************************************************/
 
-#define EXT2FSD_VERSION                 "0.62"
+#define EXT2FSD_VERSION                 "0.68"
 
+
+/* WDK DEFINITIONS ******************************************************/
+
+
+/* COMPILER SWITCH / OPTIONS ********************************************/
 
 //
 // Ext2Fsd build options
@@ -104,6 +110,26 @@ typedef struct ext3_dir_entry_2 EXT2_DIR_ENTRY2, *PEXT2_DIR_ENTRY2;
 #define CEILING_ALIGNED(T, A, B) (((A) + (B) - 1) & (~((T)(B) - 1)))
 #define COCKLOFT_ALIGNED(T, A, B) (((A) + (B)) & (~((T)(B) - 1)))
 
+
+
+/*
+ * Compile-time assertion: (Lustre version)
+ *
+ * Check an invariant described by a constant expression at compile time by
+ * forcing a compiler error if it does not hold.  \a cond must be a constant
+ * expression as defined by the ISO C Standard:
+ *
+ *       6.8.4.2  The switch statement
+ *       ....
+ *       [#3] The expression of each case label shall be  an  integer
+ *       constant   expression  and  no  two  of  the  case  constant
+ *       expressions in the same switch statement shall have the same
+ *       value  after  conversion...
+ *
+ */
+
+#define CL_ASSERT(cond) do {switch('x') {case (cond): case 0: break;}} while (0)
+
 /* File System Releated *************************************************/
 
 #define DRIVER_NAME      "Ext2Fsd"
@@ -124,6 +150,10 @@ typedef struct ext3_dir_entry_2 EXT2_DIR_ENTRY2, *PEXT2_DIR_ENTRY2;
 #define HIDING_SUFFIX       L"HidingSuffix"
 #define AUTO_MOUNT          L"AutoMount"
 #define MOUNT_POINT         L"MountPoint"
+#define UID                 L"uid"
+#define GID                 L"gid"
+#define EUID                L"euid"
+#define EGID                L"egid"
 
 #define DOS_DEVICE_NAME L"\\DosDevices\\Ext2Fsd"
 
@@ -378,9 +408,24 @@ Ext2ClearFlag(PULONG Flags, ULONG FlagBit)
 #define Ext2SetOwnerReadOnly(m) do {(m) &= ~S_IWUSR;} while(0)
 
 #define Ext2IsOwnerWritable(m)  (((m) & S_IWUSR) == S_IWUSR)
-#define Ext2IsOwnerReadOnly(m)  (!(Ext2IsOwnerWritable(m)))
+#define Ext2IsOwnerReadable(m)  (((m) & S_IRUSR) == S_IRUSR)
+#define Ext2IsOwnerReadOnly(m)  (!(Ext2IsOwnerWritable(m)) && Ext2IsOwnerReadable(m))
+
+#define Ext2IsGroupWritable(m)  (((m) & S_IWGRP) == S_IWGRP)
+#define Ext2IsGroupReadable(m)  (((m) & S_IRGRP) == S_IRGRP)
+#define Ext2IsGroupReadOnly(m)  (!(Ext2IsGroupWritable(m)) && Ext2IsGroupReadable(m))
+
+#define Ext2IsOtherWritable(m)  (((m) & S_IWOTH) == S_IWOTH)
+#define Ext2IsOtherReadable(m)  (((m) & S_IROTH) == S_IROTH)
+#define Ext2IsOtherReadOnly(m)  (!(Ext2IsOtherWritable(m)) && Ext2IsOtherReadable(m))
 
 #define Ext2SetReadOnly(m) do {(m) &= ~(S_IWUSR | S_IWGRP | S_IWOTH);} while(0)
+
+
+#define Ext2FileCanRead         (0x1)
+#define Ext2FileCanWrite        (0x2)
+#define Ext2FileCanExecute      (0x4)
+
 
 /*
  * We need 8-bytes aligned for all the sturctures
@@ -443,6 +488,18 @@ typedef PVOID   PBCB;
 // Data that is not specific to a mounted volume
 //
 
+typedef VOID (NTAPI *EXT2_REAPER_RELEASE)(PVOID);
+
+typedef struct _EXT2_REAPER {
+        PETHREAD                Thread;
+        KEVENT                  Engine;
+        KEVENT                  Wait;
+        EXT2_REAPER_RELEASE     Free;
+        ULONG                   Flags;
+} EXT2_REAPER, *PEXT2_REAPER;
+
+#define EXT2_REAPER_FLAG_STOP   (1 << 0)
+
 typedef struct _EXT2_GLOBAL {
 
     /* Identifier for this structure */
@@ -457,6 +514,9 @@ typedef struct _EXT2_GLOBAL {
 
     /* Table of pointers to the fast I/O entry points */
     FAST_IO_DISPATCH            FastIoDispatch;
+
+    /* Filter callbacks */
+    FS_FILTER_CALLBACKS         FilterCallbacks;
 
     /* Table of pointers to the Cache Manager callbacks */
     CACHE_MANAGER_CALLBACKS     CacheManagerCallbacks;
@@ -475,10 +535,9 @@ typedef struct _EXT2_GLOBAL {
     LIST_ENTRY                  VcbList;
 
     /* Cleaning thread related: resource cleaner */
-    struct {
-        KEVENT                  Engine;
-        KEVENT                  Wait;
-    } Reaper;
+    EXT2_REAPER                 FcbReaper;
+    EXT2_REAPER                 McbReaper;
+    EXT2_REAPER                 bhReaper;
 
     /* Look Aside table of IRP_CONTEXT, FCB, MCB, CCB */
     NPAGED_LOOKASIDE_LIST       Ext2IrpContextLookasideList;
@@ -491,11 +550,14 @@ typedef struct _EXT2_GLOBAL {
 
     /* User specified global codepage name */
     struct {
+        WCHAR                   PageName[CODEPAGE_MAXLEN];
         UCHAR                   AnsiName[CODEPAGE_MAXLEN];
         struct nls_table *      PageTable;
     } Codepage;
 
     /* global hiding patterns */
+    WCHAR                       wHidingPrefix[HIDINGPAT_LEN];
+    WCHAR                       wHidingSuffix[HIDINGPAT_LEN];
     BOOLEAN                     bHidingPrefix;
     CHAR                        sHidingPrefix[HIDINGPAT_LEN];
     BOOLEAN                     bHidingSuffix;
@@ -578,18 +640,26 @@ typedef struct _EXT2_VCB {
     /* Common header */
     EXT2_FCBVCB;
 
-    // Resource for metadata (super block, tables)
-    ERESOURCE                   MetaLock;
+    // Resource for metadata (inode)
+    ERESOURCE                   MetaInode;
+
+    // Resource for metadata (block)
+    ERESOURCE                   MetaBlock;
 
     // Resource for Mcb (Meta data control block)
     ERESOURCE                   McbLock;
 
-    // Entry of Mcb Tree (Root Node)
-    PEXT2_MCB                   McbTree;
+    // List of FCBs for open files on this volume
+    ERESOURCE                   FcbLock;
+    LIST_ENTRY                  FcbList;
+    ULONG                       FcbCount;
 
     // Mcb list
-    LIST_ENTRY                  McbList;
     ULONG                       NumOfMcb;
+    LIST_ENTRY                  McbList;
+
+    // Entry of Mcb Tree (Root Node)
+    PEXT2_MCB                   McbTree;
 
     // Link list to Global
     LIST_ENTRY                  Next;
@@ -600,10 +670,6 @@ typedef struct _EXT2_VCB {
     // Dirty Mcbs of modifications for volume stream
     LARGE_MCB                   Extents;
 
-    // List of FCBs for open files on this volume
-    ULONG                       FcbCount;
-    LIST_ENTRY                  FcbList;
-    KSPIN_LOCK                  FcbLock;
 
     // Share Access for the file object
     SHARE_ACCESS                ShareAccess;
@@ -648,12 +714,6 @@ typedef struct _EXT2_VCB {
     BOOLEAN                     IsExt3fs;
     PEXT2_SUPER_BLOCK           SuperBlock;
 
-    /*
-        // Bitmap Block per group
-        PRTL_BITMAP                 BlockBitMaps;
-        PRTL_BITMAP                 InodeBitMaps;
-    */
-
     // Block / Cluster size
     ULONG                       BlockSize;
 
@@ -690,6 +750,14 @@ typedef struct _EXT2_VCB {
     BOOLEAN                     bHidingSuffix;
     CHAR                        sHidingSuffix[HIDINGPAT_LEN];
 
+    /* User to impersanate */
+    uid_t                       uid;
+    gid_t                       gid;
+
+    /* User to act as */
+    uid_t                       euid;
+    gid_t                       egid;
+
     /* mountpoint: symlink to DesDevices */
     UCHAR                       DrvLetter;
 
@@ -713,7 +781,10 @@ typedef struct _EXT2_VCB {
 #define VCB_DISMOUNT_PENDING    0x00000008
 #define VCB_NEW_VPB             0x00000010
 #define VCB_BEING_CLOSED        0x00000020
+#define VCB_USER_IDS            0x00000040  /* uid/gid specified by user */
+#define VCB_USER_EIDS           0x00000080  /* euid/egid specified by user */
 
+#define VCB_BEING_DROPPED       0x00002000
 #define VCB_FORCE_WRITING       0x00004000
 #define VCB_DEVICE_REMOVED      0x00008000
 #define VCB_JOURNAL_RECOVER     0x00080000
@@ -749,6 +820,7 @@ typedef struct _EXT2_FCB {
 
     // List of FCBs for this volume
     LIST_ENTRY                      Next;
+    LARGE_INTEGER                   TsDrop; /* drop time */
 
     SECTION_OBJECT_POINTERS         SectionObject;
 
@@ -795,7 +867,7 @@ typedef struct _EXT2_FCB {
 #define FCB_FROM_POOL               0x00000001
 #define FCB_PAGE_FILE               0x00000002
 #define FCB_FILE_MODIFIED           0x00000020
-#define FCB_STATE_BUSY              0x00000040
+
 #define FCB_ALLOC_IN_CREATE         0x00000080
 #define FCB_ALLOC_IN_WRITE          0x00000100
 #define FCB_ALLOC_IN_SETINFO        0x00000200
@@ -816,7 +888,7 @@ struct _EXT2_MCB {
 
     // Link List Info
     PEXT2_MCB                       Parent; // Parent
-    PEXT2_MCB                       Next;   // Brothers
+    PEXT2_MCB                       Next;   // Siblings
 
     union {
         PEXT2_MCB                   Child;  // Children Mcb nodes
@@ -893,12 +965,10 @@ struct _EXT2_MCB {
 static
 #endif
 __inline ULONG DEC_OBJ_CNT(PULONG _C) {
-    if (*_C > 0) {
-        return InterlockedDecrement(_C);
-    } else {
+    if (*_C <= 0) {
         DbgBreak();
     }
-    return 0;
+    return InterlockedDecrement(_C);
 }
 
 #if EXT2_DEBUG
@@ -943,7 +1013,7 @@ typedef struct _EXT2_CCB {
 #define CCB_FROM_POOL               0x00000001
 #define CCB_VOLUME_DASD_PURGE       0x00000002
 #define CCB_LAST_WRITE_UPDATED      0x00000004
-
+#define CCB_OPEN_REPARSE_POINT      0x00000008
 #define CCB_DELETE_ON_CLOSE         0x00000010
 
 #define CCB_ALLOW_EXTENDED_DASD_IO  0x80000000
@@ -1103,13 +1173,20 @@ typedef struct _EXT2_FILLDIR_CONTEXT {
 } EXT2_FILLDIR_CONTEXT, *PEXT2_FILLDIR_CONTEXT;
 
 //
+// Access.c
+//
+
+
+int Ext2CheckInodeAccess(PEXT2_VCB Vcb, struct inode *in, int attempt);
+int Ext2CheckFileAccess (PEXT2_VCB Vcb, PEXT2_MCB Mcb, int attempt);
+
+//
 // Block.c
 //
 
 PMDL
 Ext2CreateMdl (
     IN PVOID Buffer,
-    IN BOOLEAN bPaged,
     IN ULONG Length,
     IN LOCK_OPERATION Operation
 );
@@ -1216,44 +1293,6 @@ Ext2NoOpAcquire (
 VOID NTAPI
 Ext2NoOpRelease (IN PVOID Fcb);
 
-VOID NTAPI
-Ext2AcquireForCreateSection (
-    IN PFILE_OBJECT FileObject
-);
-
-VOID NTAPI
-Ext2ReleaseForCreateSection (
-    IN PFILE_OBJECT FileObject
-);
-
-NTSTATUS NTAPI
-Ext2AcquireFileForModWrite (
-    IN PFILE_OBJECT FileObject,
-    IN PLARGE_INTEGER EndingOffset,
-    OUT PERESOURCE *ResourceToRelease,
-    IN PDEVICE_OBJECT DeviceObject
-);
-
-NTSTATUS NTAPI
-Ext2ReleaseFileForModWrite (
-    IN PFILE_OBJECT FileObject,
-    IN PERESOURCE ResourceToRelease,
-    IN PDEVICE_OBJECT DeviceObject
-);
-
-NTSTATUS NTAPI
-Ext2AcquireFileForCcFlush (
-    IN PFILE_OBJECT FileObject,
-    IN PDEVICE_OBJECT DeviceObject
-);
-
-NTSTATUS NTAPI
-Ext2ReleaseFileForCcFlush (
-    IN PFILE_OBJECT FileObject,
-    IN PDEVICE_OBJECT DeviceObject
-);
-
-
 //
 // Create.c
 //
@@ -1268,7 +1307,7 @@ Ext2FollowLink (
     IN PEXT2_VCB            Vcb,
     IN PEXT2_MCB            Parent,
     IN PEXT2_MCB            Mcb,
-    IN USHORT               Linkdep
+    IN ULONG                Linkdep
 );
 
 NTSTATUS
@@ -1287,6 +1326,9 @@ Ext2IsSpecialSystemFile(
     IN BOOLEAN         bDirectory
 );
 
+#define EXT2_LOOKUP_FLAG_MASK   (0xFF00000)
+#define EXT2_LOOKUP_NOT_FOLLOW  (0x8000000)
+
 NTSTATUS
 Ext2LookupFile (
     IN PEXT2_IRP_CONTEXT    IrpContext,
@@ -1294,7 +1336,7 @@ Ext2LookupFile (
     IN PUNICODE_STRING      FullName,
     IN PEXT2_MCB            Parent,
     OUT PEXT2_MCB *         Ext2Mcb,
-    IN USHORT               Linkdep
+    IN ULONG                Linkdep
 );
 
 NTSTATUS
@@ -1357,13 +1399,7 @@ Ext2SupersedeOrOverWriteFile(
 #define DL_PNP 0x00010000   /* pnp */
 #define DL_IO  0x00020000   /* file i/o */
 
-#define DL_ALL (DL_ERR|DL_VIT|DL_DBG|DL_INF|DL_FUN|DL_LOW|DL_REN|DL_RES|DL_BLK|DL_CP|DL_EXT|DL_MAP|DL_JNL|DL_HTI|DL_WRN|DL_BH|DL_PNP|DL_IO)
-
-#if EXT2_DEBUG && defined(__REACTOS__)
-  #define DL_DEFAULT (DL_ERR|DL_VIT|DL_DBG|DL_INF|DL_FUN|DL_LOW|DL_WRN)
-#else
-  #define DL_DEFAULT (DL_ERR|DL_VIT)
-#endif
+#define DL_DEFAULT (DL_ERR|DL_VIT)
 
 #if EXT2_DEBUG
 extern  ULONG DebugFilter;
@@ -1440,21 +1476,21 @@ Ext2FreePool(
 NTSTATUS
 Ext2ProcessGlobalProperty(
     IN  PDEVICE_OBJECT  DeviceObject,
-    IN  PEXT2_VOLUME_PROPERTY2 Property,
+    IN  PEXT2_VOLUME_PROPERTY3 Property,
     IN  ULONG Length
 );
 
 NTSTATUS
 Ext2ProcessVolumeProperty(
     IN  PEXT2_VCB              Vcb,
-    IN  PEXT2_VOLUME_PROPERTY2 Property,
+    IN  PEXT2_VOLUME_PROPERTY3 Property,
     IN  ULONG Length
 );
 
 NTSTATUS
 Ext2ProcessUserProperty(
     IN PEXT2_IRP_CONTEXT        IrpContext,
-    IN PEXT2_VOLUME_PROPERTY2   Property,
+    IN PEXT2_VOLUME_PROPERTY3   Property,
     IN ULONG                    Length
 );
 
@@ -1733,6 +1769,9 @@ Ext2LoadGroup(IN PEXT2_VCB Vcb);
 VOID
 Ext2PutGroup(IN PEXT2_VCB Vcb);
 
+VOID
+Ext2DropBH(IN PEXT2_VCB Vcb);
+
 BOOLEAN
 Ext2SaveGroup(
     IN PEXT2_IRP_CONTEXT    IrpContext,
@@ -1867,6 +1906,13 @@ Ext2NewInode(
 );
 
 NTSTATUS
+Ext2UpdateGroupDirStat(
+    IN PEXT2_IRP_CONTEXT    IrpContext,
+    IN PEXT2_VCB            Vcb,
+    IN ULONG                Group
+);
+
+NTSTATUS
 Ext2FreeInode(
     IN PEXT2_IRP_CONTEXT    IrpContext,
     IN PEXT2_VCB            Vcb,
@@ -1882,6 +1928,15 @@ Ext2AddEntry (
     IN struct inode       *Inode,
     IN PUNICODE_STRING     FileName,
     OUT struct dentry    **dentry
+);
+
+NTSTATUS
+Ext2SetFileType (
+    IN PEXT2_IRP_CONTEXT    IrpContext,
+    IN PEXT2_VCB            Vcb,
+    IN PEXT2_FCB            Dcb,
+    IN PEXT2_MCB            Mcb,
+    IN umode_t              mode
 );
 
 NTSTATUS
@@ -2057,6 +2112,56 @@ Ext2FastIoQueryNetworkOpenInfo (
     OUT PIO_STATUS_BLOCK                IoStatus,
     IN PDEVICE_OBJECT                   DeviceObject);
 
+VOID
+NTAPI
+Ext2AcquireForCreateSection (
+    IN PFILE_OBJECT FileObject
+);
+
+VOID
+NTAPI
+Ext2ReleaseForCreateSection (
+    IN PFILE_OBJECT FileObject
+);
+
+NTSTATUS
+NTAPI
+Ext2AcquireFileForModWrite (
+    IN PFILE_OBJECT FileObject,
+    IN PLARGE_INTEGER EndingOffset,
+    OUT PERESOURCE *ResourceToRelease,
+    IN PDEVICE_OBJECT DeviceObject
+);
+
+NTSTATUS
+NTAPI
+Ext2ReleaseFileForModWrite (
+    IN PFILE_OBJECT FileObject,
+    IN PERESOURCE ResourceToRelease,
+    IN PDEVICE_OBJECT DeviceObject
+);
+
+NTSTATUS
+NTAPI
+Ext2AcquireFileForCcFlush (
+    IN PFILE_OBJECT FileObject,
+    IN PDEVICE_OBJECT DeviceObject
+);
+
+NTSTATUS
+NTAPI
+Ext2ReleaseFileForCcFlush (
+    IN PFILE_OBJECT FileObject,
+    IN PDEVICE_OBJECT DeviceObject
+);
+
+
+NTSTATUS
+NTAPI
+Ext2PreAcquireForCreateSection(
+    IN PFS_FILTER_CALLBACK_DATA cd,
+    OUT PVOID *cc
+    );
 
 //
 // FileInfo.c
@@ -2116,6 +2221,14 @@ Ext2SetRenameInfo(
     PEXT2_CCB Ccb
 );
 
+NTSTATUS
+Ext2SetLinkInfo(
+    PEXT2_IRP_CONTEXT IrpContext,
+    PEXT2_VCB Vcb,
+    PEXT2_FCB Fcb,
+    PEXT2_CCB Ccb
+);
+
 ULONG
 Ext2InodeType(PEXT2_MCB Mcb);
 
@@ -2160,6 +2273,34 @@ Ext2Flush (IN PEXT2_IRP_CONTEXT IrpContext);
 //
 // Fsctl.c
 //
+
+NTSTATUS
+Ext2ReadSymlink (
+    IN PEXT2_IRP_CONTEXT    IrpContext,
+    IN PEXT2_VCB            Vcb,
+    IN PEXT2_MCB            Mcb,
+    IN PVOID                Buffer,
+    IN ULONG                Size,
+    OUT PULONG              BytesRead
+    );
+
+NTSTATUS
+Ext2WriteSymlink (
+    IN PEXT2_IRP_CONTEXT    IrpContext,
+    IN PEXT2_VCB            Vcb,
+    IN PEXT2_MCB            Mcb,
+    IN PVOID                Buffer,
+    IN ULONG                Size,
+    OUT PULONG              BytesWritten
+);
+
+NTSTATUS
+Ext2TruncateSymlink(
+    PEXT2_IRP_CONTEXT IrpContext,
+    PEXT2_VCB         Vcb,
+    PEXT2_MCB         Mcb,
+    ULONG             Size
+);
 
 //
 // MountPoint process workitem
@@ -2293,7 +2434,6 @@ struct buffer_head *ext3_bread(struct ext2_icb *icb, struct inode *inode,
 int add_dirent_to_buf(struct ext2_icb *icb, struct dentry *dentry,
                       struct inode *inode, struct ext3_dir_entry_2 *de,
                       struct buffer_head *bh);
-
 #if !defined(__REACTOS__) || defined(_MSC_VER)
 struct ext3_dir_entry_2 *
             do_split(struct ext2_icb *icb, struct inode *dir,
@@ -2313,8 +2453,10 @@ int ext3_is_dir_empty(struct ext2_icb *icb, struct inode *inode);
 // Init.c
 //
 
+NTSTATUS
+Ext2QueryGlobalParameters(IN PUNICODE_STRING RegistryPath);
 BOOLEAN
-Ext2QueryGlobalParameters (IN PUNICODE_STRING  RegistryPath);
+Ext2QueryRegistrySettings(IN PUNICODE_STRING  RegistryPath);
 
 VOID NTAPI
 DriverUnload (IN PDRIVER_OBJECT DriverObject);
@@ -2376,6 +2518,25 @@ Ext2LockControl (IN PEXT2_IRP_CONTEXT IrpContext);
 // Memory.c
 //
 
+VOID
+NTAPI
+Ext2FcbReaperThread(
+    PVOID   Context
+);
+
+VOID
+NTAPI
+Ext2McbReaperThread(
+    PVOID   Context
+);
+
+VOID
+NTAPI
+Ext2bhReaperThread(
+    PVOID   Context
+);
+
+
 PEXT2_IRP_CONTEXT
 Ext2AllocateIrpContext (IN PDEVICE_OBJECT   DeviceObject,
                         IN PIRP             Irp );
@@ -2391,16 +2552,18 @@ Ext2AllocateFcb (
 );
 
 VOID
+Ext2UnlinkFcb(IN PEXT2_FCB Fcb);
+
+VOID
 Ext2FreeFcb (IN PEXT2_FCB Fcb);
+VOID
+Ext2ReleaseFcb (IN PEXT2_FCB Fcb);
 
 VOID
 Ext2InsertFcb(PEXT2_VCB Vcb, PEXT2_FCB Fcb);
 
-VOID
-Ext2RemoveFcb(PEXT2_VCB Vcb, PEXT2_FCB Fcb);
-
 PEXT2_CCB
-Ext2AllocateCcb (PEXT2_MCB  SymLink);
+Ext2AllocateCcb (ULONG Flags, PEXT2_MCB SymLink);
 
 VOID
 Ext2FreeMcb (
@@ -2680,7 +2843,10 @@ Ext2ReaperThread(
 );
 
 NTSTATUS
-Ext2StartReaperThread();
+Ext2StartReaper(PEXT2_REAPER, EXT2_REAPER_RELEASE);
+VOID
+NTAPI
+Ext2StopReaper(PEXT2_REAPER Reaper);
 
 //
 // Misc.c
@@ -2858,6 +3024,7 @@ Ext2WriteInode (
     IN BOOLEAN              bDirectIo,
     OUT PULONG              dwReturn
 );
+
 
 VOID
 Ext2StartFloppyFlushDpc (

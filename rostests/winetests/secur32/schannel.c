@@ -29,7 +29,7 @@
 
 #include "wine/test.h"
 
-static HMODULE secdll, crypt32dll;
+static HMODULE secdll;
 
 static ACQUIRE_CREDENTIALS_HANDLE_FN_A pAcquireCredentialsHandleA;
 static ENUMERATE_SECURITY_PACKAGES_FN_A pEnumerateSecurityPackagesA;
@@ -41,16 +41,6 @@ static QUERY_CONTEXT_ATTRIBUTES_FN_A pQueryContextAttributesA;
 static DELETE_SECURITY_CONTEXT_FN pDeleteSecurityContext;
 static DECRYPT_MESSAGE_FN pDecryptMessage;
 static ENCRYPT_MESSAGE_FN pEncryptMessage;
-
-static PCCERT_CONTEXT (WINAPI *pCertCreateCertificateContext)(DWORD,const BYTE*,DWORD);
-static BOOL (WINAPI *pCertFreeCertificateContext)(PCCERT_CONTEXT);
-static BOOL (WINAPI *pCertSetCertificateContextProperty)(PCCERT_CONTEXT,DWORD,DWORD,const void*);
-static PCCERT_CONTEXT (WINAPI *pCertEnumCertificatesInStore)(HCERTSTORE,PCCERT_CONTEXT);
-
-static BOOL (WINAPI *pCryptAcquireContextW)(HCRYPTPROV*, LPCWSTR, LPCWSTR, DWORD, DWORD);
-static BOOL (WINAPI *pCryptDestroyKey)(HCRYPTKEY);
-static BOOL (WINAPI *pCryptImportKey)(HCRYPTPROV,const BYTE*,DWORD,HCRYPTKEY,DWORD,HCRYPTKEY*);
-static BOOL (WINAPI *pCryptReleaseContext)(HCRYPTPROV,ULONG_PTR);
 
 static const BYTE bigCert[] = { 0x30, 0x7a, 0x02, 0x01, 0x01, 0x30, 0x02, 0x06,
  0x00, 0x30, 0x15, 0x31, 0x13, 0x30, 0x11, 0x06, 0x03, 0x55, 0x04, 0x03, 0x13,
@@ -119,13 +109,9 @@ static CHAR unisp_name_a[] = UNISP_NAME_A;
 
 static void InitFunctionPtrs(void)
 {
-    HMODULE advapi32dll;
-
-    crypt32dll = LoadLibraryA("crypt32.dll");
     secdll = LoadLibraryA("secur32.dll");
     if(!secdll)
         secdll = LoadLibraryA("security.dll");
-    advapi32dll = LoadLibraryA("advapi32.dll");
 
 #define GET_PROC(h, func)  p ## func = (void*)GetProcAddress(h, #func)
 
@@ -142,16 +128,6 @@ static void InitFunctionPtrs(void)
         GET_PROC(secdll, DecryptMessage);
         GET_PROC(secdll, EncryptMessage);
     }
-
-    GET_PROC(advapi32dll, CryptAcquireContextW);
-    GET_PROC(advapi32dll, CryptDestroyKey);
-    GET_PROC(advapi32dll, CryptImportKey);
-    GET_PROC(advapi32dll, CryptReleaseContext);
-
-    GET_PROC(crypt32dll, CertFreeCertificateContext);
-    GET_PROC(crypt32dll, CertSetCertificateContextProperty);
-    GET_PROC(crypt32dll, CertCreateCertificateContext);
-    GET_PROC(crypt32dll, CertEnumCertificatesInStore);
 
 #undef GET_PROC
 }
@@ -336,9 +312,9 @@ static void testAcquireSecurityContext(void)
     HCRYPTKEY key;
     CRYPT_KEY_PROV_INFO keyProvInfo;
 
-    if (!pAcquireCredentialsHandleA || !pCertCreateCertificateContext ||
+    if (!pAcquireCredentialsHandleA ||
         !pEnumerateSecurityPackagesA || !pFreeContextBuffer ||
-        !pFreeCredentialsHandle || !pCryptAcquireContextW)
+        !pFreeCredentialsHandle)
     {
         win_skip("Needed functions are not available\n");
         return;
@@ -372,13 +348,11 @@ static void testAcquireSecurityContext(void)
     keyProvInfo.rgProvParam = NULL;
     keyProvInfo.dwKeySpec = AT_SIGNATURE;
 
-    certs[0] = pCertCreateCertificateContext(X509_ASN_ENCODING, bigCert,
-     sizeof(bigCert));
-    certs[1] = pCertCreateCertificateContext(X509_ASN_ENCODING, selfSignedCert,
-     sizeof(selfSignedCert));
+    certs[0] = CertCreateCertificateContext(X509_ASN_ENCODING, bigCert, sizeof(bigCert));
+    certs[1] = CertCreateCertificateContext(X509_ASN_ENCODING, selfSignedCert, sizeof(selfSignedCert));
 
     SetLastError(0xdeadbeef);
-    ret = pCryptAcquireContextW(&csp, cspNameW, MS_DEF_PROV_W, PROV_RSA_FULL,
+    ret = CryptAcquireContextW(&csp, cspNameW, MS_DEF_PROV_W, PROV_RSA_FULL,
      CRYPT_DELETEKEYSET);
     if (!ret && GetLastError() == ERROR_CALL_NOT_IMPLEMENTED)
     {
@@ -497,31 +471,26 @@ static void testAcquireSecurityContext(void)
      "or SEC_E_INTERNAL_ERROR, got %08x\n", st);
 
     /* Good cert, with CRYPT_KEY_PROV_INFO set before it's had a key loaded. */
-    if (pCertSetCertificateContextProperty)
-    {
-        ret = pCertSetCertificateContextProperty(certs[1],
-              CERT_KEY_PROV_INFO_PROP_ID, 0, &keyProvInfo);
-        schanCred.dwVersion = SCH_CRED_V3;
-        ok(ret, "CertSetCertificateContextProperty failed: %08x\n", GetLastError());
-        st = pAcquireCredentialsHandleA(NULL, unisp_name_a, SECPKG_CRED_OUTBOUND,
-             NULL, &schanCred, NULL, NULL, &cred, NULL);
-        ok(st == SEC_E_UNKNOWN_CREDENTIALS || st == SEC_E_INTERNAL_ERROR /* WinNT */,
-           "Expected SEC_E_UNKNOWN_CREDENTIALS or SEC_E_INTERNAL_ERROR, got %08x\n", st);
-        st = pAcquireCredentialsHandleA(NULL, unisp_name_a, SECPKG_CRED_INBOUND,
-             NULL, &schanCred, NULL, NULL, &cred, NULL);
-        ok(st == SEC_E_UNKNOWN_CREDENTIALS || st == SEC_E_INTERNAL_ERROR /* WinNT */,
-           "Expected SEC_E_UNKNOWN_CREDENTIALS or SEC_E_INTERNAL_ERROR, got %08x\n", st);
-    }
+    ret = CertSetCertificateContextProperty(certs[1],
+          CERT_KEY_PROV_INFO_PROP_ID, 0, &keyProvInfo);
+    schanCred.dwVersion = SCH_CRED_V3;
+    ok(ret, "CertSetCertificateContextProperty failed: %08x\n", GetLastError());
+    st = pAcquireCredentialsHandleA(NULL, unisp_name_a, SECPKG_CRED_OUTBOUND,
+        NULL, &schanCred, NULL, NULL, &cred, NULL);
+    ok(st == SEC_E_UNKNOWN_CREDENTIALS || st == SEC_E_INTERNAL_ERROR /* WinNT */,
+       "Expected SEC_E_UNKNOWN_CREDENTIALS or SEC_E_INTERNAL_ERROR, got %08x\n", st);
+    st = pAcquireCredentialsHandleA(NULL, unisp_name_a, SECPKG_CRED_INBOUND,
+        NULL, &schanCred, NULL, NULL, &cred, NULL);
+    ok(st == SEC_E_UNKNOWN_CREDENTIALS || st == SEC_E_INTERNAL_ERROR /* WinNT */,
+        "Expected SEC_E_UNKNOWN_CREDENTIALS or SEC_E_INTERNAL_ERROR, got %08x\n", st);
 
-    ret = pCryptAcquireContextW(&csp, cspNameW, MS_DEF_PROV_W, PROV_RSA_FULL,
+    ret = CryptAcquireContextW(&csp, cspNameW, MS_DEF_PROV_W, PROV_RSA_FULL,
      CRYPT_NEWKEYSET);
     ok(ret, "CryptAcquireContextW failed: %08x\n", GetLastError());
     ret = 0;
-    if (pCryptImportKey)
-    {
-        ret = pCryptImportKey(csp, privKey, sizeof(privKey), 0, 0, &key);
-        ok(ret, "CryptImportKey failed: %08x\n", GetLastError());
-    }
+
+    ret = CryptImportKey(csp, privKey, sizeof(privKey), 0, 0, &key);
+    ok(ret, "CryptImportKey failed: %08x\n", GetLastError());
     if (ret)
     {
         PCCERT_CONTEXT tmp;
@@ -610,20 +579,14 @@ static void testAcquireSecurityContext(void)
          "Expected SEC_E_UNKNOWN_CREDENTIALS, got %08x\n", st);
         /* FIXME: what about two valid certs? */
 
-        if (pCryptDestroyKey)
-            pCryptDestroyKey(key);
+        CryptDestroyKey(key);
     }
 
-    if (pCryptReleaseContext)
-        pCryptReleaseContext(csp, 0);
-    pCryptAcquireContextW(&csp, cspNameW, MS_DEF_PROV_W, PROV_RSA_FULL,
-     CRYPT_DELETEKEYSET);
+    CryptReleaseContext(csp, 0);
+    CryptAcquireContextW(&csp, cspNameW, MS_DEF_PROV_W, PROV_RSA_FULL, CRYPT_DELETEKEYSET);
 
-    if (pCertFreeCertificateContext)
-    {
-        pCertFreeCertificateContext(certs[0]);
-        pCertFreeCertificateContext(certs[1]);
-    }
+    CertFreeCertificateContext(certs[0]);
+    CertFreeCertificateContext(certs[1]);
 }
 
 static void test_remote_cert(PCCERT_CONTEXT remote_cert)
@@ -634,13 +597,13 @@ static void test_remote_cert(PCCERT_CONTEXT remote_cert)
 
     ok(remote_cert->hCertStore != NULL, "hCertStore == NULL\n");
 
-    while((iter = pCertEnumCertificatesInStore(remote_cert->hCertStore, iter))) {
+    while((iter = CertEnumCertificatesInStore(remote_cert->hCertStore, iter))) {
         if(iter == remote_cert)
             incl_remote = TRUE;
         cert_cnt++;
     }
 
-    ok(cert_cnt == 3, "cert_cnt = %u\n", cert_cnt);
+    ok(cert_cnt == 2 || cert_cnt == 3, "cert_cnt = %u\n", cert_cnt);
     ok(incl_remote, "context does not contain cert itself\n");
 }
 
@@ -822,7 +785,6 @@ todo_wine
             ISC_REQ_CONFIDENTIALITY|ISC_REQ_STREAM,
             0, 0, &buffers[1], 0, NULL, &buffers[0], &attrs, NULL);
     ok(status == SEC_E_INVALID_TOKEN, "Expected SEC_E_INVALID_TOKEN, got %08x\n", status);
-todo_wine
     ok(buffers[0].pBuffers[0].cbBuffer == 0, "Output buffer size was not set to 0.\n");
 
     buffers[0].pBuffers[0].cbBuffer = 0;
@@ -832,9 +794,15 @@ todo_wine
 todo_wine
     ok(status == SEC_E_INSUFFICIENT_MEMORY || status == SEC_E_INVALID_TOKEN,
        "Expected SEC_E_INSUFFICIENT_MEMORY or SEC_E_INVALID_TOKEN, got %08x\n", status);
+    ok(buffers[0].pBuffers[0].cbBuffer == 0, "Output buffer size was not set to 0.\n");
+
+    status = pInitializeSecurityContextA(&cred_handle, NULL, (SEC_CHAR *)"localhost",
+            ISC_REQ_CONFIDENTIALITY|ISC_REQ_STREAM,
+            0, 0, NULL, 0, &context, NULL, &attrs, NULL);
+todo_wine
+    ok(status == SEC_E_INVALID_TOKEN, "Expected SEC_E_INVALID_TOKEN, got %08x\n", status);
 
     buffers[0].pBuffers[0].cbBuffer = buf_size;
-
     status = pInitializeSecurityContextA(&cred_handle, NULL, (SEC_CHAR *)"localhost",
             ISC_REQ_CONFIDENTIALITY|ISC_REQ_STREAM,
             0, 0, NULL, 0, &context, &buffers[0], &attrs, NULL);
@@ -907,6 +875,7 @@ todo_wine
         buffers[1].pBuffers[0].cbBuffer = buf_size;
     }
 
+    ok(buffers[0].pBuffers[0].cbBuffer == 0, "Output buffer size was not set to 0.\n");
     ok(status == SEC_E_OK || broken(status == SEC_E_INVALID_TOKEN) /* WinNT */,
         "InitializeSecurityContext failed: %08x\n", status);
     if(status != SEC_E_OK) {
@@ -921,14 +890,13 @@ todo_wine
     ok(status == SEC_E_OK, "QueryContextAttributesW(SECPKG_ATTR_REMOTE_CERT_CONTEXT) failed: %08x\n", status);
     if(status == SEC_E_OK) {
         test_remote_cert(cert);
-        pCertFreeCertificateContext(cert);
+        CertFreeCertificateContext(cert);
     }
 
     status = pQueryContextAttributesA(&context, SECPKG_ATTR_CONNECTION_INFO, (void*)&conn_info);
     ok(status == SEC_E_OK, "QueryContextAttributesW(SECPKG_ATTR_CONNECTION_INFO) failed: %08x\n", status);
     if(status == SEC_E_OK) {
-        ok(conn_info.dwCipherStrength == 128 || conn_info.dwCipherStrength == 168,
-           "conn_info.dwCipherStrength = %d\n", conn_info.dwCipherStrength);
+        ok(conn_info.dwCipherStrength >= 128, "conn_info.dwCipherStrength = %d\n", conn_info.dwCipherStrength);
         ok(conn_info.dwHashStrength >= 128, "conn_info.dwHashStrength = %d\n", conn_info.dwHashStrength);
     }
 
@@ -1027,6 +995,4 @@ START_TEST(schannel)
 
     if(secdll)
         FreeLibrary(secdll);
-    if(crypt32dll)
-        FreeLibrary(crypt32dll);
 }

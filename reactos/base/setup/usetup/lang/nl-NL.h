@@ -500,6 +500,7 @@ static MUI_ENTRY nlNLRepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY nlNLComputerPageEntries[] =
 {
     {
@@ -854,7 +855,7 @@ static MUI_ENTRY nlNLSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY nlNLConfirmDeletePartitionEntries[] =
+static MUI_ENTRY nlNLConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
@@ -865,13 +866,13 @@ static MUI_ENTRY nlNLConfirmDeletePartitionEntries[] =
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "You have chosen to delete the system partition.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -895,7 +896,7 @@ static MUI_ENTRY nlNLConfirmDeletePartitionEntries[] =
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "programs on the partition, or when you are sure you want to delete them.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1642,7 +1643,6 @@ MUI_ERROR nlNLErrorEntries[] =
     }
 };
 
-
 MUI_PAGE nlNLPages[] =
 {
     {
@@ -1687,7 +1687,7 @@ MUI_PAGE nlNLPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        nlNLConfirmDeletePartitionEntries
+        nlNLConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1785,6 +1785,8 @@ MUI_STRING nlNLStrings[] =
     "Setup installeert ReactOS op Partitie"},
     {STRING_CHECKINGPART,
     "Setup controleert nu de geselecteerde partitie."},
+    {STRING_CONTINUE,
+    "ENTER = Doorgaan"},
     {STRING_QUITCONTINUE,
     "F3 = Afsluiten   ENTER = Doorgaan"},
     {STRING_REBOOTCOMPUTER,
@@ -1832,7 +1834,7 @@ MUI_STRING nlNLStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  Schijf %lu  (Poort=%hu, Bus=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  Type %lu    %I64u %s"},
+    "   %c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "op %I64u %s  Schijf %lu  (Poort=%hu, Bus=%hu, Id=%hu) op %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1840,7 +1842,7 @@ MUI_STRING nlNLStrings[] =
     {STRING_HDINFOPARTZEROED,
     "Schijf %lu (%I64u %s), Poort=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  Type %lu    %I64u %s"},
+    "%c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "op Schijf %lu (%I64u %s), Poort=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

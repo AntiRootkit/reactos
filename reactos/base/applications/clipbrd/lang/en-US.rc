@@ -10,7 +10,7 @@ BEGIN
     POPUP "&File"
     BEGIN
         MENUITEM "&Open...", CMD_OPEN
-        MENUITEM "Save &as...", CMD_SAVE_AS
+        MENUITEM "Save &As...", CMD_SAVE_AS
         MENUITEM SEPARATOR
         MENUITEM "E&xit", CMD_EXIT
     END
@@ -32,7 +32,8 @@ END
 
 STRINGTABLE
 BEGIN
-    STRING_CLIPBOARD "Clipboard"
+    STRING_CLIPBOARD "Clipboard Viewer"
+    STRING_CLIPFILE  "Clipboard Element"
     STRING_DELETE_MSG "Clear contents of the Clipboard?"
     STRING_DELETE_TITLE "Clear Clipboard"
     STRING_FORMAT_NT "Clipboard files for ReactOS (*.clp)"

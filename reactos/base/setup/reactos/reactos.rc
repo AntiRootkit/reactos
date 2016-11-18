@@ -17,7 +17,6 @@ IDI_MAIN ICON "res/setup.ico"
 /* Bitmaps */
 IDB_WATERMARK BITMAP "res/watermark.bmp"
 IDB_HEADER BITMAP "res/header.bmp"
-IDB_ROSLOGO BITMAP "res/rosbitmap.bmp"
 
 #include <reactos/manifest_exe.rc>
 
@@ -92,4 +91,7 @@ IDB_ROSLOGO BITMAP "res/rosbitmap.bmp"
 #endif
 #ifdef LANGUAGE_ZH_CN
     #include "lang/zh-CN.rc"
+#endif
+#ifdef LANGUAGE_ZH_TW
+    #include "lang/zh-TW.rc"
 #endif

@@ -184,7 +184,7 @@ static int KbdMessage( KEV kev, WPARAM *pwParam, LPARAM *plParam )
             if(  TrackSysKey == VK_MENU || /* <ALT>-down/<ALT>-up sequence */
                     (VKey != VK_MENU)) /* <ALT>-down...<something else>-up */
                 message = WM_SYSKEYUP;
-                TrackSysKey = 0;
+            TrackSysKey = 0;
         }
         InputKeyStateTable[VKey] &= ~0x80;
         flags |= KF_REPEAT | KF_UP;
@@ -1635,6 +1635,9 @@ static const struct tounicode_tests
     { 0, ctrl, '^', 1, {0x1e}},
     { 0, ctrl, '_', 1, {0x1f}},
     { 0, ctrl, '`', 0, {0}},
+    { VK_SPACE, 0, 0, 1, {' ',0}},
+    { VK_SPACE, shift, 0, 1, {' ',0}},
+    { VK_SPACE, ctrl, 0, 1, {' ',0}},
 };
 
 static void test_ToUnicode(void)
@@ -1764,8 +1767,8 @@ static void test_keyboard_layout_name(void)
     BOOL ret;
     char klid[KL_NAMELENGTH];
 
-if (0) /* crashes on native system */
-    ret = GetKeyboardLayoutNameA(NULL);
+    if (0) /* crashes on native system */
+        ret = GetKeyboardLayoutNameA(NULL);
 
     SetLastError(0xdeadbeef);
     ret = GetKeyboardLayoutNameW(NULL);

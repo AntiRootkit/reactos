@@ -341,6 +341,51 @@ DrawScrollBarGenericList(
 }
 
 
+static
+VOID
+CenterCurrentListItem(
+    PGENERIC_LIST List)
+{
+    PLIST_ENTRY Entry;
+    ULONG MaxVisibleItems, ItemCount, i;
+
+    if ((List->Top == 0 && List->Bottom == 0) ||
+        IsListEmpty(&List->ListHead) ||
+        List->CurrentEntry == NULL)
+        return;
+
+    MaxVisibleItems = (ULONG)(List->Bottom - List->Top - 1);
+
+    ItemCount = 0;
+    Entry = List->ListHead.Flink;
+    while (Entry != &List->ListHead)
+    {
+        ItemCount++;
+        Entry = Entry->Flink;
+    }
+
+    if (ItemCount > MaxVisibleItems)
+    {
+        Entry = &List->CurrentEntry->Entry;
+        for (i = 0; i < MaxVisibleItems / 2; i++)
+        {
+            if (Entry->Blink != &List->ListHead)
+                Entry = Entry->Blink;
+        }
+
+        List->FirstShown = Entry;
+
+        for (i = 0; i < MaxVisibleItems; i++)
+        {
+            if (Entry->Flink != &List->ListHead)
+                Entry = Entry->Flink;
+        }
+
+        List->LastShown = Entry;
+    }
+}
+
+
 VOID
 DrawGenericList(
     PGENERIC_LIST List,
@@ -359,6 +404,8 @@ DrawGenericList(
 
     if (IsListEmpty(&List->ListHead))
         return;
+
+    CenterCurrentListItem(List);
 
     DrawListEntries(List);
     DrawScrollBarGenericList(List);
@@ -579,7 +626,7 @@ GetListEntryText(
 VOID
 GenericListKeyPress(
     PGENERIC_LIST GenericList,
-    CHAR AsciChar)
+    CHAR AsciiChar)
 {
     PGENERIC_LIST_ENTRY ListEntry;
     PGENERIC_LIST_ENTRY OldListEntry;
@@ -590,13 +637,13 @@ GenericListKeyPress(
 
     GenericList->Redraw = FALSE;
 
-    if ((strlen(ListEntry->Text) > 0) && (tolower(ListEntry->Text[0]) == AsciChar) &&
+    if ((strlen(ListEntry->Text) > 0) && (tolower(ListEntry->Text[0]) == AsciiChar) &&
          (GenericList->CurrentEntry->Entry.Flink != &GenericList->ListHead))
     {
         ScrollDownGenericList(GenericList);
         ListEntry = GenericList->CurrentEntry;
 
-        if ((strlen(ListEntry->Text) > 0) && (tolower(ListEntry->Text[0]) == AsciChar))
+        if ((strlen(ListEntry->Text) > 0) && (tolower(ListEntry->Text[0]) == AsciiChar))
             goto End;
     }
 
@@ -607,7 +654,7 @@ GenericListKeyPress(
 
     for (;;)
     {
-        if ((strlen(ListEntry->Text) > 0) && (tolower(ListEntry->Text[0]) == AsciChar))
+        if ((strlen(ListEntry->Text) > 0) && (tolower(ListEntry->Text[0]) == AsciiChar))
         {
             Flag = TRUE;
             break;

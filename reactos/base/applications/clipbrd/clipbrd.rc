@@ -8,7 +8,8 @@
 #define REACTOS_STR_ORIGINAL_FILENAME "clipbrd.exe"
 #include <reactos/version.rc>
 
-CLIP_ICON ICON "res/clipbrd.ico"
+CLIPBRD_ICON ICON "res/clipbrd.ico"
+CLPFILE_ICON ICON "res/clpfile.ico"
 
 #include <reactos/manifest_exe.rc>
 
@@ -27,6 +28,18 @@ CLIP_ICON ICON "res/clipbrd.ico"
 #ifdef LANGUAGE_FR_FR
     #include "lang/fr-FR.rc"
 #endif
+#ifdef LANGUAGE_RO_RO
+    #include "lang/ro-RO.rc"
+#endif
+#ifdef LANGUAGE_RU_RU
+    #include "lang/ru-RU.rc"
+#endif
+#ifdef LANGUAGE_TR_TR
+    #include "lang/tr-TR.rc"
+#endif
 #ifdef LANGUAGE_ZH_CN
     #include "lang/zh-CN.rc"
+#endif
+#ifdef LANGUAGE_ZH_TW
+    #include "lang/zh-TW.rc"
 #endif

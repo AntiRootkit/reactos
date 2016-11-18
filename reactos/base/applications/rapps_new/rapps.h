@@ -24,12 +24,16 @@
 #include <strsafe.h>
 #include <ndk/rtlfuncs.h>
 
-#include <rappsmsg.h>
+#include <rappsmsg_new.h>
 
 #include "resource.h"
 
-/* FIXME: this should be downloaded by HTTPS once is supported */
-#define APPLICATION_DATABASE_URL L"http://svn.reactos.org/packages/rappmgr.cab"
+#ifdef USE_CERT_PINNING
+  #define CERT_ISSUER_INFO "BE\r\nGlobalSign nv-sa\r\nGlobalSign Domain Validation CA - SHA256 - G2"
+  #define CERT_SUBJECT_INFO "Domain Control Validated\r\n*.reactos.org"
+#endif
+
+#define APPLICATION_DATABASE_URL L"https://svn.reactos.org/packages/rappmgr.cab"
 
 #define SPLIT_WIDTH 4
 #define MAX_STR_LEN 256
@@ -89,8 +93,8 @@ typedef struct
     FILETIME ftCacheStamp;
     LIST_ENTRY List;
 
-    /* optional integrity checks */
-    BYTE MD5Checksum[16];
+    /* optional integrity checks (SHA-1 digests are 160 bit = 40 characters in hex string form) */
+    WCHAR szSHA1[40 + 1];
 
 } APPLICATION_INFO, *PAPPLICATION_INFO;
 
@@ -184,6 +188,9 @@ VOID NewRichEditText(PCWSTR szText, DWORD flags);
 VOID InsertRichEditText(PCWSTR szText, DWORD flags);
 extern HWND hListView;
 extern WCHAR szSearchPattern[MAX_STR_LEN];
+
+/* integrity.cpp */
+BOOL VerifyInteg(LPCWSTR lpSHA1Hash, LPCWSTR lpFileName);
 
 //extern HWND hTreeView;
 //BOOL CreateTreeView(HWND hwnd);

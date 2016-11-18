@@ -18,20 +18,17 @@ extern PEXT2_GLOBAL Ext2Global;
 /* DEFINITIONS *************************************************************/
 
 #ifdef ALLOC_PRAGMA
-#pragma alloc_text(PAGE, Ext2AllocateFcb)
-#pragma alloc_text(PAGE, Ext2FreeFcb)
 #pragma alloc_text(PAGE, Ext2AllocateInode)
 #pragma alloc_text(PAGE, Ext2DestroyInode)
 #pragma alloc_text(PAGE, Ext2CheckBitmapConsistency)
 #pragma alloc_text(PAGE, Ext2CheckSetBlock)
 #pragma alloc_text(PAGE, Ext2InitializeVcb)
-#pragma alloc_text(PAGE, Ext2FreeCcb)
-#pragma alloc_text(PAGE, Ext2AllocateCcb)
 #pragma alloc_text(PAGE, Ext2TearDownStream)
 #pragma alloc_text(PAGE, Ext2DestroyVcb)
 #pragma alloc_text(PAGE, Ext2SyncUninitializeCacheMap)
 #pragma alloc_text(PAGE, Ext2ReaperThread)
-#pragma alloc_text(PAGE, Ext2StartReaperThread)
+#pragma alloc_text(PAGE, Ext2StartReaper)
+#pragma alloc_text(PAGE, Ext2StopReaper)
 #endif
 
 PEXT2_IRP_CONTEXT
@@ -138,7 +135,7 @@ Ext2AllocateFcb (
 {
     PEXT2_FCB Fcb;
 
-    ASSERT(!IsMcbSymLink(Mcb));
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&Vcb->FcbLock));
 
     Fcb = (PEXT2_FCB) ExAllocateFromNPagedLookasideList(
               &(Ext2Global->Ext2FcbLookasideList));
@@ -202,88 +199,125 @@ Ext2AllocateFcb (
 }
 
 VOID
+Ext2UnlinkFcb(IN PEXT2_FCB Fcb)
+{
+    PEXT2_VCB  Vcb = Fcb->Vcb;
+    PEXT2_MCB  Mcb;
+
+    ExAcquireResourceExclusiveLite(&Vcb->McbLock, TRUE);
+    Mcb = Fcb->Mcb;
+
+    DEBUG(DL_ERR, ("Ext2FreeFcb: Fcb (%p) to be unlinked: %wZ.\n",
+                    Fcb, Mcb ? &Mcb->FullName : NULL));
+
+    if ((Mcb != NULL) && 
+        (Mcb->Identifier.Type == EXT2MCB) &&
+        (Mcb->Identifier.Size == sizeof(EXT2_MCB))) {
+
+        ASSERT (Mcb->Fcb == Fcb);
+        if (IsMcbSpecialFile(Mcb) ||
+            IsFileDeleted(Mcb)) {
+
+            ASSERT(!IsRoot(Fcb));
+            Ext2RemoveMcb(Vcb, Mcb);
+            Mcb->Fcb = NULL;
+
+            Ext2UnlinkMcb(Vcb, Mcb);
+            Ext2DerefMcb(Mcb);
+            Ext2LinkHeadMcb(Vcb, Mcb);
+
+        } else {
+            Mcb->Fcb = NULL;
+            Ext2DerefMcb(Mcb);
+        }
+        Fcb->Mcb = NULL;
+    }
+
+    ExReleaseResourceLite(&Vcb->McbLock);
+}
+
+VOID
 Ext2FreeFcb (IN PEXT2_FCB Fcb)
 {
     PEXT2_VCB   Vcb = Fcb->Vcb;
 
-    ASSERT((Fcb != NULL) && (Fcb->Identifier.Type == EXT2FCB) &&
-           (Fcb->Identifier.Size == sizeof(EXT2_FCB)));
-    ASSERT((Fcb->Mcb->Identifier.Type == EXT2MCB) &&
-           (Fcb->Mcb->Identifier.Size == sizeof(EXT2_MCB)));
+    _SEH2_TRY {
+
+        ASSERT((Fcb != NULL) && (Fcb->Identifier.Type == EXT2FCB) &&
+               (Fcb->Identifier.Size == sizeof(EXT2_FCB)));
+        ASSERT(0 == Fcb->ReferenceCount);
 
 #ifndef _WIN2K_TARGET_
-    FsRtlTeardownPerStreamContexts(&Fcb->Header);
+        FsRtlTeardownPerStreamContexts(&Fcb->Header);
 #endif
 
-    if ((Fcb->Mcb->Identifier.Type == EXT2MCB) &&
-            (Fcb->Mcb->Identifier.Size == sizeof(EXT2_MCB))) {
+        FsRtlUninitializeFileLock(&Fcb->FileLockAnchor);
+        FsRtlUninitializeOplock(&Fcb->Oplock);
+        ExDeleteResourceLite(&Fcb->MainResource);
+        ExDeleteResourceLite(&Fcb->PagingIoResource);
 
-        ASSERT (Fcb->Mcb->Fcb == Fcb);
-        if (IsMcbSpecialFile(Fcb->Mcb) || IsFileDeleted(Fcb->Mcb)) {
+        Fcb->Identifier.Type = 0;
+        Fcb->Identifier.Size = 0;
 
-            ASSERT(!IsRoot(Fcb));
-            Ext2RemoveMcb(Fcb->Vcb, Fcb->Mcb);
-            Fcb->Mcb->Fcb = NULL;
+        ExFreeToNPagedLookasideList(&(Ext2Global->Ext2FcbLookasideList), Fcb);
+        DEC_MEM_COUNT(PS_FCB, Fcb, sizeof(EXT2_FCB));
 
-            Ext2UnlinkMcb(Vcb, Fcb->Mcb);
-            Ext2DerefMcb(Fcb->Mcb);
-            Ext2LinkHeadMcb(Vcb, Fcb->Mcb);
-
-        } else {
-
-            Fcb->Mcb->Fcb = NULL;
-            Ext2DerefMcb(Fcb->Mcb);
+        if (0 == Ext2DerefXcb(&Vcb->ReferenceCount)) {
+            if (!IsMounted(Vcb) || IsDispending(Vcb)) {
+                Ext2CheckDismount(NULL, Vcb, FALSE);
+            }
         }
 
-    } else {
-        DbgBreak();
-    }
-
-    Ext2RemoveFcb(Fcb->Vcb, Fcb);
-
-    FsRtlUninitializeFileLock(&Fcb->FileLockAnchor);
-    FsRtlUninitializeOplock(&Fcb->Oplock);
-    ExDeleteResourceLite(&Fcb->MainResource);
-    ExDeleteResourceLite(&Fcb->PagingIoResource);
-
-    DEBUG(DL_RES, ( "Ext2FreeFcb: Fcb (%p) is being released: %wZ.\n",
-                    Fcb, &Fcb->Mcb->FullName));
-
-    Fcb->Identifier.Type = 0;
-    Fcb->Identifier.Size = 0;
-
-    ExFreeToNPagedLookasideList(&(Ext2Global->Ext2FcbLookasideList), Fcb);
-    DEC_MEM_COUNT(PS_FCB, Fcb, sizeof(EXT2_FCB));
+    } _SEH2_FINALLY {
+    } _SEH2_END;
 }
 
-/* Insert Fcb to Vcb->FcbList queue */
+VOID
+Ext2ReleaseFcb (IN PEXT2_FCB Fcb)
+{
+    PEXT2_VCB   Vcb = Fcb->Vcb;
+    PEXT2_MCB   Mcb;
+
+    if (0 != Ext2DerefXcb(&Fcb->ReferenceCount))
+        return;
+
+    ExAcquireResourceExclusiveLite(&Vcb->FcbLock, TRUE);
+    ExAcquireResourceExclusiveLite(&Fcb->MainResource, TRUE);
+
+    Mcb = Fcb->Mcb;
+    RemoveEntryList(&Fcb->Next);
+
+    if (IsFlagOn(Fcb->Flags, FCB_DELETE_PENDING) ||
+        NULL == Mcb || IsFileDeleted(Mcb)) {
+        InsertHeadList(&Vcb->FcbList, &Fcb->Next);
+        Fcb->TsDrop.QuadPart = 0;
+    } else {
+        InsertTailList(&Vcb->FcbList, &Fcb->Next);
+        KeQuerySystemTime(&Fcb->TsDrop);
+    }
+    ExReleaseResourceLite(&Fcb->MainResource);
+    ExReleaseResourceLite(&Vcb->FcbLock);
+
+    if ((Vcb->FcbCount >> 6) > (ULONG)(Ext2Global->MaxDepth)) {
+        KeSetEvent(&Ext2Global->FcbReaper.Wait, 0, FALSE);
+    }
+}
+
+/* Insert Fcb to Vcb->FcbList queue, with Vcb->FcbLock Acquired. */
 
 VOID
 Ext2InsertFcb(PEXT2_VCB Vcb, PEXT2_FCB Fcb)
 {
-    ExInterlockedInsertTailList(&Vcb->FcbList, &Fcb->Next, &Vcb->FcbLock);
+    ASSERT(ExIsResourceAcquiredExclusiveLite(&Vcb->FcbLock));
+
+    KeQuerySystemTime(&Fcb->TsDrop);
     Ext2ReferXcb(&Vcb->FcbCount);
-}
-
-/* Remove Fcb from Vcb->FcbList queue */
-
-VOID
-Ext2RemoveFcb(PEXT2_VCB Vcb, PEXT2_FCB Fcb)
-{
-    KIRQL   irql;
-
-    KeAcquireSpinLock(&Vcb->FcbLock, &irql);
-    RemoveEntryList(&(Fcb->Next));
-    if (Vcb->FcbCount > 0) {
-        Ext2DerefXcb(&Vcb->FcbCount);
-    } else {
-        DbgBreak();
-    }
-    KeReleaseSpinLock(&Vcb->FcbLock, irql);
+    Ext2ReferXcb(&Vcb->ReferenceCount);
+    InsertTailList(&Vcb->FcbList, &Fcb->Next);
 }
 
 PEXT2_CCB
-Ext2AllocateCcb (PEXT2_MCB  SymLink)
+Ext2AllocateCcb (ULONG Flags, PEXT2_MCB SymLink)
 {
     PEXT2_CCB Ccb;
 
@@ -299,6 +333,7 @@ Ext2AllocateCcb (PEXT2_MCB  SymLink)
 
     Ccb->Identifier.Type = EXT2CCB;
     Ccb->Identifier.Size = sizeof(EXT2_CCB);
+    Ccb->Flags = Flags;
 
     Ccb->SymLink = SymLink;
     if (SymLink) {
@@ -321,7 +356,6 @@ VOID
 Ext2FreeCcb (IN PEXT2_VCB Vcb, IN PEXT2_CCB Ccb)
 {
     ASSERT(Ccb != NULL);
-
     ASSERT((Ccb->Identifier.Type == EXT2CCB) &&
            (Ccb->Identifier.Size == sizeof(EXT2_CCB)));
 
@@ -1187,7 +1221,7 @@ Ext2BuildExtents(
     NTSTATUS    Status = STATUS_SUCCESS;
 
     PEXT2_EXTENT  Extent = NULL;
-    PEXT2_EXTENT  List = *Chain;
+    PEXT2_EXTENT  List = *Chain = NULL;
 
     if (!IsZoneInited(Mcb)) {
         Status = Ext2InitializeZone(IrpContext, Vcb, Mcb);
@@ -1246,7 +1280,7 @@ Ext2BuildExtents(
                              &Mapped
                      );
             if (!NT_SUCCESS(Status)) {
-                goto errorout;
+                break;
             }
 
             /* skip wrong blocks, in case wrongly treating symlink
@@ -1272,6 +1306,11 @@ Ext2BuildExtents(
             Length = Size;
         }
 
+        if (0 == Length) {
+            DbgBreak();
+            break;
+        }
+
         Start += Mapped;
         Offset = (ULONGLONG)Start << BLOCK_BITS;
 
@@ -1288,7 +1327,8 @@ Ext2BuildExtents(
                 Extent = Ext2AllocateExtent();
                 if (!Extent) {
                     Status = STATUS_INSUFFICIENT_RESOURCES;
-                    goto errorout;
+                    DbgBreak();
+                    break;
                 }
 
                 Extent->Lba = Lba;
@@ -1303,13 +1343,15 @@ Ext2BuildExtents(
                     *Chain = List = Extent;
                 }
             }
+        } else {
+            if (bAlloc) {
+                DbgBreak();
+            }
         }
 
         Total += Length;
         Size  -= Length;
     }
-
-errorout:
 
     return Status;
 }
@@ -1397,7 +1439,7 @@ Ext2AllocateMcb (
 
     /* need wake the reaper thread if there are many Mcb allocated */
     if (Ext2Global->PerfStat.Current.Mcb > (((ULONG)Ext2Global->MaxDepth) * 4)) {
-        KeSetEvent(&Ext2Global->Reaper.Wait, 0, FALSE);
+        KeSetEvent(&Ext2Global->McbReaper.Wait, 0, FALSE);
     }
 
     /* allocate Mcb from LookasideList */
@@ -1498,6 +1540,7 @@ Ext2FreeMcb (IN PEXT2_VCB Vcb, IN PEXT2_MCB Mcb)
 #ifndef __REACTOS__
     PEXT2_MCB   Parent = Mcb->Parent;
 #endif
+
     ASSERT(Mcb != NULL);
 
     ASSERT((Mcb->Identifier.Type == EXT2MCB) &&
@@ -1800,29 +1843,23 @@ Ext2CleanupAllMcbs(PEXT2_VCB Vcb)
 BOOLEAN
 Ext2CheckSetBlock(PEXT2_IRP_CONTEXT IrpContext, PEXT2_VCB Vcb, LONGLONG Block)
 {
-    PEXT2_GROUP_DESC gd;
-    ULONG           Group, dwBlk, Length;
+    PEXT2_GROUP_DESC    gd;
+    struct buffer_head *gb = NULL;
+    struct buffer_head *bh = NULL;
+    ULONG               group, dwBlk, Length;
+    RTL_BITMAP          bitmap;
+    BOOLEAN             bModified = FALSE;
 
-    RTL_BITMAP      BlockBitmap;
-    PVOID           BitmapCache;
-    PBCB            BitmapBcb;
-
-    LARGE_INTEGER   Offset;
-
-    BOOLEAN         bModified = FALSE;
-
-
-    Group = (ULONG)(Block - EXT2_FIRST_DATA_BLOCK) / BLOCKS_PER_GROUP;
+    group = (ULONG)(Block - EXT2_FIRST_DATA_BLOCK) / BLOCKS_PER_GROUP;
     dwBlk = (ULONG)(Block - EXT2_FIRST_DATA_BLOCK) % BLOCKS_PER_GROUP;
 
-    gd = ext4_get_group_desc(&Vcb->sb, Group, NULL);
+    gd = ext4_get_group_desc(&Vcb->sb, group, &gb);
     if (!gd) {
         return FALSE;
     }
-    Offset.QuadPart = ext4_block_bitmap(&Vcb->sb, gd);
-    Offset.QuadPart <<= BLOCK_BITS;
+    bh = sb_getblk(&Vcb->sb, ext4_block_bitmap(&Vcb->sb, gd));
 
-    if (Group == Vcb->sbi.s_groups_count - 1) {
+    if (group == Vcb->sbi.s_groups_count - 1) {
         Length = (ULONG)(TOTAL_BLOCKS % BLOCKS_PER_GROUP);
 
         /* s_blocks_count is integer multiple of s_blocks_per_group */
@@ -1832,43 +1869,24 @@ Ext2CheckSetBlock(PEXT2_IRP_CONTEXT IrpContext, PEXT2_VCB Vcb, LONGLONG Block)
         Length = BLOCKS_PER_GROUP;
     }
 
-    if (dwBlk >= Length)
-        return FALSE;
-
-    if (!CcPinRead( Vcb->Volume,
-                    &Offset,
-                    Vcb->BlockSize,
-                    PIN_WAIT,
-                    &BitmapBcb,
-                    &BitmapCache ) ) {
-
-        DEBUG(DL_ERR, ( "Ext2CheckSetBlock: Failed to PinLock block %xh ...\n",
-                        ext4_block_bitmap(&Vcb->sb, gd)));
+    if (dwBlk >= Length) {
+        fini_bh(&gb);
+        fini_bh(&bh);
         return FALSE;
     }
 
-    RtlInitializeBitMap( &BlockBitmap,
-                         BitmapCache,
-                         Length );
 
-    if (RtlCheckBit(&BlockBitmap, dwBlk) == 0) {
+    RtlInitializeBitMap(&bitmap, (PULONG)bh->b_data, Length);
+
+    if (RtlCheckBit(&bitmap, dwBlk) == 0) {
         DbgBreak();
-        RtlSetBits(&BlockBitmap, dwBlk, 1);
+        RtlSetBits(&bitmap, dwBlk, 1);
         bModified = TRUE;
+        mark_buffer_dirty(bh);
     }
 
-    if (bModified) {
-        CcSetDirtyPinnedData(BitmapBcb, NULL );
-        Ext2AddVcbExtent(Vcb, Offset.QuadPart, (LONGLONG)BLOCK_SIZE);
-    }
-
-    {
-        CcUnpinData(BitmapBcb);
-        BitmapBcb = NULL;
-        BitmapCache = NULL;
-
-        RtlZeroMemory(&BlockBitmap, sizeof(RTL_BITMAP));
-    }
+    fini_bh(&gb);
+    fini_bh(&bh);
 
     return (!bModified);
 }
@@ -1881,8 +1899,9 @@ Ext2CheckBitmapConsistency(PEXT2_IRP_CONTEXT IrpContext, PEXT2_VCB Vcb)
     for (i = 0; i < Vcb->sbi.s_groups_count; i++) {
 
         PEXT2_GROUP_DESC    gd;
+        struct buffer_head  *bh = NULL;
 
-        gd = ext4_get_group_desc(&Vcb->sb, i, NULL);
+        gd = ext4_get_group_desc(&Vcb->sb, i, &bh);
         if (!gd)
             continue;
         Ext2CheckSetBlock(IrpContext, Vcb, ext4_block_bitmap(&Vcb->sb, gd));
@@ -1900,6 +1919,8 @@ Ext2CheckBitmapConsistency(PEXT2_IRP_CONTEXT IrpContext, PEXT2_VCB Vcb)
 
         for (j = 0; j < InodeBlocks; j++ )
             Ext2CheckSetBlock(IrpContext, Vcb, ext4_inode_table(&Vcb->sb, gd) + j);
+
+        fini_bh(&bh);
     }
 
     return TRUE;
@@ -1998,7 +2019,7 @@ errorout:
 VOID
 Ext2ParseRegistryVolumeParams(
     IN  PUNICODE_STRING         Params,
-    OUT PEXT2_VOLUME_PROPERTY2  Property
+    OUT PEXT2_VOLUME_PROPERTY3  Property
 )
 {
     WCHAR       Codepage[CODEPAGE_MAXLEN];
@@ -2006,11 +2027,15 @@ Ext2ParseRegistryVolumeParams(
     WCHAR       Suffix[HIDINGPAT_LEN];
     USHORT      MountPoint[4];
     UCHAR       DrvLetter[4];
+    WCHAR       wUID[8], wGID[8], wEUID[8], wEGID[8];
+    CHAR        sUID[8], sGID[8], sEUID[8], sEGID[8];
 
     BOOLEAN     bWriteSupport = FALSE,
                 bCheckBitmap = FALSE,
                 bCodeName = FALSE,
                 bMountPoint = FALSE;
+    BOOLEAN     bUID = 0, bGID = 0, bEUID = 0, bEGID = 0;
+
     struct {
         PWCHAR   Name;      /* parameters name */
         PBOOLEAN bExist;    /* is it contained in params */
@@ -2036,6 +2061,11 @@ Ext2ParseRegistryVolumeParams(
         {MOUNT_POINT, &bMountPoint, 4,
          &MountPoint[0], &DrvLetter[0]},
 
+        {UID,  &bUID,  8, &wUID[0],  &sUID[0],},
+        {GID,  &bGID,  8, &wGID[0],  &sGID[0]},
+        {EUID, &bEUID, 8, &wEUID[0], &sEUID[0]},
+        {EGID, &bEGID, 8, &wEGID[0], &sEGID[0]},
+
         /* end */
         {NULL, NULL, 0, NULL}
     };
@@ -2048,9 +2078,9 @@ Ext2ParseRegistryVolumeParams(
     RtlZeroMemory(MountPoint, sizeof(USHORT) * 4);
     RtlZeroMemory(DrvLetter, sizeof(CHAR) * 4);
 
-    RtlZeroMemory(Property, sizeof(EXT2_VOLUME_PROPERTY2));
+    RtlZeroMemory(Property, sizeof(EXT2_VOLUME_PROPERTY3));
     Property->Magic = EXT2_VOLUME_PROPERTY_MAGIC;
-    Property->Command = APP_CMD_SET_PROPERTY2;
+    Property->Command = APP_CMD_SET_PROPERTY3;
 
     for (i=0; ParamPattern[i].Name != NULL; i++) {
 
@@ -2111,6 +2141,22 @@ Ext2ParseRegistryVolumeParams(
         Property->DrvLetter = DrvLetter[0];
         Property->DrvLetter |= 0x80;
     }
+
+    if (bUID && bGID) {
+        SetFlag(Property->Flags2, EXT2_VPROP3_USERIDS);
+        sUID[7] = sGID[7] = sEUID[7] = sEGID[7] = 0;
+        Property->uid = (USHORT)atoi(sUID);
+        Property->gid = (USHORT)atoi(sGID);
+        if (bEUID) {
+            Property->euid = (USHORT)atoi(sEUID);
+            Property->egid = (USHORT)atoi(sEGID);
+            Property->EIDS = TRUE;
+        } else {
+            Property->EIDS = FALSE;
+        }
+    } else {
+        ClearFlag(Property->Flags2, EXT2_VPROP3_USERIDS);
+    }
 }
 
 NTSTATUS
@@ -2123,7 +2169,7 @@ Ext2PerformRegistryVolumeParams(IN PEXT2_VCB Vcb)
     if (NT_SUCCESS(Status)) {
 
         /* set Vcb settings from registery */
-        EXT2_VOLUME_PROPERTY2  Property;
+        EXT2_VOLUME_PROPERTY3  Property;
         Ext2ParseRegistryVolumeParams(&VolumeParams, &Property);
         Ext2ProcessVolumeProperty(Vcb, &Property, sizeof(Property));
 
@@ -2157,7 +2203,7 @@ Ext2PerformRegistryVolumeParams(IN PEXT2_VCB Vcb)
         memcpy(Vcb->Codepage.AnsiName, Ext2Global->Codepage.AnsiName, CODEPAGE_MAXLEN);
         Vcb->Codepage.PageTable = Ext2Global->Codepage.PageTable;
 
-        if ((Vcb->bHidingPrefix = Ext2Global->bHidingPrefix) != 0) {
+        if (Vcb->bHidingPrefix == Ext2Global->bHidingPrefix) {
             RtlCopyMemory( Vcb->sHidingPrefix,
                            Ext2Global->sHidingPrefix,
                            HIDINGPAT_LEN);
@@ -2166,7 +2212,7 @@ Ext2PerformRegistryVolumeParams(IN PEXT2_VCB Vcb)
                            HIDINGPAT_LEN);
         }
 
-        if ((Vcb->bHidingSuffix = Ext2Global->bHidingSuffix) != 0) {
+        if (Vcb->bHidingSuffix == Ext2Global->bHidingSuffix) {
             RtlCopyMemory( Vcb->sHidingSuffix,
                            Ext2Global->sHidingSuffix,
                            HIDINGPAT_LEN);
@@ -2263,6 +2309,7 @@ Ext2InitializeVcb( IN PEXT2_IRP_CONTEXT IrpContext,
     BOOLEAN                     NotifySyncInitialized = FALSE;
     BOOLEAN                     ExtentsInitialized = FALSE;
     BOOLEAN                     InodeLookasideInitialized = FALSE;
+    BOOLEAN                     GroupLoaded = FALSE;
 
     _SEH2_TRY {
 
@@ -2309,8 +2356,10 @@ Ext2InitializeVcb( IN PEXT2_IRP_CONTEXT IrpContext,
         /* initialize eresources */
         ExInitializeResourceLite(&Vcb->MainResource);
         ExInitializeResourceLite(&Vcb->PagingIoResource);
-        ExInitializeResourceLite(&Vcb->MetaLock);
+        ExInitializeResourceLite(&Vcb->MetaInode);
+        ExInitializeResourceLite(&Vcb->MetaBlock);
         ExInitializeResourceLite(&Vcb->McbLock);
+        ExInitializeResourceLite(&Vcb->sbi.s_gd_lock);
 #ifndef _WIN2K_TARGET_
         ExInitializeFastMutex(&Vcb->Mutex);
         FsRtlSetupAdvancedHeader(&Vcb->Header,  &Vcb->Mutex);
@@ -2319,7 +2368,7 @@ Ext2InitializeVcb( IN PEXT2_IRP_CONTEXT IrpContext,
 
         /* initialize Fcb list head */
         InitializeListHead(&Vcb->FcbList);
-        KeInitializeSpinLock(&Vcb->FcbLock);
+        ExInitializeResourceLite(&Vcb->FcbLock);
 
         /* initialize Mcb list head  */
         InitializeListHead(&(Vcb->McbList));
@@ -2383,15 +2432,7 @@ Ext2InitializeVcb( IN PEXT2_IRP_CONTEXT IrpContext,
         /* initialize UUID and serial number */
         if (Ext2IsNullUuid(sb->s_uuid)) {
             ExUuidCreate((UUID *)sb->s_uuid);
-        } else {
-            /* query parameters from registry */
-            if (!NT_SUCCESS(Ext2PerformRegistryVolumeParams(Vcb))) {
-                /* don't mount this volume */
-                Status = STATUS_UNRECOGNIZED_VOLUME;
-                _SEH2_LEAVE;
-            }
         }
-
         Vpb->SerialNumber = ((ULONG*)sb->s_uuid)[0] +
                             ((ULONG*)sb->s_uuid)[1] +
                             ((ULONG*)sb->s_uuid)[2] +
@@ -2487,7 +2528,10 @@ Ext2InitializeVcb( IN PEXT2_IRP_CONTEXT IrpContext,
         Vcb->bd.bd_volume = Vcb->Volume;
         Vcb->bd.bd_priv = (void *) Vcb;
         memset(&Vcb->bd.bd_bh_root, 0, sizeof(struct rb_root));
-        spin_lock_init(&Vcb->bd.bd_bh_lock);
+        InitializeListHead(&Vcb->bd.bd_bh_free);
+        ExInitializeResourceLite(&Vcb->bd.bd_bh_lock);
+        KeInitializeEvent(&Vcb->bd.bd_bh_notify,
+                           NotificationEvent, TRUE);
         Vcb->bd.bd_bh_cache = kmem_cache_create("bd_bh_buffer",
                                                 Vcb->BlockSize, 0, 0, NULL);
         if (!Vcb->bd.bd_bh_cache) {
@@ -2616,6 +2660,7 @@ Ext2InitializeVcb( IN PEXT2_IRP_CONTEXT IrpContext,
             Status = STATUS_UNSUCCESSFUL;
             _SEH2_LEAVE;
         }
+        GroupLoaded = TRUE;
 
         /* recovery journal since it's ext3 */
         if (Vcb->IsExt3fs) {
@@ -2672,6 +2717,10 @@ Ext2InitializeVcb( IN PEXT2_IRP_CONTEXT IrpContext,
 
         /* get anything doen, then refer target device */
         ObReferenceObject(Vcb->TargetDeviceObject);
+
+        /* query parameters from registry */
+        Ext2PerformRegistryVolumeParams(Vcb);
+
         SetLongFlag(Vcb->Flags, VCB_INITIALIZED);
 
     } _SEH2_FINALLY {
@@ -2687,9 +2736,11 @@ Ext2InitializeVcb( IN PEXT2_IRP_CONTEXT IrpContext,
             }
 
             if (ExtentsInitialized) {
-                Ext2PutGroup(Vcb);
-                if (Vcb->bd.bd_bh_cache)
+                if (Vcb->bd.bd_bh_cache) {
+                    if (GroupLoaded)
+                        Ext2PutGroup(Vcb);
                     kmem_cache_destroy(Vcb->bd.bd_bh_cache);
+                }
                 FsRtlUninitializeLargeMcb(&(Vcb->Extents));
             }
 
@@ -2706,7 +2757,9 @@ Ext2InitializeVcb( IN PEXT2_IRP_CONTEXT IrpContext,
 
             if (VcbResourceInitialized) {
                 ExDeleteResourceLite(&Vcb->McbLock);
-                ExDeleteResourceLite(&Vcb->MetaLock);
+                ExDeleteResourceLite(&Vcb->MetaInode);
+                ExDeleteResourceLite(&Vcb->MetaBlock);
+                ExDeleteResourceLite(&Vcb->sbi.s_gd_lock);
                 ExDeleteResourceLite(&Vcb->MainResource);
                 ExDeleteResourceLite(&Vcb->PagingIoResource);
             }
@@ -2764,10 +2817,11 @@ Ext2DestroyVcb (IN PEXT2_VCB Vcb)
 
     Ext2CleanupAllMcbs(Vcb);
 
-    Ext2PutGroup(Vcb);
+    Ext2DropBH(Vcb);
 
     if (Vcb->bd.bd_bh_cache)
         kmem_cache_destroy(Vcb->bd.bd_bh_cache);
+    ExDeleteResourceLite(&Vcb->bd.bd_bh_lock);
 
     if (Vcb->SuperBlock) {
         Ext2FreePool(Vcb->SuperBlock, EXT2_SB_MAGIC);
@@ -2776,7 +2830,8 @@ Ext2DestroyVcb (IN PEXT2_VCB Vcb)
 
     if (IsFlagOn(Vcb->Flags, VCB_NEW_VPB)) {
         ASSERT(Vcb->Vpb2 != NULL);
-        Ext2FreePool(Vcb->Vpb2, TAG_VPB);
+        DEBUG(DL_DBG, ("Ext2DestroyVcb: Vpb2 to be freed: %p\n", Vcb->Vpb2));
+        ExFreePoolWithTag(Vcb->Vpb2, TAG_VPB);
         DEC_MEM_COUNT(PS_VPB, Vcb->Vpb2, sizeof(VPB));
         Vcb->Vpb2 = NULL;
     }
@@ -2784,8 +2839,11 @@ Ext2DestroyVcb (IN PEXT2_VCB Vcb)
     ObDereferenceObject(Vcb->TargetDeviceObject);
 
     ExDeleteNPagedLookasideList(&(Vcb->InodeLookasideList));
+    ExDeleteResourceLite(&Vcb->FcbLock);
     ExDeleteResourceLite(&Vcb->McbLock);
-    ExDeleteResourceLite(&Vcb->MetaLock);
+    ExDeleteResourceLite(&Vcb->MetaInode);
+    ExDeleteResourceLite(&Vcb->MetaBlock);
+    ExDeleteResourceLite(&Vcb->sbi.s_gd_lock);
     ExDeleteResourceLite(&Vcb->PagingIoResource);
     ExDeleteResourceLite(&Vcb->MainResource);
 
@@ -2950,16 +3008,11 @@ Ext2FirstUnusedMcb(PEXT2_VCB Vcb, BOOLEAN Wait, ULONG Number)
 
 /* Reaper thread to release unused Mcb blocks */
 VOID NTAPI
-Ext2ReaperThread(
+Ext2McbReaperThread(
     PVOID   Context
 )
 {
-    BOOLEAN         GlobalAcquired = FALSE;
-
-    BOOLEAN         DidNothing = TRUE;
-    BOOLEAN         LastState  = TRUE;
-    BOOLEAN         WaitLock;
-
+    PEXT2_REAPER    Reaper = Context;
     PLIST_ENTRY     List = NULL;
     LARGE_INTEGER   Timeout;
 
@@ -2968,13 +3021,21 @@ Ext2ReaperThread(
 
     ULONG           i, NumOfMcbs;
 
+    BOOLEAN         GlobalAcquired = FALSE;
+
+    BOOLEAN         DidNothing = TRUE;
+    BOOLEAN         LastState  = TRUE;
+    BOOLEAN         WaitLock;
+
     _SEH2_TRY {
 
+        Reaper->Thread = PsGetCurrentThread();
+
         /* wake up DirverEntry */
-        KeSetEvent(&Ext2Global->Reaper.Engine, 0, FALSE);
+        KeSetEvent(&Reaper->Engine, 0, FALSE);
 
         /* now process looping */
-        while (TRUE) {
+        while (!IsFlagOn(Reaper->Flags, EXT2_REAPER_FLAG_STOP)) {
 
             WaitLock = FALSE;
 
@@ -3017,12 +3078,15 @@ Ext2ReaperThread(
 
             /* wait until it is waken or it times out */
             KeWaitForSingleObject(
-                &(Ext2Global->Reaper.Wait),
+                &Reaper->Wait,
                 Executive,
                 KernelMode,
                 FALSE,
                 &Timeout
             );
+
+            if (IsFlagOn(Reaper->Flags, EXT2_REAPER_FLAG_STOP))
+                break;
 
             DidNothing = TRUE;
 
@@ -3062,22 +3126,301 @@ Ext2ReaperThread(
         if (GlobalAcquired) {
             ExReleaseResourceLite(&Ext2Global->Resource);
         }
+
+        KeSetEvent(&Reaper->Engine, 0, FALSE);
     } _SEH2_END;
 
     PsTerminateSystemThread(STATUS_SUCCESS);
 }
 
 
+/* get buffer heads from global Vcb BH list */
+
+BOOLEAN
+Ext2QueryUnusedBH(PEXT2_VCB Vcb, PLIST_ENTRY head)
+{
+    struct buffer_head *bh = NULL;
+    PLIST_ENTRY      next = NULL;
+    LARGE_INTEGER   now;
+    BOOLEAN         wake = FALSE;
+
+    KeQuerySystemTime(&now);
+
+    ExAcquireResourceExclusiveLite(&Vcb->bd.bd_bh_lock, TRUE);
+
+    while (!IsListEmpty(&Vcb->bd.bd_bh_free)) {
+        next = RemoveHeadList(&Vcb->bd.bd_bh_free);
+        bh = CONTAINING_RECORD(next, struct buffer_head, b_link);
+        if (atomic_read(&bh->b_count)) {
+            InitializeListHead(&bh->b_link);
+            /* to be inserted by brelse */
+            continue;
+        }
+
+        if ( IsFlagOn(Vcb->Flags, VCB_BEING_DROPPED) ||
+            (bh->b_ts_drop.QuadPart + (LONGLONG)10*1000*1000*15) > now.QuadPart ||
+            (bh->b_ts_creat.QuadPart + (LONGLONG)10*1000*1000*180) > now.QuadPart) {
+            InsertTailList(head, &bh->b_link);
+        } else {
+            InsertHeadList(&Vcb->bd.bd_bh_free, &bh->b_link);
+            break;
+        }
+    }
+
+    wake = IsListEmpty(&Vcb->bd.bd_bh_free);
+    ExReleaseResourceLite(&Vcb->bd.bd_bh_lock);
+
+    if (wake)
+        KeSetEvent(&Vcb->bd.bd_bh_notify, 0, FALSE);
+
+    return IsFlagOn(Vcb->Flags, VCB_BEING_DROPPED);
+}
+
+
+/* Reaper thread to release unused buffer heads */
+VOID NTAPI
+Ext2bhReaperThread(
+    PVOID   Context
+)
+{
+    PEXT2_REAPER    Reaper = Context;
+    PEXT2_VCB       Vcb = NULL;
+    LIST_ENTRY      List, *Link;
+    LARGE_INTEGER   Timeout;
+
+    BOOLEAN         GlobalAcquired = FALSE;
+    BOOLEAN         DidNothing = FALSE;
+    BOOLEAN         NonWait = FALSE;
+
+    _SEH2_TRY {
+
+        Reaper->Thread = PsGetCurrentThread();
+
+        /* wake up DirverEntry */
+        KeSetEvent(&Reaper->Engine, 0, FALSE);
+
+        /* now process looping */
+        while (!IsFlagOn(Reaper->Flags, EXT2_REAPER_FLAG_STOP)) {
+
+            /* wait until it is waken or it times out */
+            if (NonWait) {
+                Timeout.QuadPart = (LONGLONG)-10*1000*10;
+                NonWait = FALSE;
+            } else if (DidNothing) {
+                Timeout.QuadPart = Timeout.QuadPart * 2;
+            } else {
+                Timeout.QuadPart = (LONGLONG)-10*1000*1000*10; /* 10 seconds */
+            }
+            KeWaitForSingleObject(
+                &Reaper->Wait,
+                Executive,
+                KernelMode,
+                FALSE,
+                &Timeout
+            );
+
+            if (IsFlagOn(Reaper->Flags, EXT2_REAPER_FLAG_STOP))
+                break;
+
+            InitializeListHead(&List);
+
+            /* acquire global exclusive lock */
+            ExAcquireResourceSharedLite(&Ext2Global->Resource, TRUE);
+            GlobalAcquired = TRUE;
+            /* search all Vcb to get unused resources freed to system */
+            for (Link = Ext2Global->VcbList.Flink;
+                 Link != &(Ext2Global->VcbList);
+                 Link = Link->Flink ) {
+
+                Vcb = CONTAINING_RECORD(Link, EXT2_VCB, Next);
+                NonWait = Ext2QueryUnusedBH(Vcb, &List);
+            }
+            if (GlobalAcquired) {
+                ExReleaseResourceLite(&Ext2Global->Resource);
+                GlobalAcquired = FALSE;
+            }
+
+            DidNothing = IsListEmpty(&List);
+            while (!IsListEmpty(&List)) {
+                struct buffer_head *bh;
+                Link = RemoveHeadList(&List);
+                bh = CONTAINING_RECORD(Link, struct buffer_head, b_link);
+                ASSERT(0 == atomic_read(&bh->b_count));
+                free_buffer_head(bh);
+            }
+        }
+
+    } _SEH2_FINALLY {
+
+        if (GlobalAcquired) {
+            ExReleaseResourceLite(&Ext2Global->Resource);
+        }
+
+        KeSetEvent(&Reaper->Engine, 0, FALSE);
+    } _SEH2_END;
+
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
+/* get unused Fcbs to free */
+
+BOOLEAN
+Ext2QueryUnusedFcb(PEXT2_VCB Vcb, PLIST_ENTRY list)
+{
+    PEXT2_FCB       Fcb;
+    PLIST_ENTRY     next = NULL;
+    LARGE_INTEGER   now;
+
+    ULONG           count = 0;
+    ULONG           tries = 0;
+    BOOLEAN         wake = FALSE;
+    BOOLEAN         retry = TRUE;
+
+    KeQuerySystemTime(&now);
+
+    ExAcquireResourceExclusiveLite(&Vcb->FcbLock, TRUE);
+
+again:
+
+    while (!IsListEmpty(&Vcb->FcbList)) {
+
+        next = RemoveHeadList(&Vcb->FcbList);
+        Fcb = CONTAINING_RECORD(next, EXT2_FCB, Next);
+
+        if (Fcb->ReferenceCount > 0) {
+            InsertTailList(&Vcb->FcbList, &Fcb->Next);
+            break;
+        }
+
+        retry = FALSE;
+
+        if (now.QuadPart < Fcb->TsDrop.QuadPart + 10*1000*1000*120) {
+            InsertHeadList(&Vcb->FcbList, &Fcb->Next);
+            break;
+        }
+
+        Ext2UnlinkFcb(Fcb);
+        Ext2DerefXcb(&Vcb->FcbCount);
+        InsertTailList(list, &Fcb->Next);
+        if (++count >= Ext2Global->MaxDepth) {
+            break;
+        }
+    }
+
+    if (retry) {
+        if (++tries < (Vcb->FcbCount >> 4) )
+            goto again;
+    }
+
+    ExReleaseResourceLite(&Vcb->FcbLock);
+
+    return 0;
+}
+
+/* Reaper thread to release Fcb */
+VOID NTAPI
+Ext2FcbReaperThread(
+    PVOID   Context
+)
+{
+    PEXT2_REAPER    Reaper = Context;
+    PEXT2_VCB       Vcb = NULL;
+    LIST_ENTRY      List, *Link;
+    LARGE_INTEGER   Timeout;
+
+    BOOLEAN         GlobalAcquired = FALSE;
+    BOOLEAN         DidNothing = FALSE;
+    BOOLEAN         NonWait = FALSE;
+
+    _SEH2_TRY {
+
+        Reaper->Thread = PsGetCurrentThread();
+
+        /* wake up DirverEntry */
+        KeSetEvent(&Reaper->Engine, 0, FALSE);
+
+        /* now process looping */
+        while (!IsFlagOn(Reaper->Flags, EXT2_REAPER_FLAG_STOP)) {
+
+            /* wait until it is waken or it times out */
+            if (NonWait) {
+                Timeout.QuadPart = (LONGLONG)-10*1000*100;
+                NonWait = FALSE;
+            } else if (DidNothing) {
+                Timeout.QuadPart = Timeout.QuadPart * 2;
+            } else {
+                Timeout.QuadPart = (LONGLONG)-10*1000*1000*20; /* 20 seconds */
+            }
+            KeWaitForSingleObject(
+                &Reaper->Wait,
+                Executive,
+                KernelMode,
+                FALSE,
+                &Timeout
+            );
+
+            if (IsFlagOn(Reaper->Flags, EXT2_REAPER_FLAG_STOP))
+                break;
+
+            InitializeListHead(&List);
+
+            /* acquire global exclusive lock */
+            ExAcquireResourceSharedLite(&Ext2Global->Resource, TRUE);
+            GlobalAcquired = TRUE;
+            /* search all Vcb to get unused resources freed to system */
+            for (Link  = Ext2Global->VcbList.Flink;
+                 Link != &(Ext2Global->VcbList);
+                 Link  = Link->Flink ) {
+
+                Vcb = CONTAINING_RECORD(Link, EXT2_VCB, Next);
+                NonWait = Ext2QueryUnusedFcb(Vcb, &List);
+            }
+            if (GlobalAcquired) {
+                ExReleaseResourceLite(&Ext2Global->Resource);
+                GlobalAcquired = FALSE;
+            }
+
+            DidNothing = IsListEmpty(&List);
+            while (!IsListEmpty(&List)) {
+                PEXT2_FCB  Fcb;
+                Link = RemoveHeadList(&List);
+                Fcb = CONTAINING_RECORD(Link, EXT2_FCB, Next);
+                ASSERT(0 == Fcb->ReferenceCount);
+                Ext2FreeFcb(Fcb);
+            }
+        }
+
+    } _SEH2_FINALLY {
+
+        if (GlobalAcquired) {
+            ExReleaseResourceLite(&Ext2Global->Resource);
+        }
+
+        KeSetEvent(&Reaper->Engine, 0, FALSE);
+    } _SEH2_END;
+
+    PsTerminateSystemThread(STATUS_SUCCESS);
+}
+
 NTSTATUS
-Ext2StartReaperThread()
+Ext2StartReaper(PEXT2_REAPER Reaper, EXT2_REAPER_RELEASE Free)
 {
     NTSTATUS status = STATUS_SUCCESS;
     OBJECT_ATTRIBUTES  oa;
     HANDLE   handle = 0;
+    LARGE_INTEGER timeout;
+
+    Reaper->Free = Free;
 
     /* initialize wait event */
     KeInitializeEvent(
-        &Ext2Global->Reaper.Wait,
+        &Reaper->Wait,
+        SynchronizationEvent, FALSE
+    );
+
+    /* Reaper thread engine event */
+    KeInitializeEvent(
+        &Reaper->Engine,
         SynchronizationEvent, FALSE
     );
 
@@ -3098,13 +3441,45 @@ Ext2StartReaperThread()
                  &oa,
                  NULL,
                  NULL,
-                 Ext2ReaperThread,
-                 NULL
+                 Free,
+                 (PVOID)Reaper
              );
 
     if (NT_SUCCESS(status)) {
         ZwClose(handle);
+
+        /* make sure Reaperthread is started */
+        timeout.QuadPart = (LONGLONG)-10*1000*1000*2; /* 2 seconds */
+        status = KeWaitForSingleObject(
+                     &Reaper->Engine,
+                     Executive,
+                     KernelMode,
+                     FALSE,
+                     &timeout
+                 );
+        if (status != STATUS_SUCCESS) {
+            status = STATUS_INSUFFICIENT_RESOURCES;
+        }
     }
 
     return status;
+}
+
+
+VOID NTAPI
+Ext2StopReaper(PEXT2_REAPER Reaper)
+{
+    LARGE_INTEGER timeout;
+
+    Reaper->Flags |= EXT2_REAPER_FLAG_STOP;
+    KeSetEvent(&Reaper->Wait, 0, FALSE);
+
+    /* make sure Reaperthread is started */
+    timeout.QuadPart = (LONGLONG)-10*1000*1000*2; /* 2 seconds */
+    KeWaitForSingleObject(
+                     &Reaper->Engine,
+                     Executive,
+                     KernelMode,
+                     FALSE,
+                     &timeout);
 }

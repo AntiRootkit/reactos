@@ -45,7 +45,7 @@ static MUI_ENTRY trTRLanguagePageEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   ò3 = Äçk",
+        "Giriü = SÅrdÅr   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -103,7 +103,7 @@ static MUI_ENTRY trTRWelcomePageEntries[] =
     {
         8,
         21,
-        "\x07  ReactOS'u kurmadan áçkmak iáin ò3'e basçnçz.",
+        "\x07  ReactOS'u kurmadan áçkmak iáin F3'e basçnçz.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -121,7 +121,7 @@ static MUI_ENTRY trTRWelcomePageEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr  R = Onar veyÉ YÅkselt  L = Ruhsat ò3 = Äçk",
+        "Giriü = SÅrdÅr  R = Onar veyÉ YÅkselt  L = Ruhsat F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -179,13 +179,13 @@ static MUI_ENTRY trTRIntroPageEntries[] =
     {
         8,
         25,
-        "\x07  ReactOS'u kurmadan áçkmak iáin ò3'e basçnçz.",
+        "\x07  ReactOS'u kurmadan áçkmak iáin F3'e basçnçz.",
         TEXT_STYLE_NORMAL
     },
     {
         0,
         0,
-        "Giriü = SÅrdÅr   ò3 = Äçk",
+        "Giriü = SÅrdÅr   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -361,7 +361,7 @@ static MUI_ENTRY trTRDevicePageEntries[] =
     {
         25,
         16,
-		"Bu aygçt ayarlarçnç doßrula.",
+        "Bu aygçt ayarlarçnç doßrula.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -376,7 +376,7 @@ static MUI_ENTRY trTRDevicePageEntries[] =
         "basarak deßiütirebilirsiniz. Sonra baüka ayarlar seámek iáin Giriü",
         TEXT_STYLE_NORMAL
     },
-	{
+    {
         6,
         21,
         "dÅßmesine basçnçz.",
@@ -397,7 +397,7 @@ static MUI_ENTRY trTRDevicePageEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   ò3 = Äçk",
+        "Giriü = SÅrdÅr   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -513,7 +513,7 @@ static MUI_ENTRY trTRComputerPageEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   Äçkçü = òptal   ò3 = Äçk",
+        "Giriü = SÅrdÅr   Äçkçü = òptal   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -650,7 +650,7 @@ static MUI_ENTRY trTRDisplayPageEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   Äçkçü = òptal   ò3 = Äçk",
+        "Giriü = SÅrdÅr   Äçkçü = òptal   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -736,7 +736,7 @@ static MUI_ENTRY trTRBootPageEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   ò3 = Äçk",
+        "Giriü = SÅrdÅr   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -818,7 +818,7 @@ static MUI_ENTRY trTRSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY trTRConfirmDeletePartitionEntries[] =
+static MUI_ENTRY trTRConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
@@ -920,7 +920,7 @@ static MUI_ENTRY trTRFormatPartitionEntries[] =
         "BîlÅm Biáimlendirme",
         TEXT_STYLE_NORMAL
     },
-	{
+    {
         6,
         10,
         "Kur, üimdi bîlÅmÅ biáimlendirecek. SÅrdÅrmek iáin Giriü'e basçnçz.",
@@ -929,7 +929,7 @@ static MUI_ENTRY trTRFormatPartitionEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   ò3 = Äçk",
+        "Giriü = SÅrdÅr   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -975,7 +975,7 @@ static MUI_ENTRY trTRInstallDirectoryEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   ò3 = Äçk",
+        "Giriü = SÅrdÅr   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -1000,7 +1000,7 @@ static MUI_ENTRY trTRFileCopyEntries[] =
         "ReactOS Kur, ReactOS kurulum dizininize kÅtÅkleri áoßaltçrken",
         TEXT_STYLE_NORMAL | TEXT_ALIGN_CENTER
     },
-	{
+    {
         0,
         13,
         " lÅtfen bekleyiniz.",
@@ -1067,7 +1067,7 @@ static MUI_ENTRY trTRBootLoaderEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   ò3 = Äçk",
+        "Giriü = SÅrdÅr   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -1119,7 +1119,7 @@ static MUI_ENTRY trTRKeyboardSettingsEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   Äçkçü = òptal   ò3 = Äçk",
+        "Giriü = SÅrdÅr   Äçkçü = òptal   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -1171,7 +1171,7 @@ static MUI_ENTRY trTRLayoutSettingsEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   Äçkçü = òptal   ò3 = Äçk",
+        "Giriü = SÅrdÅr   Äçkçü = òptal   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -1247,7 +1247,7 @@ static MUI_ENTRY trTRSelectFSEntries[] =
     {
         0,
         0,
-        "Giriü = SÅrdÅr   Äçkçü = òptal   ò3 = Äçk",
+        "Giriü = SÅrdÅr   Äçkçü = òptal   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
 
@@ -1294,7 +1294,7 @@ static MUI_ENTRY trTRDeletePartitionEntries[] =
     {
         0,
         0,
-        "D = BîlÅm Sil   Äçkçü = òptal   ò3 = Äçk",
+        "D = BîlÅm Sil   Äçkçü = òptal   F3 = Äçk",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -1347,8 +1347,8 @@ MUI_ERROR trTRErrorEntries[] =
         "yeniden áalçütçrmaya gereksinim duyacaksçnçz.\n"
         "\n"
         "  \x07  Kur'u sÅrdÅrmek iáin Giriü'e basçnçz.\n"
-        "  \x07  Kur'dan áçkmak iáin ò3'e basçnçz.",
-        "ò3 = Äçk  Giriü = SÅrdÅr"
+        "  \x07  Kur'dan áçkmak iáin F3'e basçnçz.",
+        "F3 = Äçk  Giriü = SÅrdÅr"
     },
     {
         //ERROR_NO_HDD
@@ -1408,13 +1408,13 @@ MUI_ERROR trTRErrorEntries[] =
     {
         //ERROR_WARN_PARTITION,
         "Kur, dÅzgÅn yînetilemeyen bir uyumsuz bîlÅm tablosu iáeren en az\n"
-		"bir sÉbit disk buldu!\n"
+        "bir sÉbit disk buldu!\n"
         "\n"         
         "BîlÅmleri oluüturmak veyÉ silmek bîlÅm tablosunu yok edebilir.\n"
         "\n"
-        "  \x07  Kur'dan áçkmak iáin ò3'e basçnçz.\n"
+        "  \x07  Kur'dan áçkmak iáin F3'e basçnçz.\n"
         "  \x07  SÅrdÅrmek iáin Giriü'e basçnçz.",
-        "ò3 = Äçk   Giriü = SÅrdÅr"
+        "F3 = Äçk   Giriü = SÅrdÅr"
     },
     {
         //ERROR_NEW_PARTITION,
@@ -1628,7 +1628,7 @@ MUI_PAGE trTRPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        trTRConfirmDeletePartitionEntries
+        trTRConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1693,13 +1693,13 @@ MUI_STRING trTRStrings[] =
     {STRING_PLEASEWAIT,
     "   LÅtfen bekleyiniz..."},
     {STRING_INSTALLCREATEPARTITION,
-    "   Giriü = Kur  P = Ana BîlÅm Oluütur  E = Geniületilmiü BîlÅm Oluütur  ò3 = Äçk"},
+    "   Giriü = Kur  P = Ana BîlÅm Oluütur  E = Geniületilmiü BîlÅm Oluütur  F3 = Äçk"},
     {STRING_INSTALLCREATELOGICAL,
-    "   ENTER = Kur   L = Mantçklçk BîlÅm Oluütur   ò3 = Äçk"},
+    "   ENTER = Kur   L = Mantçklçk BîlÅm Oluütur   F3 = Äçk"},
     {STRING_INSTALLDELETEPARTITION,
-    "   Giriü = Kur   D = BîlÅmÅ Sil   ò3 = Äçk"},
+    "   Giriü = Kur   D = BîlÅmÅ Sil   F3 = Äçk"},
     {STRING_DELETEPARTITION,
-    "   D = BîlÅmÅ Sil   ò3 = Äçk"},
+    "   D = BîlÅmÅ Sil   F3 = Äçk"},
     {STRING_PARTITIONSIZE,
     "Yeni bîlÅmÅn bÅyÅklÅßÅnÅ giriniz:"},
     {STRING_CHOOSENEWPARTITION,
@@ -1711,7 +1711,7 @@ MUI_STRING trTRStrings[] =
     {STRING_HDDSIZE,
     "LÅtfen yeni bîlÅmÅn bÅyÅklÅßÅnÅ megaáoklu olarak giriniz."},
     {STRING_CREATEPARTITION,
-    "   Giriü = BîlÅm Oluütur   Äçkçü = òptal   ò3 = Äçk"},
+    "   Giriü = BîlÅm Oluütur   Äçkçü = òptal   F3 = Äçk"},
     {STRING_PARTFORMAT,
     "Bu bîlÅm ileride biáimlendirilecektir."},
     {STRING_NONFORMATTEDPART,
@@ -1724,8 +1724,10 @@ MUI_STRING trTRStrings[] =
     "Kur, ReactOS'u bîlÅm Åzerine kurar."},
     {STRING_CHECKINGPART,
     "Kur, üimdi seáili bîlÅmÅ gîzden geáiriyor."},
+    {STRING_CONTINUE,
+    "Giriü = SÅrdÅr"},
     {STRING_QUITCONTINUE,
-    "ò3 = Äçk   Giriü = SÅrdÅr"},
+    "F3 = Äçk   Giriü = SÅrdÅr"},
     {STRING_REBOOTCOMPUTER,
     "Giriü = Bilgisayarç Yeniden Baülat"},
     {STRING_TXTSETUPFAILED,
@@ -1771,7 +1773,7 @@ MUI_STRING trTRStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  SÉbit Disk %lu  (Giriü=%hu, Veriyolu=%hu, Kimlik=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  TÅr  %lu    %I64u %s"},
+    "   %c%c  TÅr  0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "özerinde: %I64u %s  SÉbit Disk %lu  (Giriü=%hu, Veriyolu=%hu, Kimlik=%hu), %wZ Åzerinde."},
     {STRING_HDDINFOUNK3,
@@ -1779,7 +1781,7 @@ MUI_STRING trTRStrings[] =
     {STRING_HDINFOPARTZEROED,
     "SÉbit Disk %lu (%I64u %s), Giriü=%hu, Veriyolu=%hu, Kimlik=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  TÅr  %lu    %I64u %s"},
+    "%c%c  TÅr  0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "özerinde: SÉbit Disk %lu (%I64u %s), Giriü=%hu, Veriyolu=%hu, Kimlik=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

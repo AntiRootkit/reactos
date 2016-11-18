@@ -480,6 +480,7 @@ static MUI_ENTRY skSKRepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY skSKComputerPageEntries[] =
 {
     {
@@ -833,24 +834,24 @@ static MUI_ENTRY skSKSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY skSKConfirmDeletePartitionEntries[] =
+static MUI_ENTRY skSKConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
         3,
-        " ReactOS " KERNEL_VERSION_STR " Setup ",
+        " Inçtal tor syst‚mu ReactOS " KERNEL_VERSION_STR " ",
         TEXT_STYLE_UNDERLINE
     },
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "You have chosen to delete the system partition.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -874,7 +875,7 @@ static MUI_ENTRY skSKConfirmDeletePartitionEntries[] =
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "programs on the partition, or when you are sure you want to delete them.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1614,7 +1615,6 @@ MUI_ERROR skSKErrorEntries[] =
     }
 };
 
-
 MUI_PAGE skSKPages[] =
 {
     {
@@ -1659,7 +1659,7 @@ MUI_PAGE skSKPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        skSKConfirmDeletePartitionEntries
+        skSKConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1757,8 +1757,10 @@ MUI_STRING skSKStrings[] =
     "Inçtal tor nainçtaluje syst‚m ReactOS na oblasœ"},
     {STRING_CHECKINGPART,
     "Inçtal tor teraz skontroluje vybran£ oblasœ."},
+    {STRING_CONTINUE,
+    "ENTER = PokraŸovaœ"},
     {STRING_QUITCONTINUE,
-    "F3= SkonŸiœ  ENTER = PokraŸovaœ"},
+    "F3 = SkonŸiœ  ENTER = PokraŸovaœ"},
     {STRING_REBOOTCOMPUTER,
     "ENTER = Reçtart poŸ¡taŸa"},
     {STRING_TXTSETUPFAILED,
@@ -1804,7 +1806,7 @@ MUI_STRING skSKStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  pevnì disk %lu  (Port=%hu, Bus=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  typ %lu    %I64u %s"},
+    "   %c%c  typ 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "na %I64u %s  pevnom disku %lu  (Port=%hu, Bus=%hu, Id=%hu) na %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1812,7 +1814,7 @@ MUI_STRING skSKStrings[] =
     {STRING_HDINFOPARTZEROED,
     "pevnì disk %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  typ %lu    %I64u %s"},
+    "%c%c  typ 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "na pevnom disku %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

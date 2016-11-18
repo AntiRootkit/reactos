@@ -222,7 +222,7 @@ SmpHandleConnectionRequest(IN HANDLE SmApiPort,
         SmpGetProcessMuSessionId(ProcessHandle, &SessionId);
     }
 
-    /* See if we already know about the caller's subystem */
+    /* See if we already know about the caller's subsystem */
     CidSubsystem = SmpLocateKnownSubSysByCid(&SbApiMsg->h.ClientId);
     if ((CidSubsystem) && (Accept))
     {
@@ -380,7 +380,7 @@ SmpApiLoop(IN PVOID Parameter)
             case LPC_CONNECTION_REQUEST:
                 /* Create the right structures for it */
                 SmpHandleConnectionRequest(SmApiPort, (PSB_API_MSG)&RequestMsg);
-                ReplyMsg =  NULL;
+                ReplyMsg = NULL;
                 break;
 
             /* A closed connection */
@@ -423,7 +423,7 @@ SmpApiLoop(IN PVOID Parameter)
                                                                   SmApiPort);
                 }
 
-                /* Write the result valud and return the message back */
+                /* Write the result value and return the message back */
                 RequestMsg.ReturnValue = Status;
                 ReplyMsg = &RequestMsg;
                 break;

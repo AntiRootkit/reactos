@@ -333,6 +333,10 @@ IopEditDeviceList(IN PDRIVER_OBJECT DriverObject,
                   IN IOP_DEVICE_LIST_OPERATION Type)
 {
     PDEVICE_OBJECT Previous;
+    KIRQL OldIrql;
+
+    /* Lock the Device list while we edit it */
+    OldIrql = KeAcquireQueuedSpinLock(LockQueueIoDatabaseLock);
 
     /* Check the type of operation */
     if (Type == IopRemove)
@@ -353,7 +357,12 @@ IopEditDeviceList(IN PDRIVER_OBJECT DriverObject,
                 /* Not this one, keep moving */
                 if (!Previous->NextDevice)
                 {
-                    DPRINT1("Failed to remove PDO %p on driver %wZ (not found)\n", DeviceObject, &DeviceObject->DriverObject->DriverName);
+                    DPRINT1("Failed to remove PDO %p on driver %wZ (not found)\n",
+                            DeviceObject,
+                            &DeviceObject->DriverObject->DriverName);
+
+                    ASSERT(FALSE);
+                    KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
                     return;
                 }
                 Previous = Previous->NextDevice;
@@ -369,6 +378,9 @@ IopEditDeviceList(IN PDRIVER_OBJECT DriverObject,
         DeviceObject->NextDevice = DriverObject->DeviceObject;
         DriverObject->DeviceObject = DeviceObject;
     }
+
+    /* Release the device list lock */
+    KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
 }
 
 VOID
@@ -1088,6 +1100,10 @@ IoEnumerateDeviceObjectList(IN  PDRIVER_OBJECT DriverObject,
 {
     ULONG ActualDevices = 1;
     PDEVICE_OBJECT CurrentDevice = DriverObject->DeviceObject;
+    KIRQL OldIrql;
+
+    /* Lock the Device list while we enumerate it */
+    OldIrql = KeAcquireQueuedSpinLock(LockQueueIoDatabaseLock);
 
     /* Find out how many devices we'll enumerate */
     while ((CurrentDevice = CurrentDevice->NextDevice)) ActualDevices++;
@@ -1099,13 +1115,14 @@ IoEnumerateDeviceObjectList(IN  PDRIVER_OBJECT DriverObject,
     *ActualNumberDeviceObjects = ActualDevices;
 
     /* Check if we can support so many */
-    if ((ActualDevices * 4) > DeviceObjectListSize)
+    if ((ActualDevices * sizeof(PDEVICE_OBJECT)) > DeviceObjectListSize)
     {
         /* Fail because the buffer was too small */
+        KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
         return STATUS_BUFFER_TOO_SMALL;
     }
 
-    /* Check if the caller only wanted the size */
+    /* Check if the caller wanted the device list */
     if (DeviceObjectList)
     {
         /* Loop through all the devices */
@@ -1123,6 +1140,9 @@ IoEnumerateDeviceObjectList(IN  PDRIVER_OBJECT DriverObject,
             DeviceObjectList++;
         }
     }
+
+    /* Release the device list lock */
+    KeReleaseQueuedSpinLock(LockQueueIoDatabaseLock, OldIrql);
 
     /* Return the status */
     return STATUS_SUCCESS;
@@ -1329,9 +1349,18 @@ IoGetRelatedDeviceObject(IN PFILE_OBJECT FileObject)
             /* Check if the extension is really present */
             if (FileObject->FileObjectExtension)
             {
-                /* FIXME: Unhandled yet */
-                DPRINT1("FOEs not supported\n");
+                PFILE_OBJECT_EXTENSION FileObjectExtension;
                 ASSERT(FALSE);
+
+                /* Cast the buffer to something we understand */
+                FileObjectExtension = FileObject->FileObjectExtension;
+
+                /* Check if have a replacement top level device */
+                if (FileObjectExtension->TopDeviceObjectHint)
+                {
+                    /* Use this instead of returning the top level device */
+                    return FileObjectExtension->TopDeviceObjectHint;
+                }
             }
         }
 

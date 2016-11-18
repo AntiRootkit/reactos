@@ -20,8 +20,11 @@ KMT_TESTFUNC Test_ExResource;
 KMT_TESTFUNC Test_ExSequencedList;
 KMT_TESTFUNC Test_ExSingleList;
 KMT_TESTFUNC Test_ExTimer;
+KMT_TESTFUNC Test_FsRtlDissect;
 KMT_TESTFUNC Test_FsRtlExpression;
+KMT_TESTFUNC Test_FsRtlLegal;
 KMT_TESTFUNC Test_FsRtlMcb;
+KMT_TESTFUNC Test_FsRtlRemoveDotsFromPath;
 KMT_TESTFUNC Test_FsRtlTunnel;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoDeviceInterface;
@@ -51,6 +54,8 @@ KMT_TESTFUNC Test_NpfsReadWrite;
 KMT_TESTFUNC Test_NpfsVolumeInfo;
 KMT_TESTFUNC Test_ObHandle;
 KMT_TESTFUNC Test_ObReference;
+KMT_TESTFUNC Test_ObSecurity;
+KMT_TESTFUNC Test_ObSymbolicLink;
 KMT_TESTFUNC Test_ObType;
 KMT_TESTFUNC Test_ObTypeClean;
 KMT_TESTFUNC Test_ObTypeNoClean;
@@ -61,6 +66,7 @@ KMT_TESTFUNC Test_SeQueryInfoToken;
 KMT_TESTFUNC Test_RtlAvlTree;
 KMT_TESTFUNC Test_RtlException;
 KMT_TESTFUNC Test_RtlIntSafe;
+KMT_TESTFUNC Test_RtlIsValidOemCharacter;
 KMT_TESTFUNC Test_RtlMemory;
 KMT_TESTFUNC Test_RtlRegistry;
 KMT_TESTFUNC Test_RtlSplayTree;
@@ -85,8 +91,11 @@ const KMT_TEST TestList[] =
     { "ExSingleList",                       Test_ExSingleList },
     { "-ExTimer",                           Test_ExTimer },
     { "Example",                            Test_Example },
+    { "FsRtlDissect",                       Test_FsRtlDissect },
     { "FsRtlExpression",                    Test_FsRtlExpression },
+    { "FsRtlLegal",                         Test_FsRtlLegal },
     { "FsRtlMcb",                           Test_FsRtlMcb },
+    { "FsRtlRemoveDotsFromPath",            Test_FsRtlRemoveDotsFromPath },
     { "FsRtlTunnel",                        Test_FsRtlTunnel },
     { "IoCreateFile",                       Test_IoCreateFile },
     { "IoDeviceInterface",                  Test_IoDeviceInterface },
@@ -116,20 +125,23 @@ const KMT_TEST TestList[] =
     { "NpfsVolumeInfo",                     Test_NpfsVolumeInfo },
     { "ObHandle",                           Test_ObHandle },
     { "ObReference",                        Test_ObReference },
+    { "ObSecurity",                         Test_ObSecurity },
+    { "ObSymbolicLink",                     Test_ObSymbolicLink },
     { "ObType",                             Test_ObType },
     { "-ObTypeClean",                       Test_ObTypeClean },
     { "-ObTypeNoClean",                     Test_ObTypeNoClean },
     { "ObTypes",                            Test_ObTypes },
     { "PsNotify",                           Test_PsNotify },
-    { "SeInheritance",                      Test_SeInheritance },
-    { "-SeQueryInfoToken",                  Test_SeQueryInfoToken },
     { "RtlAvlTreeKM",                       Test_RtlAvlTree },
     { "RtlExceptionKM",                     Test_RtlException },
     { "RtlIntSafeKM",                       Test_RtlIntSafe },
+    { "RtlIsValidOemCharacter",             Test_RtlIsValidOemCharacter },
     { "RtlMemoryKM",                        Test_RtlMemory },
     { "RtlRegistryKM",                      Test_RtlRegistry },
     { "RtlSplayTreeKM",                     Test_RtlSplayTree },
     { "RtlUnicodeStringKM",                 Test_RtlUnicodeString },
+    { "SeInheritance",                      Test_SeInheritance },
+    { "SeQueryInfoToken",                   Test_SeQueryInfoToken },
     { "ZwAllocateVirtualMemory",            Test_ZwAllocateVirtualMemory },
     { "ZwCreateSection",                    Test_ZwCreateSection },
     { "ZwMapViewOfSection",                 Test_ZwMapViewOfSection },

@@ -294,7 +294,7 @@ ShutdownHandlerRoutine(DWORD dwCtrlType)
         ScmAutoShutdownServices();
         ScmShutdownServiceDatabase();
 
-        /* Set the shutdwon event */
+        /* Set the shutdown event */
         SetEvent(hScmShutdownEvent);
     }
 
@@ -353,6 +353,8 @@ wWinMain(HINSTANCE hInstance,
     bCanDeleteNamedPipeCriticalSection = TRUE;
 
 //    ScmInitThreadManager();
+
+    ScmInitializeSecurity();
 
     /* FIXME: more initialization */
 
@@ -432,6 +434,8 @@ wWinMain(HINSTANCE hInstance,
     WaitForSingleObject(hScmShutdownEvent, INFINITE);
 
 done:
+    ScmShutdownSecurity();
+
     /* Delete our communication named pipe's critical section */
     if (bCanDeleteNamedPipeCriticalSection == TRUE)
         ScmDeleteNamedPipeCriticalSection();

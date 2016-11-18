@@ -485,6 +485,7 @@ static MUI_ENTRY frFRRepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY frFRComputerPageEntries[] =
 {
     {
@@ -814,7 +815,7 @@ static MUI_ENTRY frFRSelectPartitionEntries[] =
     {
         8,
         19,
-        "\x07  Press L to create a logical partition.",
+        "\x07  Appuyer sur L pour crÇer une partition logique.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -837,90 +838,102 @@ static MUI_ENTRY frFRSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY frFRConfirmDeletePartitionEntries[] =
+static MUI_ENTRY frFRConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
         3,
-        " ReactOS " KERNEL_VERSION_STR " Setup ",
+        " Installation de ReactOS " KERNEL_VERSION_STR " ",
         TEXT_STYLE_UNDERLINE
     },
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "Vous avez choisi de supprimer la partition systäme.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "La partition systäme peut contenir des programmes de diagnostic, de",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         11,
-        "programs, programs to start an operating system (like ReactOS) or other",
+        "configuration du matÇriel, des programmes pour dÇmarrer un systäme",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         12,
-        "programs provided by the hardware manufacturer.",
+        "d'exploitation (comme ReactOS) ou d'autres programmes fournis par le",
         TEXT_STYLE_NORMAL
     },
     {
         6,
-        14,
-        "Delete a system partition only when you are sure that there are no such",
+        13,
+        "constructeur du matÇriel.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "Ne supprimez la partition systäme que si vous àtes sñr qu'il n'y a aucun",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         16,
-        "When you delete the partition, you might not be able to boot the",
+        "programme dans la partition, ou bien si vous souhaitez les supprimer.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         17,
-        "computer from the harddisk until you finished the ReactOS Setup.",
+        "Lorsque vous supprimez la partition systäme, vous ne pourrez peut-àtre",
+        TEXT_STYLE_NORMAL
+    },
+    {
+        6,
+        18,
+        "plus dÇmarrer votre ordinateur depuis le disque dur jusqu'Ö ce que vous",
+        TEXT_STYLE_NORMAL
+    },
+    {
+        6,
+        19,
+        "finissiez l'installation de ReactOS.",
         TEXT_STYLE_NORMAL
     },
     {
         8,
-        20,
-        "\x07  Press ENTER to delete the system partition. You will be asked",
+        22,
+        "\x07  Appuyer sur ENTRêE pour supprimer la partition systäme. Il vous sera",
         TEXT_STYLE_NORMAL
     },
     {
         8,
-        21,
-        "   to confirm the deletion of the partition again later.",
+        23,
+        "   demandÇ de confirmer la suppression de la partition plus tard.",
         TEXT_STYLE_NORMAL
     },
     {
         8,
-        24,
-        "\x07  Press ESC to return to the previous page. The partition will",
+        26,
+        "\x07  Appuyer sur êCHAP pour retourner Ö la page principale. La partition",
         TEXT_STYLE_NORMAL
     },
     {
         8,
-        25,
-        "   not be deleted.",
+        27,
+        "   ne sera pas supprimÇe.",
         TEXT_STYLE_NORMAL
     },
     {
         0,
         0,
-        "ENTER=Continue  ESC=Cancel",
+        "ENTRêE = Continuer  êCHAP = Annuler",
         TEXT_TYPE_STATUS | TEXT_PADDING_BIG
     },
     {
@@ -1379,7 +1392,7 @@ MUI_ERROR frFRErrorEntries[] =
         "\n"
         "  \x07  Appuyer sur ENTRêE pour continuer Setup.\n"
         "  \x07  Appuyer sur F3 pour quitter Setup.",
-        "F3= Quitter  ENTRêE = Continuer"
+        "F3 = Quitter  ENTRêE = Continuer"
     },
     {
         //ERROR_NO_HDD
@@ -1445,7 +1458,7 @@ MUI_ERROR frFRErrorEntries[] =
         "\n"
         "  \x07  Appuyer sur F3 pour quitter Setup.\n"
         "  \x07  Appuyer sur ENTRêE pour continuer Setup.",
-        "F3= Quitter  ENTRêE = Continuer"
+        "F3 = Quitter  ENTRêE = Continuer"
     },
     {
         //ERROR_NEW_PARTITION,
@@ -1615,7 +1628,6 @@ MUI_ERROR frFRErrorEntries[] =
     }
 };
 
-
 MUI_PAGE frFRPages[] =
 {
     {
@@ -1660,7 +1672,7 @@ MUI_PAGE frFRPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        frFRConfirmDeletePartitionEntries
+        frFRConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1727,7 +1739,7 @@ MUI_STRING frFRStrings[] =
     {STRING_INSTALLCREATEPARTITION,
      "   ENTRêE = Installer   P/E = CrÇer Partition Primaire/êtendue   F3 = Quitter"},
     {STRING_INSTALLCREATELOGICAL,
-     "   ENTER = Install   L = Create Logical Partition   F3 = Quit"},
+     "   ENTRêE = Installer   L = CrÇer Partition Logique   F3 = Quitter"},
     {STRING_INSTALLDELETEPARTITION,
      "   ENTRêE = Installer   D = Supprimer Partition   F3 = Quitter"},
     {STRING_DELETEPARTITION,
@@ -1739,7 +1751,7 @@ MUI_STRING frFRStrings[] =
     {STRING_CHOOSE_NEW_EXTENDED_PARTITION,
      "Vous avez choisi de crÇer une partition Çtendue sur"},
     {STRING_CHOOSE_NEW_LOGICAL_PARTITION,
-     "You have chosen to create a logical partition on"},
+     "Vous avez choisi de crÇer une partition logique sur"},
     {STRING_HDDSIZE,
     "Veuillez entrer la taille de la nouvelle partition en mÇgaoctets."},
     {STRING_CREATEPARTITION,
@@ -1756,8 +1768,10 @@ MUI_STRING frFRStrings[] =
     "Setup installe ReactOS sur la partition"},
     {STRING_CHECKINGPART,
     "Setup vÇrifie la partition sÇlectionnÇe."},
+    {STRING_CONTINUE,
+    "ENTRêE = Continuer"},
     {STRING_QUITCONTINUE,
-    "F3= Quitter  ENTRêE = Continuer"},
+    "F3 = Quitter  ENTRêE = Continuer"},
     {STRING_REBOOTCOMPUTER,
     "ENTRêE = RedÇmarrer l'ordinateur"},
     {STRING_TXTSETUPFAILED,
@@ -1803,7 +1817,7 @@ MUI_STRING frFRStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  Disque dur %lu  (Port=%hu, Bus=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  Type %lu    %I64u %s"},
+    "   %c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "sur %I64u %s  Disque dur %lu  (Port=%hu, Bus=%hu, Id=%hu) sur %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1811,7 +1825,7 @@ MUI_STRING frFRStrings[] =
     {STRING_HDINFOPARTZEROED,
     "Disque dur %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  Type %lu    %I64u %s"},
+    "%c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "sur Disque dur %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

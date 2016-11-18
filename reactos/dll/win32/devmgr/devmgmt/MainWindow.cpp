@@ -543,7 +543,6 @@ CDeviceManager::OnNotify(_In_ LPARAM lParam)
                     lpttt->lpszText = MAKEINTRESOURCEW(IDS_TOOLTIP_UNINSTALL);
                     break;
             }
-            idButton = idButton;
             break;
         }
     }
@@ -667,6 +666,12 @@ CDeviceManager::OnCommand(_In_ WPARAM wParam,
     return RetCode;
 }
 
+void
+CDeviceManager::OnActivate(void)
+{
+    m_DeviceView->SetFocus();
+}
+
 LRESULT
 CDeviceManager::OnDestroy(void)
 {
@@ -776,7 +781,7 @@ CDeviceManager::MainWndProc(_In_ HWND hwnd,
             if (wParam == DBT_DEVNODES_CHANGED)
             {
                 //
-                // The OS can send multiple change messages in quick sucsession. To avoid
+                // The OS can send multiple change messages in quick succession. To avoid
                 // refreshing multiple times (and to avoid waiting in the message thread)
                 // we set a timer to run in 500ms, which should leave enough time for all
                 // the messages to come through. Wrap so we don't set multiple timers
@@ -822,7 +827,11 @@ CDeviceManager::MainWndProc(_In_ HWND hwnd,
             DestroyWindow(hwnd);
             break;
         }
-        
+
+        case WM_ACTIVATE:
+            if (LOWORD(hwnd))
+                This->OnActivate();
+            break;
 
         case WM_DESTROY:
         {

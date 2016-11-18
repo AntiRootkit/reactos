@@ -29,6 +29,7 @@
 #include <msidefs.h>
 #include <msi.h>
 #include <fci.h>
+#include <oaidl.h>
 
 #include "wine/test.h"
 
@@ -600,10 +601,7 @@ static void test_dispid(void)
     while (ptr->name)
     {
         dispid = get_dispid(pInstaller, ptr->name);
-        if (ptr->todo)
-        todo_wine
-            ok(dispid == ptr->did, "%s: expected %d, got %d\n", ptr->name, ptr->did, dispid);
-        else
+        todo_wine_if (ptr->todo)
             ok(dispid == ptr->did, "%s: expected %d, got %d\n", ptr->name, ptr->did, dispid);
         ptr++;
     }
@@ -877,16 +875,14 @@ static HRESULT invoke(IDispatch *pDispatch, LPCSTR szName, WORD wFlags, DISPPARA
     hr = IDispatch_GetIDsOfNames(pDispatch, &IID_NULL, &name, 1, LOCALE_USER_DEFAULT, &dispid);
     HeapFree(GetProcessHeap(), 0, name);
     ok(hr == S_OK, "IDispatch::GetIDsOfNames returned 0x%08x\n", hr);
-    if (!hr == S_OK) return hr;
+    if (hr != S_OK) return hr;
 
     memset(&excepinfo, 0, sizeof(excepinfo));
     hr = IDispatch_Invoke(pDispatch, dispid, &IID_NULL, LOCALE_NEUTRAL, wFlags, pDispParams, pVarResult, &excepinfo, NULL);
 
     if (hr == S_OK)
     {
-        if (_invoke_todo_vtResult) todo_wine
-            ok(V_VT(pVarResult) == vtResult, "Variant result type is %d, expected %d\n", V_VT(pVarResult), vtResult);
-        else
+        todo_wine_if (_invoke_todo_vtResult)
             ok(V_VT(pVarResult) == vtResult, "Variant result type is %d, expected %d\n", V_VT(pVarResult), vtResult);
         if (vtResult != VT_EMPTY)
         {

@@ -1,3 +1,13 @@
+/*
+ * PROJECT:         ReactOS Boot Loader (FreeLDR)
+ * LICENSE:         GPL - See COPYING in the top level directory
+ * FILE:            boot/freeldr/freeldr/disk/scsiport.c
+ * PURPOSE:         Interface for SCSI Emulation
+ * PROGRAMMERS:     Hervé Poussineau  <hpoussin@reactos.org>
+ */
+
+/* INCLUDES *******************************************************************/
+
 #include <freeldr.h>
 
 #define _SCSIPORT_
@@ -48,6 +58,13 @@
 
 DBG_DEFAULT_CHANNEL(SCSIPORT);
 
+/* GLOBALS ********************************************************************/
+
+#ifdef _M_IX86
+VOID NTAPI HalpInitializePciStubs(VOID);
+VOID NTAPI HalpInitBusHandler(VOID);
+#endif
+
 typedef struct
 {
     PVOID NonCachedExtension;
@@ -76,7 +93,24 @@ typedef struct
     PVOID MiniPortDeviceExtension;
 } SCSI_PORT_DEVICE_EXTENSION, *PSCSI_PORT_DEVICE_EXTENSION;
 
+typedef struct tagDISKCONTEXT
+{
+    /* Device ID */
+    PSCSI_PORT_DEVICE_EXTENSION DeviceExtension;
+    UCHAR PathId;
+    UCHAR TargetId;
+    UCHAR Lun;
+
+    /* Device characteristics */
+    ULONG SectorSize;
+    ULONGLONG SectorOffset;
+    ULONGLONG SectorCount;
+    ULONGLONG SectorNumber;
+} DISKCONTEXT;
+
 PSCSI_PORT_DEVICE_EXTENSION ScsiDeviceExtensions[SCSI_MAXIMUM_BUSES];
+
+/* FUNCTIONS ******************************************************************/
 
 ULONG
 ntohl(
@@ -93,6 +127,7 @@ ntohl(
     return Dest.AsULong;
 }
 
+static
 BOOLEAN
 SpiSendSynchronousSrb(
     IN PSCSI_PORT_DEVICE_EXTENSION DeviceExtension,
@@ -132,21 +167,6 @@ SpiSendSynchronousSrb(
 
     return ret;
 }
-
-typedef struct tagDISKCONTEXT
-{
-    /* Device ID */
-    PSCSI_PORT_DEVICE_EXTENSION DeviceExtension;
-    UCHAR PathId;
-    UCHAR TargetId;
-    UCHAR Lun;
-
-    /* Device characteristics */
-    ULONG SectorSize;
-    ULONGLONG SectorOffset;
-    ULONGLONG SectorCount;
-    ULONGLONG SectorNumber;
-} DISKCONTEXT;
 
 static ARC_STATUS DiskClose(ULONG FileId)
 {
@@ -366,6 +386,7 @@ static const DEVVTBL DiskVtbl = {
     DiskSeek,
 };
 
+static
 NTSTATUS
 SpiCreatePortConfig(
     IN PSCSI_PORT_DEVICE_EXTENSION DeviceExtension,
@@ -586,7 +607,6 @@ ScsiPortGetPhysicalAddress(
     else
     {
         /* Nothing */
-        *Length = 0;
         PhysicalAddress.QuadPart = (LONGLONG)(SP_UNINITIALIZED_VALUE);
     }
 
@@ -608,6 +628,7 @@ ScsiPortGetSrb(
     return NULL;
 }
 
+static
 NTSTATUS
 SpiAllocateCommonBuffer(
     IN OUT PSCSI_PORT_DEVICE_EXTENSION DeviceExtension,
@@ -767,6 +788,7 @@ ScsiPortGetVirtualAddress(
     return NULL;
 }
 
+static
 VOID
 SpiScanDevice(
     IN PSCSI_PORT_DEVICE_EXTENSION DeviceExtension,
@@ -807,6 +829,7 @@ SpiScanDevice(
     }
 }
 
+static
 VOID
 SpiScanAdapter(
     IN PSCSI_PORT_DEVICE_EXTENSION DeviceExtension,
@@ -881,6 +904,7 @@ SpiScanAdapter(
     }
 }
 
+static
 VOID
 SpiResourceToConfig(
     IN PHW_INITIALIZATION_DATA HwInitializationData,
@@ -961,9 +985,10 @@ SpiResourceToConfig(
     }
 }
 
+static
 BOOLEAN
 SpiGetPciConfigData(
-    IN struct _HW_INITIALIZATION_DATA *HwInitializationData,
+    IN PHW_INITIALIZATION_DATA HwInitializationData,
     IN OUT PPORT_CONFIGURATION_INFORMATION PortConfig,
     IN ULONG BusNumber,
     IN OUT PPCI_SLOT_NUMBER NextSlotNumber)
@@ -1065,7 +1090,7 @@ NTAPI
 ScsiPortInitialize(
     IN PVOID Argument1,
     IN PVOID Argument2,
-    IN struct _HW_INITIALIZATION_DATA *HwInitializationData,
+    IN PHW_INITIALIZATION_DATA HwInitializationData,
     IN PVOID HwContext OPTIONAL)
 {
     PSCSI_PORT_DEVICE_EXTENSION DeviceExtension;
@@ -1575,6 +1600,12 @@ LoadBootDeviceDriver(VOID)
     PVOID ImageBase = NULL;
     ULONG (NTAPI *EntryPoint)(IN PVOID DriverObject, IN PVOID RegistryPath);
     BOOLEAN Success;
+
+    // FIXME: Must be done *INSIDE* the HAL!
+#ifdef _M_IX86
+    HalpInitializePciStubs();
+    HalpInitBusHandler();
+#endif
 
     /* Initialize the loaded module list */
     InitializeListHead(&ModuleListHead);

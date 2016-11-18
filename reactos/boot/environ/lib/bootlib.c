@@ -18,9 +18,10 @@ PWCHAR BlpApplicationBaseDirectory;
 PBOOT_APPLICATION_PARAMETER_BLOCK BlpApplicationParameters;
 BL_LOADED_APPLICATION_ENTRY BlpApplicationEntry;
 BOOLEAN BlpLibraryParametersInitialized;
+ULONG BlpApplicationFlags;
 
 ULONG PdPersistAllocations;
-LIST_ENTRY BlBadpListHead;
+LIST_ENTRY BlpPdListHead;
 
 /* FUNCTIONS *****************************************************************/
 
@@ -49,9 +50,11 @@ InitializeLibrary (
     PBL_MEMORY_DATA MemoryData;
     PBL_APPLICATION_ENTRY AppEntry;
     PBL_FIRMWARE_DESCRIPTOR FirmwareDescriptor;
-    ULONG_PTR ParamPointer = (ULONG_PTR)BootAppParameters;
+    LARGE_INTEGER BootFrequency;
+    ULONG_PTR ParamPointer;
 
     /* Validate correct Boot Application data */
+    ParamPointer = (ULONG_PTR)BootAppParameters;
     if (!(BootAppParameters) ||
         (BootAppParameters->Signature[0] != BOOT_APPLICATION_SIGNATURE_1) ||
         (BootAppParameters->Signature[1] != BOOT_APPLICATION_SIGNATURE_2) ||
@@ -86,11 +89,15 @@ InitializeLibrary (
     BlpApplicationParameters = BootAppParameters;
     BlpLibraryParameters = *LibraryParameters;
 
-    /* Save the application entry flags */
-    if (AppEntry->Flags & 2)
+    /* Check if the caller sent us their internal BCD options */
+    if (AppEntry->Flags & BL_APPLICATION_ENTRY_BCD_OPTIONS_INTERNAL)
     {
-        AppEntry->Flags = (AppEntry->Flags & ~0x2) | 0x80;
+        /* These are external to us now, as far as we are concerned */
+        AppEntry->Flags &= ~BL_APPLICATION_ENTRY_BCD_OPTIONS_INTERNAL;
+        AppEntry->Flags |= BL_APPLICATION_ENTRY_BCD_OPTIONS_EXTERNAL;
     }
+
+    /* Save the application entry flags */
     BlpApplicationEntry.Flags = AppEntry->Flags;
 
     /* Copy the GUID and point to the options */
@@ -127,18 +134,16 @@ InitializeLibrary (
         return Status;
     }
 
-#if 0
     /* Modern systems have an undocumented BCD system for the boot frequency */
     Status = BlGetBootOptionInteger(BlpApplicationEntry.BcdData,
                                     0x15000075,
-                                    &BootFrequency);
-    if (NT_SUCCESS(Status) && (BootFrequency))
+                                    (PULONGLONG)&BootFrequency.QuadPart);
+    if (NT_SUCCESS(Status) && (BootFrequency.QuadPart))
     {
         /* Use it if present */
-        BlpTimePerformanceFrequency = BootFrequency;
+        BlpTimePerformanceFrequency = BootFrequency.QuadPart;
     }
     else
-#endif
     {
         /* Use the TSC for calibration */
         Status = BlpTimeCalibratePerformanceCounter();
@@ -279,25 +284,24 @@ InitializeLibrary (
 
     /* Initialize the boot application persistent data */
     PdPersistAllocations = 0;
-    InitializeListHead(&BlBadpListHead);
+    InitializeListHead(&BlpPdListHead);
 
 #ifdef BL_TPM_SUPPORT
     /* Now setup the security subsystem in phase 1 */
     BlpSiInitialize(1);
 #endif
 
-#if 0
     /* Setup the text, UI and font resources */
     Status = BlpResourceInitialize();
     if (!NT_SUCCESS(Status))
     {
         /* Tear down everything if this failed */
-        if (!(LibraryParameters->LibraryFlags & BL_LIBRARY_FLAG_TEXT_MODE))
+        if (!(LibraryParameters->LibraryFlags & BL_LIBRARY_FLAG_NO_DISPLAY))
         {
 //            BlpDisplayDestroy();
         }
-        //BlpBdDestroy();
 #ifdef BL_KD_SUPPORT
+        BlpBdDestroy();
         PltDestroyPciConfiguration();
 #endif
 #ifdef BL_NET_SUPPORT
@@ -313,7 +317,6 @@ InitializeLibrary (
         //BlpMmDestroy(1);
         return Status;
     }
-#endif
 
 #if BL_BITLOCKER_SUPPORT
     /* Setup the boot cryptography library */
@@ -363,17 +366,26 @@ BlInitializeLibrary(
         BlpLibraryParameters = *LibraryParameters;
         if (LibraryParameters->LibraryFlags & BL_LIBRARY_FLAG_REINITIALIZE_ALL)
         {
-#if 0
-            /* Initialize all the core modules again */
+#ifdef BL_TPM_SUPPORT
+            /* Reinitialize the TPM security enclave as BCD hash changed */
             BlpSiInitialize(1);
+#endif
+#ifdef BL_KD_SUPPORT
+            /* Reinitialize the boot debugger as BCD debug options changed */
             BlBdInitialize();
+#endif
+
+            /* Reparse the bad page list now that the BCD has been reloaded */
             BlMmRemoveBadMemory();
+
+            /* Reparse the low/high physical address limits as well */
             BlpMmInitializeConstraints();
 
             /* Redraw the graphics console as needed */
             BlpDisplayInitialize(LibraryParameters->LibraryFlags);
+
+            /* Reinitialize resources (language may have changed) */
             BlpResourceInitialize();
-#endif
         }
 
         /* Nothing to do, we're done */
@@ -406,4 +418,63 @@ BlGetApplicationIdentifier (
     /* Return the GUID, if one was present */
     return (BlpApplicationEntry.Flags & BL_APPLICATION_ENTRY_FLAG_NO_GUID) ?
             NULL : &BlpApplicationEntry.Guid;
+}
+
+NTSTATUS
+BlGetApplicationBaseAndSize (
+    _Out_ PVOID* ImageBase, 
+    _Out_ PULONG ImageSize
+    )
+{
+    /* Fail if output parameters are missing */
+    if (!ImageBase || !ImageSize)
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* Return the requested data */
+    *ImageBase = (PVOID)(ULONG_PTR)BlpApplicationParameters->ImageBase;
+    *ImageSize = BlpApplicationParameters->ImageSize;
+    return STATUS_SUCCESS;
+}
+
+VOID
+BlDestroyBootEntry (
+    _In_ PBL_LOADED_APPLICATION_ENTRY AppEntry
+    )
+{
+    /* Check if we had allocated BCD options */
+    if (AppEntry->Flags & BL_APPLICATION_ENTRY_BCD_OPTIONS_INTERNAL)
+    {
+        BlMmFreeHeap(AppEntry->BcdData);
+    }
+
+    /* Free the entry itself */
+    BlMmFreeHeap(AppEntry);
+}
+
+NTSTATUS
+BlPdQueryData (
+    _In_ const GUID* DataGuid,
+    _In_ PVOID Unknown,
+    _Inout_ PBL_PD_DATA_BLOB DataBlob
+    )
+{
+    /* Check for invalid or missing parameters */
+    if (!(DataBlob) ||
+        !(DataGuid) ||
+        ((DataBlob->BlobSize) && !(DataBlob->Data)))
+    {
+        return STATUS_INVALID_PARAMETER;
+    }
+
+    /* Check if there's no persistent data blobs */
+    if (IsListEmpty(&BlpPdListHead))
+    {
+        return STATUS_NOT_FOUND;
+    }
+
+    /* Not yet handled, TODO */
+    EfiPrintf(L"Boot persistent data not yet implemented\r\n");
+    return STATUS_NOT_IMPLEMENTED;
 }

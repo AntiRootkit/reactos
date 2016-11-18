@@ -6,7 +6,7 @@ add_definitions(
     -D__WINESRC__
     -DCOM_NO_WINDOWS_H)
 
-include_directories(${REACTOS_SOURCE_DIR}/include/reactos/wine)
+include_directories(${REACTOS_SOURCE_DIR}/sdk/include/reactos/wine)
 add_idl_headers(mshtml_nsiface_header nsiface.idl)
 spec2def(mshtml.dll mshtml.spec)
 
@@ -105,11 +105,6 @@ list(APPEND mshtml_rc_deps
 set_source_files_properties(rsrc.rc PROPERTIES OBJECT_DEPENDS "${mshtml_rc_deps}")
 set_module_type(mshtml win32dll)
 target_link_libraries(mshtml uuid wine strmiids oldnames)
-
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_link_libraries(mshtml mingwex)
-endif()
-
 add_delay_importlibs(mshtml wininet)
 add_importlibs(mshtml urlmon shlwapi shell32 ole32 oleaut32 user32 gdi32 advapi32 msvcrt kernel32 ntdll)
 add_dependencies(mshtml mshtml_nsiface_header)

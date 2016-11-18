@@ -537,7 +537,7 @@ MountMgrNextDriveLetterWorker(IN PDEVICE_EXTENSION DeviceExtension,
         }
     }
 
-    /* No, ensure that the device is not automonted nor removable */
+    /* No, ensure that the device is not automounted nor removable */
     if (!DeviceExtension->NoAutoMount && !Removable)
     {
         if (DriveLetterInfo->DriveLetterWasAssigned)
@@ -2788,6 +2788,9 @@ MountMgrDeviceControl(IN PDEVICE_OBJECT DeviceObject,
             Status = MountMgrSetAutoMount(DeviceExtension, Irp);
             break;
 
+        case IOCTL_MOUNTMGR_DEFINE_UNIX_DRIVE:
+        case IOCTL_MOUNTMGR_QUERY_UNIX_DRIVE:
+            DPRINT1("Winism! Rewrite the caller!\n");
         default:
             Status = STATUS_INVALID_DEVICE_REQUEST;
     }

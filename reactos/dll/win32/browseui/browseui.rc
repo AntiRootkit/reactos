@@ -44,6 +44,7 @@ IDR_REGTREEOPTIONS REGISTRY "res/regtreeoptions.rgs"
 IDR_EXPLORERBAND REGISTRY "res/explorerband.rgs"
 IDR_PROGRESSDIALOG REGISTRY "res/progressdialog.rgs"
 IDR_AUTOCOMPLETE REGISTRY "res/autocomplete.rgs"
+IDR_ACLISTISF REGISTRY "res/shellautocomplete.rgs"
 
 #include <reactos/manifest_dll.rc>
 
@@ -67,14 +68,23 @@ IDR_AUTOCOMPLETE REGISTRY "res/autocomplete.rgs"
 #ifdef LANGUAGE_ES_ES
     #include "lang/es-ES.rc"
 #endif
+#ifdef LANGUAGE_FR_FR
+    #include "lang/fr-FR.rc"
+#endif
 #ifdef LANGUAGE_HE_IL
     #include "lang/he-IL.rc"
 #endif
 #ifdef LANGUAGE_IT_IT
     #include "lang/it-IT.rc"
 #endif
+#ifdef LANGUAGE_JA_JP
+    #include "lang/ja-JP.rc"
+#endif
 #ifdef LANGUAGE_PL_PL
     #include "lang/pl-PL.rc"
+#endif
+#ifdef LANGUAGE_PT_BR
+    #include "lang/pt-BR.rc"
 #endif
 #ifdef LANGUAGE_RO_RO
     #include "lang/ro-RO.rc"
@@ -94,3 +104,9 @@ IDR_AUTOCOMPLETE REGISTRY "res/autocomplete.rgs"
 #ifdef LANGUAGE_ZH_CN
     #include "lang/zh-CN.rc"
 #endif
+#ifdef LANGUAGE_ZH_TW
+    #include "lang/zh-TW.rc"
+#endif
+
+/* Include band button bitmaps */
+IDB_BANDBUTTONS BITMAP "res/barbtn.bmp"

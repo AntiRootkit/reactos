@@ -16,7 +16,7 @@
 
 NTSTATUS
 NTAPI
-CmpInitializeHive(OUT PCMHIVE *RegistryHive,
+CmpInitializeHive(OUT PCMHIVE *CmHive,
                   IN ULONG OperationType,
                   IN ULONG HiveFlags,
                   IN ULONG FileType,
@@ -28,14 +28,13 @@ CmpInitializeHive(OUT PCMHIVE *RegistryHive,
                   IN ULONG CheckFlags)
 {
     PCMHIVE Hive;
-    FILE_STANDARD_INFORMATION FileInformation;
     IO_STATUS_BLOCK IoStatusBlock;
     FILE_FS_SIZE_INFORMATION FileSizeInformation;
     NTSTATUS Status;
     ULONG Cluster;
 
     /* Assume failure */
-    *RegistryHive = NULL;
+    *CmHive = NULL;
 
     /*
      * The following are invalid:
@@ -169,26 +168,11 @@ CmpInitializeHive(OUT PCMHIVE *RegistryHive,
     Hive->Flags = 0;
     Hive->FlushCount = 0;
 
-    /* Set flags */
-    Hive->Flags = HiveFlags;
-
-    /* Check if this is a primary */
-    if (Primary)
-    {
-        /* Check how large the file is */
-        ZwQueryInformationFile(Primary,
-                               &IoStatusBlock,
-                               &FileInformation,
-                               sizeof(FileInformation),
-                               FileStandardInformation);
-        Cluster = FileInformation.EndOfFile.LowPart;
-    }
-
     /* Initialize it */
     Status = HvInitialize(&Hive->Hive,
                           OperationType,
-                          FileType,
                           HiveFlags,
+                          FileType,
                           HiveData,
                           CmpAllocate,
                           CmpFree,
@@ -237,7 +221,7 @@ CmpInitializeHive(OUT PCMHIVE *RegistryHive,
     ExReleasePushLock(&CmpHiveListHeadLock);
 
     /* Return the hive and success */
-    *RegistryHive = (PCMHIVE)Hive;
+    *CmHive = Hive;
     return STATUS_SUCCESS;
 }
 

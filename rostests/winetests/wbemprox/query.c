@@ -102,7 +102,12 @@ static void test_select( IWbemServices *services )
         {'S','E','L','E','C','T',' ','*',' ','F','R','O','M',' ','W','i','n','3','2','_',
          'P','r','o','c','e','s','s',' ','W','H','E','R','E',' ','C','a','p','t','i','o','n',' ',
          'L','I','K','E',' ','"','%','f','i','r','e','f','o','x','.','e','x','e','"',0};
-    static const WCHAR *test[] = { query1, query2, query3, query4, query5, query6, query7, query8, query9, query10 };
+    static const WCHAR query11[] =
+        {'S','E','L','E','C','T',' ','*',' ','F','R','O','M',' ',
+         'W','i','n','3','2','_','V','i','d','e','o','C','o','n','t','r','o','l','l','e','r',' ','w','h','e','r','e',' ',
+         'a','v','a','i','l','a','b','i','l','i','t','y',' ','=',' ','\'','3','\'',0};
+    static const WCHAR *test[] = { query1, query2, query3, query4, query5, query6, query7, query8, query9, query10,
+                                   query11 };
     HRESULT hr;
     IEnumWbemClassObject *result;
     BSTR wql = SysAllocString( wqlW );
@@ -140,6 +145,29 @@ static void test_select( IWbemServices *services )
     SysFreeString( wql );
     SysFreeString( sql );
     SysFreeString( query );
+}
+
+static void test_associators( IWbemServices *services )
+{
+    static const WCHAR query1[] =
+        {'A','S','S','O','C','I','A','T','O','R','S',' ','O','F',' ','{','W','i','n','3','2','_',
+         'L','o','g','i','c','a','l','D','i','s','k','.','D','e','v','i','c','e','I','D','=','"','C',':','"','}',0};
+    static const WCHAR query2[] =
+        {'A','S','S','O','C','I','A','T','O','R','S',' ','O','F',' ','{','W','i','n','3','2','_',
+         'L','o','g','i','c','a','l','D','i','s','k','.','D','e','v','i','c','e','I','D','=','"','C',':','"','}',' ',
+         'W','H','E','R','E',' ','A','s','s','o','c','C','l','a','s','s',' ','=',' ','W','i','n','3','2','_',
+         'L','o','g','i','c','a','l','D','i','s','k','T','o','P','a','r','t','i','t','i','o','n',0};
+    static const WCHAR *test[] = { query1, query2 };
+    HRESULT hr;
+    IEnumWbemClassObject *result;
+    UINT i;
+
+    for (i = 0; i < sizeof(test)/sizeof(test[0]); i++)
+    {
+        hr = exec_query( services, test[i], &result );
+        todo_wine ok( hr == S_OK, "query %u failed: %08x\n", i, hr );
+        if (result) IEnumWbemClassObject_Release( result );
+    }
 }
 
 static void test_Win32_Service( IWbemServices *services )
@@ -1049,6 +1077,7 @@ START_TEST(query)
     ok( hr == S_OK, "failed to set proxy blanket %08x\n", hr );
 
     test_select( services );
+    test_associators( services );
     test_Win32_Bios( services );
     test_Win32_Process( services );
     test_Win32_Service( services );

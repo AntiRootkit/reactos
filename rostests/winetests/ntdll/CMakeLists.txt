@@ -1,8 +1,6 @@
 
-include_directories(BEFORE ${REACTOS_SOURCE_DIR}/include/reactos/wine)
-
+include_directories(BEFORE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/wine)
 remove_definitions(-DWINVER=0x502 -D_WIN32_IE=0x600 -D_WIN32_WINNT=0x502)
-
 add_definitions(-D__WINESRC__)
 
 list(APPEND SOURCE
@@ -30,7 +28,7 @@ list(APPEND SOURCE
 
 add_executable(ntdll_winetest ${SOURCE})
 set_module_type(ntdll_winetest win32cui)
-add_importlibs(ntdll_winetest user32 msvcrt kernel32 ntdll)
+add_importlibs(ntdll_winetest user32 ole32 advapi32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET ntdll_winetest DESTINATION reactos/bin FOR all)
 
 if(NOT MSVC)

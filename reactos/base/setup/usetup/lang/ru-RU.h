@@ -473,6 +473,7 @@ static MUI_ENTRY ruRURepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY ruRUComputerPageEntries[] =
 {
     {
@@ -825,7 +826,7 @@ static MUI_ENTRY ruRUSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY ruRUConfirmDeletePartitionEntries[] =
+static MUI_ENTRY ruRUConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
@@ -836,13 +837,13 @@ static MUI_ENTRY ruRUConfirmDeletePartitionEntries[] =
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "Вы хотите удалить системный раздел.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -860,49 +861,49 @@ static MUI_ENTRY ruRUConfirmDeletePartitionEntries[] =
     {
         6,
         14,
-        "Delete a system partition only when you are sure that there are no such",
+        "Удаляйте системный раздел, когда уверены, что на нем нет важных программ",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "или когда вы уверены, что они не нужны.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         16,
-        "When you delete the partition, you might not be able to boot the",
+        "Когда вы удалите системный раздел, вы не сможете загрузить",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         17,
-        "computer from the harddisk until you finished the ReactOS Setup.",
+        "компьютер с жесткого диска, пока не закончите установку ReactOS.",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         20,
-        "\x07  Press ENTER to delete the system partition. You will be asked",
+        "\x07  Нажмите ENTER чтобы удалить системный раздел. Вы должны будете подтвердить",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         21,
-        "   to confirm the deletion of the partition again later.",
+        "   удаление позже снова.",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         24,
-        "\x07  Press ESC to return to the previous page. The partition will",
+        "\x07  Нажмите ESC чтобы вернуться к предыдущей странице. Раздел не",
         TEXT_STYLE_NORMAL
     },
     {
         8,
         25,
-        "   not be deleted.",
+        "   будет удален.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1603,7 +1604,6 @@ MUI_ERROR ruRUErrorEntries[] =
     }
 };
 
-
 MUI_PAGE ruRUPages[] =
 {
     {
@@ -1648,7 +1648,7 @@ MUI_PAGE ruRUPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        ruRUConfirmDeletePartitionEntries
+        ruRUConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1744,6 +1744,8 @@ MUI_STRING ruRUStrings[] =
     "ReactOS устанавливается на раздел:"},
     {STRING_CHECKINGPART,
     "Программа установки проверяет выбранный раздел."},
+    {STRING_CONTINUE,
+    "ENTER = Продолжить"},
     {STRING_QUITCONTINUE,
     "F3 = Выход  ENTER = Продолжить"},
     {STRING_REBOOTCOMPUTER,
@@ -1791,7 +1793,7 @@ MUI_STRING ruRUStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  Жесткий диск %lu  (Порт=%hu, Шина=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  Запись %lu    %I64u %s"},
+    "   %c%c  Запись 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "на %I64u %s  Жесткий диск %lu  (Порт=%hu, Шина=%hu, Id=%hu) на %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1799,7 +1801,7 @@ MUI_STRING ruRUStrings[] =
     {STRING_HDINFOPARTZEROED,
     "Жесткий диск %lu (%I64u %s), Порт=%hu, Шина=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  Запись %lu    %I64u %s"},
+    "%c%c  Запись 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "на жестком диске %lu (%I64u %s), Порт=%hu, Шина=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

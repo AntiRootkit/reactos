@@ -483,6 +483,7 @@ static MUI_ENTRY plPLRepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY plPLComputerPageEntries[] =
 {
     {
@@ -835,24 +836,24 @@ static MUI_ENTRY plPLSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY plPLConfirmDeletePartitionEntries[] =
+static MUI_ENTRY plPLConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
         3,
-        " ReactOS " KERNEL_VERSION_STR " Setup ",
+        " Instalator ReactOS " KERNEL_VERSION_STR " ",
         TEXT_STYLE_UNDERLINE
     },
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "You have chosen to delete the system partition.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -876,7 +877,7 @@ static MUI_ENTRY plPLConfirmDeletePartitionEntries[] =
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "programs on the partition, or when you are sure you want to delete them.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1377,7 +1378,7 @@ MUI_ERROR plPLErrorEntries[] =
         "\n"
         "  \x07  Naci˜nij ENTER, aby kontynuowa† instalacj©.\n"
         "  \x07  Naci˜nij F3, aby wyj˜† z instalatora.",
-        "F3= Wyj˜cie  ENTER = Kontynuacja"
+        "F3 = Wyj˜cie  ENTER = Kontynuacja"
     },
     {
         //ERROR_NO_HDD
@@ -1443,7 +1444,7 @@ MUI_ERROR plPLErrorEntries[] =
         "\n"
         "  \x07  Naci˜nij F3, aby wyj˜† z instalatora.\n"
         "  \x07  Naci˜nij ENTER, aby kontynuowa†.",
-        "F3= Wyj˜cie  ENTER = Kontynuacja"
+        "F3 = Wyj˜cie  ENTER = Kontynuacja"
     },
     {
         //ERROR_NEW_PARTITION,
@@ -1657,7 +1658,7 @@ MUI_PAGE plPLPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        plPLConfirmDeletePartitionEntries
+        plPLConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1753,8 +1754,10 @@ MUI_STRING plPLStrings[] =
     "Instalator kopiuje pliki systemu na wybran¥ partycj©."},
     {STRING_CHECKINGPART,
     "Instalator sprawdza wybran¥ partycj©."},
+    {STRING_CONTINUE,
+    "ENTER = Kontynuacja"},
     {STRING_QUITCONTINUE,
-    "F3= Wyj˜cie  ENTER = Kontynuacja"},
+    "F3 = Wyj˜cie  ENTER = Kontynuacja"},
     {STRING_REBOOTCOMPUTER,
     "ENTER = Restart komputera"},
     {STRING_TXTSETUPFAILED,
@@ -1800,7 +1803,7 @@ MUI_STRING plPLStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  Dysk 02 Twardy %lu  (Port=%hu, Szyna=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  03Typ %lu    %I64u %s"},
+    "   %c%c  03Typ 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "na %I64u %s  Dysku Twardym %lu  (Port=%hu, Szyna=%hu, Id=%hu) na %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1808,7 +1811,7 @@ MUI_STRING plPLStrings[] =
     {STRING_HDINFOPARTZEROED,
     "Dysk Twardy %lu (%I64u %s), Port=%hu, Szyna=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  07Typ %lu    %I64u %s"},
+    "%c%c  07Typ 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "na Dysku Twardym %lu (%I64u %s), Port=%hu, Szyna=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

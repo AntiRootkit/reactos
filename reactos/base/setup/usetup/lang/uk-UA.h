@@ -478,6 +478,7 @@ static MUI_ENTRY ukUARepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY ukUAComputerPageEntries[] =
 {
     {
@@ -831,24 +832,24 @@ static MUI_ENTRY ukUASelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY ukUAConfirmDeletePartitionEntries[] =
+static MUI_ENTRY ukUAConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
         3,
-        " ReactOS " KERNEL_VERSION_STR " Setup ",
+        " Встановлення ReactOS " KERNEL_VERSION_STR " ",
         TEXT_STYLE_UNDERLINE
     },
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "You have chosen to delete the system partition.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -872,7 +873,7 @@ static MUI_ENTRY ukUAConfirmDeletePartitionEntries[] =
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "programs on the partition, or when you are sure you want to delete them.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1440,7 +1441,7 @@ MUI_ERROR ukUAErrorEntries[] =
           "\n"
           "  \x07  Натиснiть F3 для виходу з встановлювача.\n"
           "  \x07  Натиснiть ENTER щоб продовжити.",
-          "F3= Вийти  ENTER = Продовжити"
+          "F3 = Вийти  ENTER = Продовжити"
     },
     {
         //ERROR_NEW_PARTITION,
@@ -1654,7 +1655,7 @@ MUI_PAGE ukUAPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        ukUAConfirmDeletePartitionEntries
+        ukUAConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1752,8 +1753,10 @@ MUI_STRING ukUAStrings[] =
     "ReactOS встановлюється на роздiл"},
     {STRING_CHECKINGPART,
     "Встановлювач перевiряє вибраний роздiл."},
+    {STRING_CONTINUE,
+    "ENTER = Продовжити"},
     {STRING_QUITCONTINUE,
-    "F3= Вийти  ENTER = Продовжити"},
+    "F3 = Вийти  ENTER = Продовжити"},
     {STRING_REBOOTCOMPUTER,
     "ENTER = Перезавантажити комп'ютер"},
     {STRING_TXTSETUPFAILED,
@@ -1799,7 +1802,7 @@ MUI_STRING ukUAStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  Жорсткий диск %lu  (Порт=%hu, Шина=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  Type %lu    %I64u %s"},
+    "   %c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "на %I64u %s  Жорсткий диск %lu  (Порт=%hu, Шина=%hu, Id=%hu) on %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1807,7 +1810,7 @@ MUI_STRING ukUAStrings[] =
     {STRING_HDINFOPARTZEROED,
     "Жорсткий диск %lu (%I64u %s), Порт=%hu, Шина=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  Type %lu    %I64u %s"},
+    "%c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "на Жорсткому диску %lu (%I64u %s), Порт=%hu, Шина=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

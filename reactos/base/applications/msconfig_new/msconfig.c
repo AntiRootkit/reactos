@@ -29,7 +29,7 @@
 
 /* Defaults for ReactOS */
 BOOL bIsWindows = FALSE;
-BOOL bIsOSVersionLessThanVista = TRUE;
+BOOL bIsPreVistaOSVersion = TRUE;
 
 /* Language-independent Vendor strings */
 const LPCWSTR IDS_REACTOS   = L"ReactOS";
@@ -190,8 +190,8 @@ int CALLBACK PropSheetCallback(HWND hDlg, UINT message, LPARAM lParam)
             /* Set the dialog icons */
             hIcon   = (HICON)LoadImageW(hInst, MAKEINTRESOURCEW(IDI_APPICON), IMAGE_ICON, 0, 0, LR_SHARED | LR_DEFAULTSIZE);
             hIconSm = (HICON)CopyImage(hIcon, IMAGE_ICON, GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON), LR_COPYFROMRESOURCE);
-            SendMessage(hDlg, WM_SETICON, ICON_BIG,   (LPARAM)hIcon);
-            SendMessage(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIconSm);
+            SendMessageW(hDlg, WM_SETICON, ICON_BIG,   (LPARAM)hIcon);
+            SendMessageW(hDlg, WM_SETICON, ICON_SMALL, (LPARAM)hIconSm);
 
             /* Sub-class the property sheet window procedure */
             wpOrigEditProc = (WNDPROC)SetWindowLongPtr(hDlg, DWLP_DLGPROC, (LONG_PTR)MainWndProc);
@@ -232,7 +232,7 @@ HWND CreatePropSheet(HINSTANCE hInstance, HWND hwndOwner, LPCTSTR lpszTitle)
     psp[nPages].pfnDlgProc  = GeneralPageWndProc;
     ++nPages;
 
-    // if (bIsOSVersionLessThanVista)
+    // if (bIsPreVistaOSVersion)
     {
         /* SYSTEM.INI page */
         if (MyFileExists(lpszSystemIni, NULL))
@@ -267,7 +267,7 @@ HWND CreatePropSheet(HINSTANCE hInstance, HWND hwndOwner, LPCTSTR lpszTitle)
 
     /* FreeLdr page */
     // TODO: Program the interface for Vista: "light" BCD editor...
-    if (!bIsWindows || (bIsWindows && bIsOSVersionLessThanVista))
+    if (!bIsWindows || (bIsWindows && bIsPreVistaOSVersion))
     {
         LPCWSTR lpszLoaderIniFile = NULL;
         DWORD   dwTabNameId       = 0;
@@ -346,12 +346,12 @@ BOOL Initialize(HINSTANCE hInstance)
     INITCOMMONCONTROLSEX InitControls;
 
     /* Initialize our global version flags */
-    bIsWindows = TRUE; /* IsWindowsOS(); */ // TODO: Commented for testing purposes...
-    bIsOSVersionLessThanVista = TRUE; /* IsOSVersionLessThanVista(); */ // TODO: Commented for testing purposes...
+    bIsWindows = IsWindowsOS();
+    bIsPreVistaOSVersion = IsPreVistaOSVersion();
 
     /* Initialize global strings */
     szAppName = LoadResourceString(hInstance, IDS_MSCONFIG);
-    if (!bIsOSVersionLessThanVista)
+    if (!bIsPreVistaOSVersion)
         lpszVistaAppName = LoadResourceString(hInstance, IDS_MSCONFIG_2);
 
     /* We use a semaphore in order to have a single-instance application */
@@ -367,7 +367,7 @@ BOOL Initialize(HINSTANCE hInstance)
          */
         if ( (hSingleWnd && IsWindow(hSingleWnd))                         ||
              ( (hSingleWnd = FindWindowW(L"#32770", szAppName)) != NULL ) ||
-             (!bIsOSVersionLessThanVista ? ( (hSingleWnd = FindWindowW(L"#32770", lpszVistaAppName)) != NULL ) : FALSE) )
+             (!bIsPreVistaOSVersion ? ( (hSingleWnd = FindWindowW(L"#32770", lpszVistaAppName)) != NULL ) : FALSE) )
         {
             /* Found it. Show the window. */
             ShowWindow(hSingleWnd, SW_SHOWNORMAL);
@@ -377,7 +377,7 @@ BOOL Initialize(HINSTANCE hInstance)
         /* Quit this instance of MSConfig */
         Success = FALSE;
     }
-    if (!bIsOSVersionLessThanVista) MemFree(lpszVistaAppName);
+    if (!bIsPreVistaOSVersion) MemFree(lpszVistaAppName);
 
     /* Quit now if we failed */
     if (!Success)

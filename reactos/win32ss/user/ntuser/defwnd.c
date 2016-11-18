@@ -307,7 +307,7 @@ DefWndHandleSetCursor(PWND pWnd, WPARAM wParam, LPARAM lParam)
       {
          if (pWnd->pcls->spcur)
          {
-            UserSetCursor(pWnd->pcls->spcur, FALSE);
+            IntSystemSetCursor(pWnd->pcls->spcur);
 	 }
 	 return FALSE;
       }
@@ -319,7 +319,7 @@ DefWndHandleSetCursor(PWND pWnd, WPARAM wParam, LPARAM lParam)
          {
             break;
          }
-         UserSetCursor(SYSTEMCUR(SIZEWE), FALSE);
+         IntSystemSetCursor(SYSTEMCUR(SIZEWE));
          return TRUE;
       }
 
@@ -330,7 +330,7 @@ DefWndHandleSetCursor(PWND pWnd, WPARAM wParam, LPARAM lParam)
          {
             break;
          }
-         UserSetCursor(SYSTEMCUR(SIZENS), FALSE);
+         IntSystemSetCursor(SYSTEMCUR(SIZENS));
          return TRUE;
        }
 
@@ -341,7 +341,7 @@ DefWndHandleSetCursor(PWND pWnd, WPARAM wParam, LPARAM lParam)
          {
             break;
          }
-         UserSetCursor(SYSTEMCUR(SIZENWSE), FALSE);
+         IntSystemSetCursor(SYSTEMCUR(SIZENWSE));
          return TRUE;
        }
 
@@ -352,11 +352,11 @@ DefWndHandleSetCursor(PWND pWnd, WPARAM wParam, LPARAM lParam)
          {
             break;
          }
-         UserSetCursor(SYSTEMCUR(SIZENESW), FALSE);
+         IntSystemSetCursor(SYSTEMCUR(SIZENESW));
          return TRUE;
        }
    }
-   UserSetCursor(SYSTEMCUR(ARROW), FALSE);
+   IntSystemSetCursor(SYSTEMCUR(ARROW));
    return FALSE;
 }
 
@@ -397,15 +397,14 @@ UserPaintCaption(PWND pWnd, INT Flags)
 {
   BOOL Ret = FALSE;
 
-  if ( pWnd->style & WS_VISIBLE && (pWnd->style & WS_CAPTION) == WS_CAPTION )
+  if ( (pWnd->style & WS_VISIBLE) && ((pWnd->style & WS_CAPTION) == WS_CAPTION) )
   {
-  
       if (pWnd->state & WNDS_HASCAPTION && pWnd->head.pti->MessageQueue == gpqForeground)
          Flags |= DC_ACTIVE;
     /* 
      * When themes are not enabled we can go on and paint the non client area.
      * However if we do that with themes enabled we will draw a classic frame.
-     * This is sovled by sending a themes specific message to notify the themes
+     * This is solved by sending a themes specific message to notify the themes
      * engine that the caption needs to be redrawn 
      */
       if (gpsi->dwSRVIFlags & SRVINFO_APIHOOK)
@@ -630,8 +629,8 @@ IntDefWindowProc(
 
             co_WinPosShowWindow(Wnd, wParam ? SW_SHOWNOACTIVATE : SW_HIDE);
          }
+         break;
       }
-      break;
 
       case WM_CLIENTSHUTDOWN:
          return IntClientShutdown(Wnd, wParam, lParam);
@@ -689,16 +688,16 @@ IntDefWindowProc(
           break;
 
       case WM_NCLBUTTONDOWN:
-          return (NC_HandleNCLButtonDown( Wnd, wParam, lParam));
-
-      case WM_LBUTTONDBLCLK:
-          return (NC_HandleNCLButtonDblClk( Wnd, HTCLIENT, lParam));
-
-      case WM_NCLBUTTONDBLCLK:
-          return (NC_HandleNCLButtonDblClk( Wnd, wParam, lParam));
+          return NC_HandleNCLButtonDown(Wnd, wParam, lParam);
 
       case WM_NCRBUTTONDOWN:
-          return NC_HandleNCRButtonDown( Wnd, wParam, lParam );
+          return NC_HandleNCRButtonDown(Wnd, wParam, lParam);
+
+      case WM_LBUTTONDBLCLK:
+          return NC_HandleNCLButtonDblClk(Wnd, HTCLIENT, lParam);
+
+      case WM_NCLBUTTONDBLCLK:
+          return NC_HandleNCLButtonDblClk(Wnd, wParam, lParam);
 
       case WM_RBUTTONUP:
       {

@@ -302,22 +302,23 @@ CDrvDefExt::InitGeneralPage(HWND hwndDlg)
     UINT IconId, TypeStrId = 0;
     switch (DriveType)
     {
-        case DRIVE_CDROM: IconId = IDI_SHELL_CDROM; TypeStrId = IDS_DRIVE_CDROM; break;
         case DRIVE_REMOVABLE: IconId = IDI_SHELL_3_14_FLOPPY; break;
+        case DRIVE_CDROM: IconId = IDI_SHELL_CDROM; TypeStrId = IDS_DRIVE_CDROM; break;
+        case DRIVE_REMOTE: IconId = IDI_SHELL_NETDRIVE; TypeStrId = IDS_DRIVE_NETWORK; break;
         case DRIVE_RAMDISK: IconId = IDI_SHELL_RAMDISK; break;
         default: IconId = IDI_SHELL_DRIVE; TypeStrId = IDS_DRIVE_FIXED;
     }
 
-    if (DriveType == DRIVE_CDROM)
+    if (DriveType == DRIVE_CDROM || DriveType == DRIVE_REMOTE)
     {
         /* volume label textbox */
-        EnableWindow(GetDlgItem(hwndDlg, 14000), false);
+        SendMessage(GetDlgItem(hwndDlg, 14000), EM_SETREADONLY, TRUE, 0);
         
         /* disk compression */
-        ShowWindow(GetDlgItem(hwndDlg, 14011), false);
+        ShowWindow(GetDlgItem(hwndDlg, 14011), FALSE);
 
         /* index */
-        ShowWindow(GetDlgItem(hwndDlg, 14012), false);
+        ShowWindow(GetDlgItem(hwndDlg, 14012), FALSE);
     }
     
     HICON hIcon = (HICON)LoadImage(shell32_hInstance, MAKEINTRESOURCE(IconId), IMAGE_ICON, 32, 32, LR_SHARED);

@@ -48,16 +48,6 @@
 
 #define ICMP_MINLEN 8 /* copied from dlls/iphlpapi/ip_icmp.h file */
 
-#undef htonl
-#undef htons
-#undef ntohl
-#undef ntohs
-
-#define htonl(l) ((u_long)(l))
-#define htons(s) ((u_short)(s))
-#define ntohl(l) ((u_long)(l))
-#define ntohs(s) ((u_short)(s))
-
 static HMODULE hLibrary = NULL;
 
 static DWORD (WINAPI *pGetNumberOfInterfaces)(PDWORD);
@@ -1038,13 +1028,13 @@ todo_wine
     replysz = sizeof(ICMP_ECHO_REPLY) + ICMP_MINLEN;
     ret = pIcmpSendEcho(icmp, address, senddata, ICMP_MINLEN, NULL, replydata, replysz, 1000);
     error = GetLastError();
-todo_wine
     ok (ret, "IcmpSendEcho failed unexpectedly with error %d\n", error);
 
     SetLastError(0xdeadbeef);
     replysz = sizeof(ICMP_ECHO_REPLY) + ICMP_MINLEN;
     ret = pIcmpSendEcho(icmp, address, senddata, ICMP_MINLEN + 1, NULL, replydata, replysz, 1000);
     error = GetLastError();
+todo_wine
     ok (!ret, "IcmpSendEcho succeeded unexpectedly\n");
 todo_wine
     ok (error == IP_GENERAL_FAILURE
@@ -1389,13 +1379,14 @@ static void test_GetAdaptersAddresses(void)
     size *= 2;
     osize = size;
     ptr = HeapAlloc(GetProcessHeap(), 0, osize);
-    ret = pGetAdaptersAddresses(AF_UNSPEC, 0, NULL, ptr, &osize);
+    ret = pGetAdaptersAddresses(AF_UNSPEC, GAA_FLAG_INCLUDE_PREFIX, NULL, ptr, &osize);
     ok(!ret, "expected ERROR_SUCCESS got %u\n", ret);
     ok(osize == size, "expected %d, got %d\n", size, osize);
 
     for (aa = ptr; !ret && aa; aa = aa->Next)
     {
         char temp[128];
+        IP_ADAPTER_PREFIX *prefix;
 
         ok(S(U(*aa)).Length == sizeof(IP_ADAPTER_ADDRESSES_LH) ||
            S(U(*aa)).Length == sizeof(IP_ADAPTER_ADDRESSES_XP),
@@ -1462,6 +1453,18 @@ static void test_GetAdaptersAddresses(void)
             sprintf(temp + strlen(temp), "%d ", aa->ZoneIndices[i]);
         trace("ZoneIndices:           %s\n", temp);
         trace("FirstPrefix:           %p\n", aa->FirstPrefix);
+        prefix = aa->FirstPrefix;
+        while (prefix)
+        {
+            trace("\tLength:                  %u\n", S(U(*prefix)).Length);
+            trace("\tFlags:                   0x%08x\n", S(U(*prefix)).Flags);
+            trace("\tNext:                    %p\n", prefix->Next);
+            trace("\tAddress.lpSockaddr:      %p\n", prefix->Address.lpSockaddr);
+            trace("\tAddress.iSockaddrLength: %d\n", prefix->Address.iSockaddrLength);
+            trace("\tPrefixLength:            %u\n", prefix->PrefixLength);
+            trace("\n");
+            prefix = prefix->Next;
+        }
 
         if (S(U(*aa)).Length < sizeof(IP_ADAPTER_ADDRESSES_LH)) continue;
 #ifndef __REACTOS__

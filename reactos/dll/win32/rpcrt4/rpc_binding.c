@@ -1616,6 +1616,30 @@ RpcBindingInqAuthClientExW( RPC_BINDING_HANDLE ClientBinding, RPC_AUTHZ_HANDLE *
 }
 
 /***********************************************************************
+ *             RpcBindingServerFromClient (RPCRT4.@)
+ */
+RPCRTAPI RPC_STATUS RPC_ENTRY
+RpcBindingServerFromClient(RPC_BINDING_HANDLE ClientBinding, RPC_BINDING_HANDLE* ServerBinding)
+{
+    RpcBinding* bind = ClientBinding;
+    RpcBinding* NewBinding;
+
+    if (!bind)
+        bind = I_RpcGetCurrentCallHandle();
+
+    if (!bind->server)
+        return RPC_S_INVALID_BINDING;
+
+    RPCRT4_AllocBinding(&NewBinding, TRUE);
+    NewBinding->Protseq = RPCRT4_strdupA(bind->Protseq);
+    NewBinding->NetworkAddr = RPCRT4_strdupA(bind->NetworkAddr);
+
+    *ServerBinding = NewBinding;
+
+    return RPC_S_OK;
+}
+
+/***********************************************************************
  *             RpcBindingSetAuthInfoExA (RPCRT4.@)
  */
 RPCRTAPI RPC_STATUS RPC_ENTRY

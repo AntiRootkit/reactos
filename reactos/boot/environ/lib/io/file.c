@@ -212,7 +212,7 @@ FileTablePurgeEntry (
         return STATUS_UNSUCCESSFUL;
     }
 
-    /* Purge the entry othwrwise */
+    /* Purge the entry otherwise */
     return FileTableDestroyEntry(FileEntry, FileEntry->FileId);
 }
 
@@ -323,7 +323,6 @@ FileIoOpen (
                                                 &Unknown);
     if (FileEntry)
     {
-        EfiPrintf(L"Entry exists: %p\n", FileEntry);
         goto FileOpened;
     }
 
@@ -427,8 +426,6 @@ FileIoOpen (
     Status = STATUS_SUCCESS;
     FileEntry->FileId = FileId;
 
-    EfiPrintf(L"File %s opened with ID: %lx\r\n", FileEntry->FilePath, FileId);
-
 FileOpened:
     /* Add a reference to the file entry, and see if this is the first one */
     if (++FileEntry->ReferenceCount == 1)
@@ -525,7 +522,6 @@ BlFileOpen (
     if (NT_SUCCESS(Status))
     {
         /* Return the file ID back to the caller */
-        EfiPrintf(L"File opened: %lx\r\n", FileEntry->FileId);
         *FileId = FileEntry->FileId;
     }
 
@@ -824,7 +820,7 @@ BlFileReadAtOffsetEx (
     if (!NT_SUCCESS(Status))
     {
         /* Bail out if the read is invalid */
-        EfiPrintf(L"File info check failure: %lx\n", Status);
+        EfiPrintf(L"File info check failure: %lx\r\n", Status);
         return Status;
     }
 

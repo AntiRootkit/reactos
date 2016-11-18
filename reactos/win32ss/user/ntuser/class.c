@@ -255,6 +255,9 @@ IntDestroyClass(IN OUT PCLS Class)
         // comparisons, remove registration of the atom if not zeroed.
         if (Class->atomClassName)
             IntDeregisterClassAtom(Class->atomClassName);
+        // Dereference non-versioned class name
+        if (Class->atomNVClassName)
+            IntDeregisterClassAtom(Class->atomNVClassName);
 
         if (Class->pdce)
         {
@@ -379,7 +382,7 @@ RegisterControlAtoms(VOID)
        if (IntRegisterClassAtom(&ClassName, &Atom))
        {
           gpsi->atomSysClass[i] = Atom;
-          ERR("Reg Control Atoms 0x%x\n",Atom);
+          TRACE("Reg Control Atom %ls: 0x%x\n", ControlsList[i], Atom);
        }
        i++;
     }
@@ -423,22 +426,37 @@ IntSetClassAtom(IN OUT PCLS Class,
 
     /* Update the base class first */
     Class = Class->pclsBase;
-
-    if (!IntRegisterClassAtom(ClassName,
-                              &Atom))
+    if (ClassName->Length > 0)
     {
-        return FALSE;
+        if (!IntRegisterClassAtom(ClassName,
+                                  &Atom))
+        {
+            ERR("RegisterClassAtom failed ! %x\n", EngGetLastError());
+            return FALSE;
+        }
+    }
+    else
+    {
+        if (IS_ATOM(ClassName->Buffer))
+        {
+            Atom = (ATOM)((ULONG_PTR)ClassName->Buffer & 0xffff); // XXX: are we missing refcount here ?
+        }
+        else
+        {
+            EngSetLastError(ERROR_INVALID_PARAMETER);
+            return FALSE;
+        }
     }
 
-    IntDeregisterClassAtom(Class->atomClassName);
+    IntDeregisterClassAtom(Class->atomNVClassName);
 
-    Class->atomClassName = Atom;
+    Class->atomNVClassName = Atom;
 
     /* Update the clones */
     Class = Class->pclsClone;
     while (Class != NULL)
     {
-        Class->atomClassName = Atom;
+        Class->atomNVClassName = Atom;
 
         Class = Class->pclsNext;
     }
@@ -1000,6 +1018,7 @@ PCLS
 FASTCALL
 IntCreateClass(IN CONST WNDCLASSEXW* lpwcx,
                IN PUNICODE_STRING ClassName,
+               IN PUNICODE_STRING ClassVersion,
                IN PUNICODE_STRING MenuName,
                IN DWORD fnID,
                IN DWORD dwFlags,
@@ -1008,7 +1027,7 @@ IntCreateClass(IN CONST WNDCLASSEXW* lpwcx,
 {
     SIZE_T ClassSize;
     PCLS Class = NULL;
-    RTL_ATOM Atom;
+    RTL_ATOM Atom, verAtom;
     WNDPROC WndProc;
     PWSTR pszMenuName = NULL;
     NTSTATUS Status = STATUS_SUCCESS;
@@ -1020,6 +1039,14 @@ IntCreateClass(IN CONST WNDCLASSEXW* lpwcx,
                               &Atom))
     {
         ERR("Failed to register class atom!\n");
+        return NULL;
+    }
+
+    if (!IntRegisterClassAtom(ClassVersion,
+                              &verAtom))
+    {
+        ERR("Failed to register version class atom!\n");
+        IntDeregisterClassAtom(Atom);
         return NULL;
     }
 
@@ -1054,7 +1081,8 @@ IntCreateClass(IN CONST WNDCLASSEXW* lpwcx,
 
         Class->rpdeskParent = Desktop;
         Class->pclsBase = Class;
-        Class->atomClassName = Atom;
+        Class->atomClassName = verAtom;
+        Class->atomNVClassName = Atom;
         Class->fnid = fnID;
         Class->CSF_flags = dwFlags;
 
@@ -1181,6 +1209,7 @@ IntCreateClass(IN CONST WNDCLASSEXW* lpwcx,
                             Class);
             Class = NULL;
 
+            IntDeregisterClassAtom(verAtom);
             IntDeregisterClassAtom(Atom);
         }
     }
@@ -1193,12 +1222,13 @@ NoMem:
             UserHeapFree(pszMenuName);
 
         IntDeregisterClassAtom(Atom);
+        IntDeregisterClassAtom(verAtom);
 
         EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
     }
 
-    TRACE("Created class 0x%p with name %wZ and proc 0x%p for atom 0x%x and hInstance 0x%p, global %u\n",
-            Class, ClassName, Class->lpfnWndProc, Atom, Class->hModule, Class->Global);
+    TRACE("Created class 0x%p with name %wZ and proc 0x%p for atom 0x%x and version atom 0x%x and hInstance 0x%p, global %u\n",
+            Class, ClassName, Class->lpfnWndProc, Atom, verAtom, Class->hModule, Class->Global);
 
     return Class;
 }
@@ -1283,11 +1313,7 @@ IntGetAtomFromStringOrAtom(
         }
         else
         {
-            if (Status == STATUS_OBJECT_NAME_NOT_FOUND)
-            {
-                EngSetLastError(ERROR_CLASS_DOES_NOT_EXIST);
-            }
-            else
+            if (Status != STATUS_OBJECT_NAME_NOT_FOUND)
             {
                 SetLastNtError(Status);
             }
@@ -1362,7 +1388,6 @@ IntGetClassAtom(
                              Link);
         if (Class == NULL)
         {
-            EngSetLastError(ERROR_CLASS_DOES_NOT_EXIST);
             return (RTL_ATOM)0;
         }else{TRACE("Step 4: 0x%p\n",Class );}
 
@@ -1415,7 +1440,6 @@ IntGetAndReferenceClass(PUNICODE_STRING ClassName, HINSTANCE hInstance, BOOL bDe
          ERR("Class \"%wZ\" not found\n", ClassName);
       }
 
-      EngSetLastError(ERROR_CANNOT_FIND_WND_CLASS);
       return NULL;
    }
 
@@ -1435,6 +1459,7 @@ IntGetAndReferenceClass(PUNICODE_STRING ClassName, HINSTANCE hInstance, BOOL bDe
 RTL_ATOM
 UserRegisterClass(IN CONST WNDCLASSEXW* lpwcx,
                   IN PUNICODE_STRING ClassName,
+                  IN PUNICODE_STRING ClassVersion,
                   IN PUNICODE_STRING MenuName,
                   IN DWORD fnID,
                   IN DWORD dwFlags)
@@ -1452,7 +1477,7 @@ UserRegisterClass(IN CONST WNDCLASSEXW* lpwcx,
     pi = pti->ppi;
 
     // Need only to test for two conditions not four....... Fix more whine tests....
-    if ( IntGetAtomFromStringOrAtom( ClassName, &ClassAtom) &&
+    if ( IntGetAtomFromStringOrAtom( ClassVersion, &ClassAtom) &&
                                      ClassAtom != (RTL_ATOM)0 &&
                                     !(dwFlags & CSF_SERVERSIDEPROC) ) // Bypass Server Sides
     {
@@ -1487,6 +1512,7 @@ UserRegisterClass(IN CONST WNDCLASSEXW* lpwcx,
 
     Class = IntCreateClass(lpwcx,
                            ClassName,
+                           ClassVersion,
                            MenuName,
                            fnID,
                            dwFlags,
@@ -1507,7 +1533,7 @@ UserRegisterClass(IN CONST WNDCLASSEXW* lpwcx,
         (void)InterlockedExchangePointer((PVOID*)List,
                                          Class);
 
-        Ret = Class->atomClassName;
+        Ret = Class->atomNVClassName;
     }
     else
     {
@@ -1539,6 +1565,7 @@ UserUnregisterClass(IN PUNICODE_STRING ClassName,
                                 &Link);
     if (ClassAtom == (RTL_ATOM)0)
     {
+        EngSetLastError(ERROR_CLASS_DOES_NOT_EXIST);
         TRACE("UserUnregisterClass: No Class found.\n");
         return FALSE;
     }
@@ -1629,7 +1656,7 @@ UserGetClassName(IN PCLS Class,
 
                 /* Query the class name */
                 Status = RtlQueryAtomInAtomTable(gAtomTable,
-                                                 Atom ? Atom : Class->atomClassName,
+                                                 Atom ? Atom : Class->atomNVClassName,
                                                  NULL,
                                                  NULL,
                                                  szTemp,
@@ -1663,7 +1690,7 @@ UserGetClassName(IN PCLS Class,
 
             /* Query the atom name */
             Status = RtlQueryAtomInAtomTable(gAtomTable,
-                                             Atom ? Atom : Class->atomClassName,
+                                             Atom ? Atom : Class->atomNVClassName,
                                              NULL,
                                              NULL,
                                              ClassName->Buffer,
@@ -2170,7 +2197,7 @@ UserSetClassLongPtr(IN PCLS Class,
         {
             PUNICODE_STRING Value = (PUNICODE_STRING)NewLong;
 
-            Ret = (ULONG_PTR)Class->atomClassName;
+            Ret = (ULONG_PTR)Class->atomNVClassName;
             if (!IntSetClassAtom(Class,
                                  Value))
             {
@@ -2299,15 +2326,17 @@ UserRegisterSystemClasses(VOID)
         wc.hIcon = NULL;
 
         //// System Cursors should be initilized!!!
-        if (DefaultServerClasses[i].hCursor == (HICON)OCR_NORMAL &&
-            SYSTEMCUR(ARROW) != NULL)
+        wc.hCursor = NULL;
+        if (DefaultServerClasses[i].hCursor == (HICON)OCR_NORMAL)
         {
-            wc.hCursor = UserHMGetHandle(SYSTEMCUR(ARROW));
-        }
-        else
-        {
-            ERR("SYSTEMCUR(ARROW) == NULL, should not happen!!\n");
-            wc.hCursor = NULL;
+            if (SYSTEMCUR(ARROW) == NULL)
+            {
+                ERR("SYSTEMCUR(ARROW) == NULL, should not happen!!\n");
+            }
+            else
+            {
+                wc.hCursor = UserHMGetHandle(SYSTEMCUR(ARROW));
+            }
         }
 
         hBrush = DefaultServerClasses[i].hBrush;
@@ -2321,6 +2350,7 @@ UserRegisterSystemClasses(VOID)
         wc.hIconSm = NULL;
 
         Class = IntCreateClass( &wc,
+                                &ClassName,
                                 &ClassName,
                                 &MenuName,
                                  DefaultServerClasses[i].fiId,
@@ -2352,7 +2382,7 @@ APIENTRY
 NtUserRegisterClassExWOW(
     WNDCLASSEXW* lpwcx,
     PUNICODE_STRING ClassName,
-    PUNICODE_STRING ClsNVersion,
+    PUNICODE_STRING ClsVersion,
     PCLSMENUNAME pClassMenuName,
     DWORD fnID,
     DWORD Flags,
@@ -2369,7 +2399,7 @@ NtUserRegisterClassExWOW(
  */
 {
     WNDCLASSEXW CapturedClassInfo = {0};
-    UNICODE_STRING CapturedName = {0}, CapturedMenuName = {0};
+    UNICODE_STRING CapturedName = {0}, CapturedMenuName = {0}, CapturedVersion = {0};
     RTL_ATOM Ret = (RTL_ATOM)0;
     PPROCESSINFO ppi = GetW32ProcessInfo();
     BOOL Exception = FALSE;
@@ -2407,6 +2437,7 @@ NtUserRegisterClassExWOW(
                       sizeof(WNDCLASSEXW));
 
         CapturedName = ProbeForReadUnicodeString(ClassName);
+        CapturedVersion = ProbeForReadUnicodeString(ClsVersion);
 
         ProbeForRead(pClassMenuName,
                      sizeof(CLSMENUNAME),
@@ -2436,6 +2467,21 @@ NtUserRegisterClassExWOW(
         else
         {
             if (!IS_ATOM(CapturedName.Buffer))
+            {
+                ERR("NtUserRegisterClassExWOW ClassName Error!\n");
+                goto InvalidParameter;
+            }
+        }
+
+        if (CapturedVersion.Length != 0)
+        {
+            ProbeForRead(CapturedVersion.Buffer,
+                         CapturedVersion.Length,
+                         sizeof(WCHAR));
+        }
+        else
+        {
+            if (!IS_ATOM(CapturedVersion.Buffer))
             {
                 ERR("NtUserRegisterClassExWOW ClassName Error!\n");
                 goto InvalidParameter;
@@ -2478,6 +2524,7 @@ InvalidParameter:
         /* Register the class */
         Ret = UserRegisterClass(&CapturedClassInfo,
                                 &CapturedName,
+                                &CapturedVersion,
                                 &CapturedMenuName,
                                 fnID,
                                 Flags);
@@ -2523,7 +2570,18 @@ NtUserSetClassLong(HWND hWnd,
             /* Probe the parameters */
             if (Offset == GCW_ATOM || Offset == GCLP_MENUNAME)
             {
-                Value = ProbeForReadUnicodeString((PUNICODE_STRING)dwNewLong);
+                /* FIXME: Resource ID can be passed directly without UNICODE_STRING ? */
+                if (IS_ATOM(dwNewLong))
+                {
+                    Value.MaximumLength = 0;
+                    Value.Length = 0;
+                    Value.Buffer = (PWSTR)dwNewLong;
+                }
+                else
+                {
+                    Value = ProbeForReadUnicodeString((PUNICODE_STRING)dwNewLong);
+                }
+
                 if (Value.Length & 1)
                 {
                     goto InvalidParameter;

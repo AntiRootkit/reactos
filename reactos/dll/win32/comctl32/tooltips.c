@@ -91,6 +91,8 @@
 
 #include "comctl32.h"
 
+#include <wine/exception.h>
+
 WINE_DEFAULT_DEBUG_CHANNEL(tooltips);
 
 static HICON hTooltipIcons[TTI_ERROR+1];
@@ -494,6 +496,12 @@ TOOLTIPS_GetTipText (const TOOLTIPS_INFO *infoPtr, INT nTool, WCHAR *buffer)
     else {
 	/* no text available */
         buffer[0] = '\0';
+    }
+
+    if (!(GetWindowLongW(infoPtr->hwndSelf, GWL_STYLE) & TTS_NOPREFIX)) {
+        WCHAR *ptrW;
+        if ((ptrW = strchrW(buffer, '\t')))
+            *ptrW = 0;
     }
 
     TRACE("%s\n", debugstr_w(buffer));
@@ -1063,10 +1071,19 @@ TOOLTIPS_AddToolT (TOOLTIPS_INFO *infoPtr, const TTTOOLINFOW *ti, BOOL isW)
                 toolPtr->lpszText = LPSTR_TEXTCALLBACKW;
             }
             else if (isW) {
-                INT len = lstrlenW (ti->lpszText);
-                TRACE("add text %s!\n", debugstr_w(ti->lpszText));
-                toolPtr->lpszText =	Alloc ((len + 1)*sizeof(WCHAR));
-                strcpyW (toolPtr->lpszText, ti->lpszText);
+                __TRY
+                {
+                    INT len = lstrlenW (ti->lpszText);
+                    TRACE("add text %s!\n", debugstr_w(ti->lpszText));
+                    toolPtr->lpszText =	Alloc ((len + 1)*sizeof(WCHAR));
+                    strcpyW (toolPtr->lpszText, ti->lpszText);
+                }
+                __EXCEPT_PAGE_FAULT
+                {
+                    WARN("Invalid lpszText.\n");
+                    return FALSE;
+                }
+                __ENDTRY
             }
             else {
                 INT len = MultiByteToWideChar(CP_ACP, 0, (LPSTR)ti->lpszText, -1, NULL, 0);
@@ -1304,12 +1321,10 @@ TOOLTIPS_GetDelayTime (const TOOLTIPS_INFO *infoPtr, DWORD duration)
 
 
 static LRESULT
-TOOLTIPS_GetMargin (const TOOLTIPS_INFO *infoPtr, LPRECT lpRect)
+TOOLTIPS_GetMargin (const TOOLTIPS_INFO *infoPtr, RECT *rect)
 {
-    lpRect->left   = infoPtr->rcMargin.left;
-    lpRect->right  = infoPtr->rcMargin.right;
-    lpRect->bottom = infoPtr->rcMargin.bottom;
-    lpRect->top    = infoPtr->rcMargin.top;
+    if (rect)
+        *rect = infoPtr->rcMargin;
 
     return 0;
 }
@@ -1581,12 +1596,10 @@ TOOLTIPS_SetDelayTime (TOOLTIPS_INFO *infoPtr, DWORD duration, INT nTime)
 
 
 static LRESULT
-TOOLTIPS_SetMargin (TOOLTIPS_INFO *infoPtr, const RECT *lpRect)
+TOOLTIPS_SetMargin (TOOLTIPS_INFO *infoPtr, const RECT *rect)
 {
-    infoPtr->rcMargin.left   = lpRect->left;
-    infoPtr->rcMargin.right  = lpRect->right;
-    infoPtr->rcMargin.bottom = lpRect->bottom;
-    infoPtr->rcMargin.top    = lpRect->top;
+    if (rect)
+        infoPtr->rcMargin = *rect;
 
     return 0;
 }

@@ -80,7 +80,7 @@ IsAcpiComputer(VOID)
    }
 
    pValueInformation = RtlAllocateHeap(RtlGetProcessHeap(), 0, ValueInfoLength);
-   if (!pDeviceInformation)
+   if (!pValueInformation)
    {
       DPRINT("RtlAllocateHeap() failed\n");
       Status = STATUS_NO_MEMORY;
@@ -810,6 +810,43 @@ ProcessLocaleRegistry(
     LanguageId = (PWCHAR)GetListEntryUserData(Entry);
     if (LanguageId == NULL)
         return FALSE;
+
+    DPRINT("LanguageId: %S\n", LanguageId);
+
+    /* Open the default users locale key */
+    RtlInitUnicodeString(&KeyName,
+                         L"\\Registry\\User\\.DEFAULT\\Control Panel\\International");
+
+    InitializeObjectAttributes(&ObjectAttributes,
+                               &KeyName,
+                               OBJ_CASE_INSENSITIVE,
+                               NULL,
+                               NULL);
+
+    Status =  NtOpenKey(&KeyHandle,
+                        KEY_SET_VALUE,
+                        &ObjectAttributes);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("NtOpenKey() failed (Status %lx)\n", Status);
+        return FALSE;
+    }
+
+    /* Set default user locale */
+    RtlInitUnicodeString(&ValueName,
+                         L"Locale");
+    Status = NtSetValueKey(KeyHandle,
+                           &ValueName,
+                           0,
+                           REG_SZ,
+                           (PVOID)LanguageId,
+                           (wcslen(LanguageId) + 1) * sizeof(WCHAR));
+    NtClose(KeyHandle);
+    if (!NT_SUCCESS(Status))
+    {
+        DPRINT1("NtSetValueKey() failed (Status %lx)\n", Status);
+        return FALSE;
+    }
 
     /* Skip first 4 zeroes */
     if (wcslen(LanguageId) >= 4)

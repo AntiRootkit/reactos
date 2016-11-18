@@ -302,12 +302,6 @@ void PerfDataRefresh(void)
         /*  CurrentCpuUsage% = 100 - (CurrentCpuIdle * 100) / NumberOfProcessors */
         dbIdleTime = 100.0 - dbIdleTime * 100.0 / (double)SystemBasicInfo.NumberOfProcessors; /* + 0.5; */
         dbKernelTime = 100.0 - dbKernelTime * 100.0 / (double)SystemBasicInfo.NumberOfProcessors; /* + 0.5; */
-
-        if (dbIdleTime < 0.0) dbIdleTime = 0.0;
-        if (dbIdleTime > 100.0) dbIdleTime = 100.0;
-        if (dbKernelTime < 0.0) dbKernelTime = 0.0;
-        if (dbKernelTime > 100.0) dbKernelTime = 100.0;
-
     }
 
     /* Store new CPU's idle and system time */
@@ -477,17 +471,29 @@ ULONG PerfDataGetProcessIndex(ULONG pid)
 
 ULONG PerfDataGetProcessCount(void)
 {
-    return ProcessCount;
+    ULONG Result;
+    EnterCriticalSection(&PerfDataCriticalSection);
+    Result = ProcessCount;
+    LeaveCriticalSection(&PerfDataCriticalSection);
+    return Result;
 }
 
 ULONG PerfDataGetProcessorUsage(void)
 {
-    return (ULONG)dbIdleTime;
+    ULONG Result;
+    EnterCriticalSection(&PerfDataCriticalSection);
+    Result = (ULONG)dbIdleTime;
+    LeaveCriticalSection(&PerfDataCriticalSection);
+    return Result;
 }
 
 ULONG PerfDataGetProcessorSystemUsage(void)
 {
-    return (ULONG)dbKernelTime;
+    ULONG Result;
+    EnterCriticalSection(&PerfDataCriticalSection);
+    Result = (ULONG)dbKernelTime;
+    LeaveCriticalSection(&PerfDataCriticalSection);
+    return Result;
 }
 
 BOOL PerfDataGetImageName(ULONG Index, LPWSTR lpImageName, ULONG nMaxCount)
@@ -626,7 +632,7 @@ BOOL PerfDataGetCommandLine(ULONG Index, LPWSTR lpCommandLine, ULONG nMaxCount)
                                NULL);
     if (!result)
     {
-        /* Weird, after sucessfully reading the mem of that process
+        /* Weird, after successfully reading the mem of that process
            various times it fails now, forget it and bail out */
         HeapFree(GetProcessHeap(), 0, new_entry);
         goto cleanup;

@@ -13,7 +13,8 @@ typedef HANDLE HIMC;
 #define FIRST_USER_HANDLE 0x0020 /* first possible value for low word of user handle */
 #define LAST_USER_HANDLE 0xffef /* last possible value for low word of user handle */
 
-#define HANDLEENTRY_INDESTROY 1
+#define HANDLEENTRY_DESTROY 1
+#define HANDLEENTRY_INDESTROY 2
 
 typedef struct _USER_HANDLE_ENTRY
 {
@@ -140,6 +141,7 @@ typedef struct _DESKTOPINFO
     HWND hProgmanWindow;
     HWND hShellWindow;
     struct _WND *spwndShell;
+    struct _WND *spwndBkGnd;
 
     struct _PROCESSINFO *ppiShellProcess;
 
@@ -729,6 +731,15 @@ typedef struct _SBWND
     UINT wDisableFlags;
     SBCALC SBCalc;
 } SBWND, *PSBWND;
+
+typedef struct _MDIWND
+{
+  WND wnd;
+  DWORD dwReserved;
+  PVOID pmdi;
+} MDIWND, *PMDIWND;
+
+#define GWLP_MDIWND 4
 
 typedef struct _MENUWND
 {
@@ -2826,7 +2837,7 @@ NTAPI
 NtUserRegisterClassExWOW(
     WNDCLASSEXW* lpwcx,
     PUNICODE_STRING pustrClassName,
-    PUNICODE_STRING pustrCNVersion,
+    PUNICODE_STRING pustrCVersion,
     PCLSMENUNAME pClassMenuName,
     DWORD fnID,
     DWORD Flags,

@@ -9,8 +9,8 @@
  *  use, modify or distribute it freely.
  *
  *  This code is distributed in the hope that it will be useful but
- *  WITHOUT ANY WARRANTY. ALL WARRENTIES, EXPRESS OR IMPLIED ARE HEREBY
- *  DISCLAMED. This includes but is not limited to warrenties of
+ *  WITHOUT ANY WARRANTY. ALL WARRANTIES, EXPRESS OR IMPLIED ARE HEREBY
+ *  DISCLAMED. This includes but is not limited to warranties of
  *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  *
  */
@@ -124,5 +124,19 @@ DllMain(PVOID hinstDll, ULONG dwReason, PVOID reserved)
 
     return TRUE;
 }
+
+/* FIXME: This hack is required to prevent the VC linker from linking these
+   exports to the functions from libntdll. See CORE-10753 */
+#ifdef _MSC_VER
+#ifdef _M_IX86
+#pragma comment(linker, "/include:__vsnprintf")
+#pragma comment(linker, "/include:_bsearch")
+#pragma comment(linker, "/include:_strcspn")
+#else
+#pragma comment(linker, "/include:_vsnprintf")
+#pragma comment(linker, "/include:bsearch")
+#pragma comment(linker, "/include:strcspn")
+#endif // _M_IX86
+#endif // _MSC_VER
 
 /* EOF */

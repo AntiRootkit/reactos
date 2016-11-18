@@ -481,6 +481,7 @@ static MUI_ENTRY bgBGRepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY bgBGComputerPageEntries[] =
 {
     {
@@ -834,24 +835,24 @@ static MUI_ENTRY bgBGSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY bgBGConfirmDeletePartitionEntries[] =
+static MUI_ENTRY bgBGConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
         3,
-        " ReactOS " KERNEL_VERSION_STR " Setup ",
+        " Слагане на РеактОС " KERNEL_VERSION_STR " . ",
         TEXT_STYLE_UNDERLINE
     },
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "You have chosen to delete the system partition.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -875,7 +876,7 @@ static MUI_ENTRY bgBGConfirmDeletePartitionEntries[] =
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "programs on the partition, or when you are sure you want to delete them.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1615,7 +1616,6 @@ MUI_ERROR bgBGErrorEntries[] =
     }
 };
 
-
 MUI_PAGE bgBGPages[] =
 {
     {
@@ -1660,7 +1660,7 @@ MUI_PAGE bgBGPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        bgBGConfirmDeletePartitionEntries
+        bgBGConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1758,8 +1758,10 @@ MUI_STRING bgBGStrings[] =
     "Слагане на РеактОС върху дял"},
     {STRING_CHECKINGPART,
     "Тече проверка на избрания дял."},
+    {STRING_CONTINUE,
+    "ENTER = Продължаване"},
     {STRING_QUITCONTINUE,
-    "F3= Изход  ENTER = Продължаване"},
+    "F3 = Изход  ENTER = Продължаване"},
     {STRING_REBOOTCOMPUTER,
     "ENTER = Презапускане на компютъра"},
     {STRING_TXTSETUPFAILED,
@@ -1805,7 +1807,7 @@ MUI_STRING bgBGStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  твърд диск %lu  (Извод=%hu, Шина=%hu, ОУ=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  вид %lu    %I64u %s"},
+    "   %c%c  вид 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "на %I64u %s  твърд диск %lu  (Извод=%hu, Шина=%hu, ОУ=%hu) на %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1813,7 +1815,7 @@ MUI_STRING bgBGStrings[] =
     {STRING_HDINFOPARTZEROED,
     "твърд диск %lu (%I64u %s), Извод=%hu, Шина=%hu, ОУ=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  вид %lu    %I64u %s"},
+    "%c%c  вид 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "на твърд диск %lu (%I64u %s), Извод=%hu, Шина=%hu, ОУ=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

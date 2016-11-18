@@ -5,7 +5,7 @@ add_definitions(
     -DUSE_WIN32_OPENGL
     -Dcopysignf=_copysignf)
 
-include_directories(BEFORE ${REACTOS_SOURCE_DIR}/include/reactos/wine)
+include_directories(BEFORE ${REACTOS_SOURCE_DIR}/sdk/include/reactos/wine)
 
 # We name this d3dwine.dll, because the Virtualbox additions ship with a custom wined3d.dll
 # and it breaks everything if it is installed.
@@ -50,11 +50,6 @@ add_library(d3dwine SHARED
 
 set_module_type(d3dwine win32dll)
 target_link_libraries(d3dwine wine)
-
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_link_libraries(d3dwine mingwex)
-endif()
-
 add_importlibs(d3dwine user32 opengl32 gdi32 advapi32 msvcrt kernel32 ntdll)
 add_pch(d3dwine wined3d_private.h SOURCE)
 add_cd_file(TARGET d3dwine DESTINATION reactos/system32 FOR all)

@@ -274,7 +274,7 @@ ApphelpCacheParse(
     }
 
     NumEntries = Header->NumEntries;
-    DPRINT1("SHIMS: ApphelpCacheParse walking %d entries\n", NumEntries);
+    DPRINT("SHIMS: ApphelpCacheParse walking %d entries\n", NumEntries);
     for (Cur = 0; Cur < NumEntries; ++Cur)
     {
         Persistent = (PSHIM_PERSISTENT_CACHE_ENTRY)(Data + SHIM_CACHE_HEADER_SIZE +
@@ -382,9 +382,9 @@ ApphelpCacheWrite(VOID)
         ++NumEntries;
         ListEntry = ListEntry->Flink;
     }
-    DPRINT1("SHIMS: ApphelpCacheWrite, %d Entries, total size: %d\n", NumEntries, Length);
+    DPRINT("SHIMS: ApphelpCacheWrite, %d Entries, total size: %d\n", NumEntries, Length);
     Length = ROUND_UP(Length, sizeof(ULONGLONG));
-    DPRINT1("SHIMS: ApphelpCacheWrite, Rounded to: %d\n", Length);
+    DPRINT("SHIMS: ApphelpCacheWrite, Rounded to: %d\n", Length);
 
     /* Now we allocate and prepare some helpers */
     Buffer = ApphelpAlloc(Length);
@@ -439,7 +439,7 @@ NTAPI
 INIT_FUNCTION
 ApphelpCacheInitialize(VOID)
 {
-    DPRINT1("SHIMS: ApphelpCacheInitialize\n");
+    DPRINT("SHIMS: ApphelpCacheInitialize\n");
     /* If we are booting in safemode we do not want to use the apphelp cache */
     if (InitSafeBootMode)
     {
@@ -457,7 +457,7 @@ ApphelpCacheInitialize(VOID)
         InitializeListHead(&ApphelpShimCacheAge);
         ApphelpCacheEnabled = ApphelpCacheRead();
     }
-    DPRINT1("SHIMS: ApphelpCacheInitialize: %d\n", ApphelpCacheEnabled);
+    DPRINT("SHIMS: ApphelpCacheInitialize: %d\n", ApphelpCacheEnabled);
     return STATUS_SUCCESS;
 }
 
@@ -546,14 +546,14 @@ ApphelpCacheLookupEntry(
     Entry = RtlLookupElementGenericTableAvl(&ApphelpShimCache, &Lookup);
     if (Entry == NULL)
     {
-        DPRINT1("SHIMS: ApphelpCacheLookupEntry: could not find %wZ\n", ImageName);
+        DPRINT("SHIMS: ApphelpCacheLookupEntry: could not find %wZ\n", ImageName);
         goto Cleanup;
     }
 
-    DPRINT1("SHIMS: ApphelpCacheLookupEntry: found %wZ\n", ImageName);
+    DPRINT("SHIMS: ApphelpCacheLookupEntry: found %wZ\n", ImageName);
     if (ImageHandle == INVALID_HANDLE_VALUE)
     {
-        DPRINT1("SHIMS: ApphelpCacheLookupEntry: ok\n");
+        DPRINT("SHIMS: ApphelpCacheLookupEntry: ok\n");
         /* just return if we know it, do not query file info */
         Status = STATUS_SUCCESS;
     }
@@ -564,7 +564,7 @@ ApphelpCacheLookupEntry(
             Lookup.Persistent.DateTime.QuadPart == Entry->Persistent.DateTime.QuadPart &&
             Lookup.Persistent.FileSize.QuadPart == Entry->Persistent.FileSize.QuadPart)
         {
-            DPRINT1("SHIMS: ApphelpCacheLookupEntry: found & validated\n");
+            DPRINT("SHIMS: ApphelpCacheLookupEntry: found & validated\n");
             Status = STATUS_SUCCESS;
             /* move it to the front to keep it alive */
             RemoveEntryList(&Entry->List);
@@ -572,7 +572,8 @@ ApphelpCacheLookupEntry(
         }
         else
         {
-            DPRINT1("SHIMS: ApphelpCacheLookupEntry: file info mismatch\n");
+            DPRINT1("SHIMS: ApphelpCacheLookupEntry: file info mismatch (%lx)\n", Status);
+            Status = STATUS_NOT_FOUND;
             /* Could not read file info, or it did not match, drop it from the cache */
             ApphelpCacheRemoveEntryNolock(Entry);
         }
@@ -642,7 +643,7 @@ ApphelpCacheUpdateEntry(
                                                  &NodeOrParent, &SearchResult);
     if (Lookup)
     {
-        DPRINT1("SHIMS: ApphelpCacheUpdateEntry: Entry already exists, reusing it\n");
+        DPRINT("SHIMS: ApphelpCacheUpdateEntry: Entry already exists, reusing it\n");
         /* Unlink the found item, so we can put it back at the front,
             and copy the earlier obtained file info*/
         RemoveEntryList(&Lookup->List);
@@ -651,7 +652,7 @@ ApphelpCacheUpdateEntry(
     }
     else
     {
-        DPRINT1("SHIMS: ApphelpCacheUpdateEntry: Inserting new Entry\n");
+        DPRINT("SHIMS: ApphelpCacheUpdateEntry: Inserting new Entry\n");
         /* Insert a new entry, with its own copy of the ImageName */
         ApphelpDuplicateUnicodeString(&Entry.Persistent.ImageName, ImageName);
         Lookup = RtlInsertElementGenericTableFullAvl(&ApphelpShimCache,
@@ -705,7 +706,7 @@ ApphelpCacheDump(VOID)
     PLIST_ENTRY ListEntry;
     PSHIM_CACHE_ENTRY Entry;
 
-    DPRINT1("SHIMS: NtApphelpCacheControl( Dumping entries, newset to oldest )\n");
+    DPRINT1("SHIMS: NtApphelpCacheControl( Dumping entries, newest to oldest )\n");
     ApphelpCacheAcquireLock();
     ListEntry = ApphelpShimCacheAge.Flink;
     while (ListEntry != &ApphelpShimCacheAge)
@@ -741,19 +742,19 @@ NtApphelpCacheControl(
     switch (Service)
     {
         case ApphelpCacheServiceLookup:
-            DPRINT1("SHIMS: NtApphelpCacheControl( ApphelpCacheServiceLookup )\n");
+            DPRINT("SHIMS: NtApphelpCacheControl( ApphelpCacheServiceLookup )\n");
             Status = ApphelpValidateData(ServiceData, &ImageName, &Handle);
             if (NT_SUCCESS(Status))
                 Status = ApphelpCacheLookupEntry(&ImageName, Handle);
             break;
         case ApphelpCacheServiceRemove:
-            DPRINT1("SHIMS: NtApphelpCacheControl( ApphelpCacheServiceRemove )\n");
+            DPRINT("SHIMS: NtApphelpCacheControl( ApphelpCacheServiceRemove )\n");
             Status = ApphelpValidateData(ServiceData, &ImageName, &Handle);
             if (NT_SUCCESS(Status))
                 Status = ApphelpCacheRemoveEntry(&ImageName);
             break;
         case ApphelpCacheServiceUpdate:
-            DPRINT1("SHIMS: NtApphelpCacheControl( ApphelpCacheServiceUpdate )\n");
+            DPRINT("SHIMS: NtApphelpCacheControl( ApphelpCacheServiceUpdate )\n");
             Status = ApphelpCacheAccessCheck();
             if (NT_SUCCESS(Status))
             {

@@ -1545,16 +1545,16 @@ CmpQueryNameInformation(
     {
         *ResultLength = FIELD_OFFSET(KEY_NAME_INFORMATION, Name) + NeededLength;
         if (Length < RTL_SIZEOF_THROUGH_FIELD(KEY_NAME_INFORMATION, NameLength))
-            return STATUS_BUFFER_TOO_SMALL;
+            _SEH2_YIELD(return STATUS_BUFFER_TOO_SMALL);
         if (Length < *ResultLength)
         {
             KeyNameInfo->NameLength = NeededLength;
-            return STATUS_BUFFER_OVERFLOW;
+            _SEH2_YIELD(return STATUS_BUFFER_OVERFLOW);
         }
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
-        return _SEH2_GetExceptionCode();
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
     }
     _SEH2_END;
 
@@ -1597,7 +1597,7 @@ CmpQueryNameInformation(
     }
     _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
-        return _SEH2_GetExceptionCode();
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
     }
     _SEH2_END;
 
@@ -2343,46 +2343,6 @@ CmCountOpenSubKeys(IN PCM_KEY_CONTROL_BLOCK RootKcb,
     DPRINT("open sub keys: %u\n", SubKeys);
 
     return SubKeys;
-}
-
-HCELL_INDEX
-NTAPI
-CmpCopyCell(IN PHHIVE SourceHive,
-            IN HCELL_INDEX SourceCell,
-            IN PHHIVE DestinationHive,
-            IN HSTORAGE_TYPE StorageType)
-{
-    PCELL_DATA SourceData;
-    PCELL_DATA DestinationData = NULL;
-    HCELL_INDEX DestinationCell = HCELL_NIL;
-    LONG DataSize;
-    PAGED_CODE();
-
-    /* Get the data and the size of the source cell */
-    SourceData = HvGetCell(SourceHive, SourceCell);
-    DataSize = HvGetCellSize(SourceHive, SourceData);
-
-    /* Allocate a new cell in the destination hive */
-    DestinationCell = HvAllocateCell(DestinationHive,
-                                     DataSize,
-                                     StorageType,
-                                     HCELL_NIL);
-    if (DestinationCell == HCELL_NIL) goto Cleanup;
-
-    /* Get the data of the destination cell */
-    DestinationData = HvGetCell(DestinationHive, DestinationCell);
-
-    /* Copy the data from the source cell to the destination cell */
-    RtlMoveMemory(DestinationData, SourceData, DataSize);
-
-Cleanup:
-
-    /* Release the cells */
-    if (SourceData) HvReleaseCell(SourceHive, SourceCell);
-    if (DestinationData) HvReleaseCell(DestinationHive, DestinationCell);
-
-    /* Return the destination cell index */
-    return DestinationCell;
 }
 
 static

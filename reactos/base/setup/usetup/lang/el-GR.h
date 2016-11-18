@@ -473,6 +473,7 @@ static MUI_ENTRY elGRRepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY elGRComputerPageEntries[] =
 {
     {
@@ -837,24 +838,24 @@ static MUI_ENTRY elGRSelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY elGRConfirmDeletePartitionEntries[] =
+static MUI_ENTRY elGRConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
         3,
-        " ReactOS " KERNEL_VERSION_STR " Setup ",
+        " ДЪбШлсйлШйЮ лжм ReactOS " KERNEL_VERSION_STR,
         TEXT_STYLE_UNDERLINE
     },
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "You have chosen to delete the system partition.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -878,7 +879,7 @@ static MUI_ENTRY elGRConfirmDeletePartitionEntries[] =
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "programs on the partition, or when you are sure you want to delete them.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1391,7 +1392,7 @@ MUI_ERROR elGRErrorEntries[] =
         "\n"
         "  \x07  ПШлуйлЬ ENTER ЪаШ Шд ймдЬохйЬлЬ лЮд ДЪбШлсйлШйЮ.\n"
         "  \x07  ПШлуйлЬ F3 ЪаШ дШ ШзжориуйЬлЬ Шзц лЮд ДЪбШлсйлШйЮ.",
-        "F3= АзжощиЮйЮ  ENTER = СмдтоЬаШ"
+        "F3 = АзжощиЮйЮ  ENTER = СмдтоЬаШ"
     },
     {
         //ERROR_NO_HDD
@@ -1453,11 +1454,11 @@ MUI_ERROR elGRErrorEntries[] =
           "Ж ЬЪбШлсйлШйЮ ЩиубЬ цла лжмвсоайлжд тдШк йбвЮицк Ыхйбжк зЬиатоЬа тдШ гЮ ймгЩШлц\n"
           "partition table зжм ЫЬ гзжиЬх дШ ЬвЬЪоЯЬх йрйлс!\n"
           "\n"
-          "Ж ЫЮгажмиЪхШ у ЫаШЪиШну partitions гзжиЬх дШ бШлШйлитпЬа лж partiton table.\n"
+          "Ж ЫЮгажмиЪхШ у ЫаШЪиШну partitions гзжиЬх дШ бШлШйлитпЬа лж partition table.\n"
           "\n"
           "  \x07  ПШлуйлЬ F3 ЪаШ дШ ШзжориуйЬлЬ Шзц лЮд ДЪбШлсйлШйЮ.\n"
           "  \x07  ПШлуйлЬ ENTER ЪаШ дШ ймдЬохйЬлЬ.",
-          "F3= АзжощиЮйЮ  ENTER = СмдтоЬаШ"
+          "F3 = АзжощиЮйЮ  ENTER = СмдтоЬаШ"
     },
     {
         //ERROR_NEW_PARTITION,
@@ -1619,7 +1620,6 @@ MUI_ERROR elGRErrorEntries[] =
     }
 };
 
-
 MUI_PAGE elGRPages[] =
 {
     {
@@ -1664,7 +1664,7 @@ MUI_PAGE elGRPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        elGRConfirmDeletePartitionEntries
+        elGRConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1762,8 +1762,10 @@ MUI_STRING elGRStrings[] =
     "Setup install ReactOS onto Partition"},
     {STRING_CHECKINGPART,
     "Ж ЬЪбШлсйлШйЮ ЬвтЪоЬа лщиШ лж ЬзавЬЪгтдж partition."},
+    {STRING_CONTINUE,
+    "ENTER = СмдтоЬаШ"},
     {STRING_QUITCONTINUE,
-    "F3= АзжощиЮйЮ  ENTER = СмдтоЬаШ"},
+    "F3 = АзжощиЮйЮ  ENTER = СмдтоЬаШ"},
     {STRING_REBOOTCOMPUTER,
     "ENTER = ДзШдЬббхдЮйЮ мзжвжЪайлу"},
     {STRING_TXTSETUPFAILED,
@@ -1809,7 +1811,7 @@ MUI_STRING elGRStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  СбвЮицк Ыхйбжк %lu  (Port=%hu, Bus=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  Type %lu    %I64u %s"},
+    "   %c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "on %I64u %s  Harddisk %lu  (Port=%hu, Bus=%hu, Id=%hu) on %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1817,7 +1819,7 @@ MUI_STRING elGRStrings[] =
     {STRING_HDINFOPARTZEROED,
     "СбвЮицк Ыхйбжк %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  Type %lu    %I64u %s"},
+    "%c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "йлж йбвЮиц Ыхйбж %lu (%I64u %s), Port=%hu, Bus=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

@@ -86,8 +86,8 @@ typedef struct _NTFS_INFO
 
 #define NTFS_TYPE_CCB         '20SF'
 #define NTFS_TYPE_FCB         '30SF'
-#define	NTFS_TYPE_VCB         '50SF'
-#define NTFS_TYPE_IRP_CONTEST '60SF'
+#define NTFS_TYPE_VCB         '50SF'
+#define NTFS_TYPE_IRP_CONTEXT '60SF'
 #define NTFS_TYPE_GLOBAL_DATA '70SF'
 
 typedef struct
@@ -116,7 +116,12 @@ typedef struct
 
     NTFS_INFO NtfsInfo;
 
+    ULONG Flags;
+    ULONG OpenHandleCount;
+
 } DEVICE_EXTENSION, *PDEVICE_EXTENSION, NTFS_VCB, *PNTFS_VCB;
+
+#define VCB_VOLUME_LOCKED       0x0001
 
 typedef struct
 {
@@ -236,7 +241,7 @@ typedef struct _FILE_RECORD_HEADER
     ULONG BytesAllocated;         /* Allocated size of the FILE record */
     ULONGLONG BaseFileRecord;     /* File reference to the base FILE record */
     USHORT NextAttributeNumber;   /* Next Attribute Id */
-    USHORT Pading;                /* Align to 4 UCHAR boundary (XP) */
+    USHORT Padding;               /* Align to 4 UCHAR boundary (XP) */
     ULONG MFTRecordNumber;        /* Number of this MFT Record (XP) */
 } FILE_RECORD_HEADER, *PFILE_RECORD_HEADER;
 
@@ -460,6 +465,7 @@ typedef struct _FCB
 
     LONG RefCount;
     ULONG Flags;
+    ULONG OpenHandleCount;
 
     ULONGLONG MFTIndex;
     USHORT LinkCount;
@@ -565,6 +571,12 @@ NtfsDeviceIoControl(IN PDEVICE_OBJECT DeviceObject,
 /* close.c */
 
 NTSTATUS
+NtfsCleanup(PNTFS_IRP_CONTEXT IrpContext);
+
+
+/* close.c */
+
+NTSTATUS
 NtfsCloseFile(PDEVICE_EXTENSION DeviceExt,
               PFILE_OBJECT FileObject);
 
@@ -641,6 +653,9 @@ NtfsFCBIsDirectory(PNTFS_FCB Fcb);
 
 BOOLEAN
 NtfsFCBIsReparsePoint(PNTFS_FCB Fcb);
+
+BOOLEAN
+NtfsFCBIsCompressed(PNTFS_FCB Fcb);
 
 BOOLEAN
 NtfsFCBIsRoot(PNTFS_FCB Fcb);
@@ -801,16 +816,6 @@ NtfsAllocateIrpContext(PDEVICE_OBJECT DeviceObject,
 PVOID
 NtfsGetUserBuffer(PIRP Irp,
                   BOOLEAN Paging);
-
-#if 0
-BOOLEAN
-wstrcmpjoki(PWSTR s1, PWSTR s2);
-
-VOID
-CdfsSwapString(PWCHAR Out,
-	       PUCHAR In,
-	       ULONG Count);
-#endif
 
 VOID
 NtfsFileFlagsToAttributes(ULONG NtfsAttributes,

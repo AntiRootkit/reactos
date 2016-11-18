@@ -520,23 +520,6 @@ _assert (
     DbgRaiseAssertionFailure();
 }
 
-#if defined(_MSC_VER) && (DBG != 1)
-
-/* MSVC uses its own in this case. */
-#else
-
-double
-__cdecl
-atan2(
-    double y,
-    double x)
-{
-    __debugbreak();
-    return 0.;
-}
-
-#endif
-
 /******************************************************************************/
 
 static
@@ -854,7 +837,7 @@ DRIVER_Dispatch(
                                                  _va_arg_n(argptr, const POINT*, 0),
                                                  _va_arg_n(argptr, DWORD, 1));
         case DCFUNC_PolyDraw:
-            DPRINT1("DCFUNC_PolyDraw not implemented\n");;
+            DPRINT1("DCFUNC_PolyDraw not implemented\n");
             return FALSE;
             return physdev->funcs->pPolyDraw(physdev,
                                              _va_arg_n(argptr, const POINT*, 1),
@@ -869,7 +852,7 @@ DRIVER_Dispatch(
                                              _va_arg_n(argptr, const POINT*, 0),
                                              _va_arg_n(argptr, INT, 1));
         case DCFUNC_PolylineTo:
-            DPRINT1("DCFUNC_PolylineTo not implemented\n");;
+            DPRINT1("DCFUNC_PolylineTo not implemented\n");
             return FALSE;
             return physdev->funcs->pPolylineTo(physdev,
                                                _va_arg_n(argptr, const POINT*, 0),

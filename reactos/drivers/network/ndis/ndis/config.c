@@ -11,7 +11,7 @@
  *       Whenever a read operation is performed, the NDIS library allocates space and returns
  *       it.  A linked list is kept associated with every handle of the memory allocated to
  *       it.  When the handle is closed, the resources are systematically released.
- *     - The NDIS_HANDLE Configuraiton context is no longer a registry handle.  An opaque struct
+ *     - The NDIS_HANDLE Configuration context is no longer a registry handle.  An opaque struct
  *       had to be created to allow for resource tracking.  This means that Miniports cannot just
  *       pass this NDIS_HANDLE to things like ZwQueryValueKey().  I don't thknk they do (they
  *       certainly should not), but it should be kept in mind.
@@ -761,6 +761,7 @@ NdisReadNetworkAddress(
     NDIS_STRING Keyword;
     UINT *IntArray = 0;
     UINT i,j = 0;
+    WCHAR Buff[11];
     NDIS_STRING str;
 
     NdisInitUnicodeString(&Keyword, L"NetworkAddress");
@@ -774,8 +775,6 @@ NdisReadNetworkAddress(
 
     if (ParameterValue->ParameterType == NdisParameterInteger)
     {
-        WCHAR Buff[11];
-
         NDIS_DbgPrint(MAX_TRACE, ("Read integer data %lx\n",
                                   ParameterValue->ParameterData.IntegerData));
 

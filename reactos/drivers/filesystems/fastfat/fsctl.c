@@ -67,7 +67,7 @@ VfatHasFileSystem(
                                       FALSE);
     if (!NT_SUCCESS(Status))
     {
-        DPRINT("VfatBlockDeviceIoControl faild (%x)\n", Status);
+        DPRINT("VfatBlockDeviceIoControl failed (%x)\n", Status);
         return Status;
     }
 
@@ -85,7 +85,7 @@ VfatHasFileSystem(
                                           FALSE);
         if (!NT_SUCCESS(Status))
         {
-            DPRINT("VfatBlockDeviceIoControl faild (%x)\n", Status);
+            DPRINT("VfatBlockDeviceIoControl failed (%x)\n", Status);
             return Status;
         }
 
@@ -120,16 +120,6 @@ VfatHasFileSystem(
             PartitionInfoIsValid = TRUE;
             *RecognizedFS = TRUE;
         }
-    }
-    else if (DiskGeometry.MediaType == Unknown)
-    {
-        /*
-         * Floppy disk driver can return Unknown as media type if it
-         * doesn't know yet what floppy in the drive really is. This is
-         * perfectly correct to do under Windows.
-         */
-        *RecognizedFS = TRUE;
-        DiskGeometry.BytesPerSector = 512;
     }
     else
     {
@@ -455,7 +445,6 @@ VfatMount(
     Status = VfatMountDevice(DeviceExt, DeviceToMount);
     if (!NT_SUCCESS(Status))
     {
-        /* FIXME: delete device object */
         goto ByeBye;
     }
 
@@ -586,7 +575,7 @@ VfatMount(
     }
 
     VolumeFcb->Flags = FCB_IS_VOLUME;
-    VolumeFcb->RFCB.FileSize.QuadPart = DeviceExt->FatInfo.Sectors * DeviceExt->FatInfo.BytesPerSector;
+    VolumeFcb->RFCB.FileSize.QuadPart = (LONGLONG) DeviceExt->FatInfo.Sectors * DeviceExt->FatInfo.BytesPerSector;
     VolumeFcb->RFCB.ValidDataLength = VolumeFcb->RFCB.FileSize;
     VolumeFcb->RFCB.AllocationSize = VolumeFcb->RFCB.FileSize;
     DeviceExt->VolumeFcb = VolumeFcb;
@@ -685,7 +674,7 @@ VfatVerify(
         {
             /*
              * FIXME:
-             *   Preformated floppy disks have very often a serial number of 0000:0000.
+             *   Preformatted floppy disks have very often a serial number of 0000:0000.
              *   We should calculate a crc sum over the sectors from the root directory as secondary volume number.
              *   Each write to the root directory must update this crc sum.
              */

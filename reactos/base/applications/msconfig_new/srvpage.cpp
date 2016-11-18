@@ -287,7 +287,7 @@ static void AddService(SC_HANDLE hSCManager, LPENUM_SERVICE_STATUS_PROCESS Servi
 
                 bAddServiceToList = params.bIsPresent;
 
-                if (bIsWindows && bIsOSVersionLessThanVista && !bAddServiceToList)
+                if (bIsWindows && bIsPreVistaOSVersion && !bAddServiceToList)
                 {
                     QUERY_REGISTRY_VALUES_TABLE ValuesQueryTable[2] = {};
                     ValuesQueryTable[0].QueryRoutine = GetRegistryValuedDisabledServicesQueryRoutine;
@@ -735,15 +735,15 @@ ServicesPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
             {
                 case IDC_BTN_SERVICES_ACTIVATE:
                 {
-                    BOOL bAreThereModifs = FALSE;
+                    BOOL bAreThereMods = FALSE;
 
                     int index = -1; // From the beginning.
                     while ((index = ListView_GetNextItem(hServicesListCtrl, index, LVNI_ALL)) != -1)
                     {
-                        bAreThereModifs = ValidateItem(index, TRUE, FALSE) || bAreThereModifs; // The order is verrrrrry important !!!!
+                        bAreThereMods = ValidateItem(index, TRUE, FALSE) || bAreThereMods; // The order is verrrrrry important !!!!
                     }
 
-                    if (bAreThereModifs)
+                    if (bAreThereMods)
                     {
                         Update_Btn_States(hDlg);
                         PropSheet_Changed(GetParent(hServicesPage), hServicesPage);
@@ -754,15 +754,15 @@ ServicesPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 
                 case IDC_BTN_SERVICES_DEACTIVATE:
                 {
-                    BOOL bAreThereModifs = FALSE;
+                    BOOL bAreThereMods = FALSE;
 
                     int index = -1; // From the beginning.
                     while ((index = ListView_GetNextItem(hServicesListCtrl, index, LVNI_ALL)) != -1)
                     {
-                        bAreThereModifs = ValidateItem(index, FALSE, FALSE) || bAreThereModifs; // The order is verrrrrry important !!!!
+                        bAreThereMods = ValidateItem(index, FALSE, FALSE) || bAreThereMods; // The order is verrrrrry important !!!!
                     }
 
-                    if (bAreThereModifs)
+                    if (bAreThereMods)
                     {
                         Update_Btn_States(hDlg);
                         PropSheet_Changed(GetParent(hServicesPage), hServicesPage);
@@ -927,7 +927,7 @@ ServicesPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
 
                                 if (lpServiceConfig->dwStartType == SERVICE_DISABLED) // We have a disabled service which is becoming to be enabled.
                                 {
-                                    // 3a- Retrive the properties of the disabled service from the registry.
+                                    // 3a- Retrieve the properties of the disabled service from the registry.
                                     RegistryDisabledServiceItemParams params = {};
 
                                     QUERY_REGISTRY_KEYS_TABLE KeysQueryTable[2] = {};
@@ -935,7 +935,7 @@ ServicesPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
                                     KeysQueryTable[0].EntryContext = &params;
                                     RegQueryRegistryKeys(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Shared Tools\\MSConfig\\services", KeysQueryTable, (PVOID)svcName);
 
-                                    if (bIsWindows && bIsOSVersionLessThanVista && !params.bIsPresent)
+                                    if (bIsWindows && bIsPreVistaOSVersion && !params.bIsPresent)
                                     {
                                         QUERY_REGISTRY_VALUES_TABLE ValuesQueryTable[2] = {};
                                         ValuesQueryTable[0].QueryRoutine = GetRegistryValuedDisabledServicesQueryRoutine;
@@ -959,7 +959,7 @@ ServicesPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
                                             //
                                             // Delete also the valued-entry of the service.
                                             //
-                                            if (bIsWindows && bIsOSVersionLessThanVista)
+                                            if (bIsWindows && bIsPreVistaOSVersion)
                                             {
                                                 HKEY hSubKey = NULL;
                                                 if (RegOpenKeyEx(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Shared Tools\\MSConfig\\services", 0, KEY_SET_VALUE /*KEY_READ*/, &hSubKey) == ERROR_SUCCESS)
@@ -1022,7 +1022,7 @@ ServicesPageWndProc(HWND hDlg, UINT message, WPARAM wParam, LPARAM lParam)
                                     //
                                     // Save also a valued-entry for the service.
                                     //
-                                    if (bIsWindows && bIsOSVersionLessThanVista)
+                                    if (bIsWindows && bIsPreVistaOSVersion)
                                     {
                                         RegSetDWORDValue(HKEY_LOCAL_MACHINE, L"SOFTWARE\\Microsoft\\Shared Tools\\MSConfig\\services", svcName, TRUE, lpServiceConfig->dwStartType);
                                     }

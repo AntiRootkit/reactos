@@ -63,7 +63,6 @@
 #include <comm.h>
 #include <disk.h>
 #include <fs.h>
-#include <hal.h>
 #include <inffile.h>
 #include <inifile.h>
 #include <keycodes.h>
@@ -79,7 +78,10 @@
 #include <ui.h>
 #include <ver.h>
 #include <video.h>
+
+/* NTOS loader */
 #include <winldr.h>
+#include <conversion.h> // More-or-less related to MM also...
 
 /* File system headers */
 #include <fs/ext2.h>
@@ -119,9 +121,9 @@
 #include <arch/mips/arcbios.h>
 #endif
 
-VOID __cdecl BootMain(LPSTR CmdLine);
+VOID __cdecl BootMain(IN PCCH CmdLine);
 VOID LoadOperatingSystem(IN OperatingSystemItem* OperatingSystem);
 VOID RunLoader(VOID);
-VOID FrLdrCheckCpuCompatiblity(VOID);
+VOID FrLdrCheckCpuCompatibility(VOID);
 
 #endif  /* __FREELDR_H */

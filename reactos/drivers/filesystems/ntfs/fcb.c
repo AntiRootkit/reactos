@@ -138,6 +138,12 @@ NtfsFCBIsReparsePoint(PNTFS_FCB Fcb)
 
 
 BOOLEAN
+NtfsFCBIsCompressed(PNTFS_FCB Fcb)
+{
+    return ((Fcb->Entry.FileAttributes & NTFS_FILE_TYPE_COMPRESSED) == NTFS_FILE_TYPE_COMPRESSED); 
+}
+
+BOOLEAN
 NtfsFCBIsRoot(PNTFS_FCB Fcb)
 {
     return (wcscmp(Fcb->PathName, L"\\") == 0);
@@ -622,7 +628,7 @@ NtfsGetFCBForFile(PNTFS_VCB Vcb,
 
     parentFCB = NULL;
 
-    /* Parse filename and check each path element for existance and access */
+    /* Parse filename and check each path element for existence and access */
     while (NtfsGetNextPathElement(currentElement) != 0)
     {
         /* Skip blank directory levels */

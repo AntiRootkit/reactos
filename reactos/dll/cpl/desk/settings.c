@@ -26,6 +26,8 @@ UpdateDisplay(IN HWND hwndDlg, PDATA pData, IN BOOL bUpdateThumb)
     TCHAR Buffer[64];
     TCHAR Pixel[64];
     DWORD index;
+    HWND hwndMonSel;
+    MONSL_MONINFO info;
 
     LoadString(hApplet, IDS_PIXEL, Pixel, sizeof(Pixel) / sizeof(TCHAR));
     _stprintf(Buffer, Pixel, pData->CurrentDisplayDevice->CurrentSettings->dmPelsWidth, pData->CurrentDisplayDevice->CurrentSettings->dmPelsHeight, Pixel);
@@ -43,6 +45,37 @@ UpdateDisplay(IN HWND hwndDlg, PDATA pData, IN BOOL bUpdateThumb)
     }
     if (LoadString(hApplet, (2900 + pData->CurrentDisplayDevice->CurrentSettings->dmBitsPerPel), Buffer, sizeof(Buffer) / sizeof(TCHAR)))
         SendDlgItemMessage(hwndDlg, IDC_SETTINGS_BPP, CB_SELECTSTRING, (WPARAM)-1, (LPARAM)Buffer);
+
+    hwndMonSel = GetDlgItem(hwndDlg, IDC_SETTINGS_MONSEL);
+    index = (INT)SendMessage(hwndMonSel, MSLM_GETCURSEL, 0, 0);
+    if (index != (DWORD)-1 && SendMessage(hwndMonSel, MSLM_GETMONITORINFO, index, (LPARAM)&info))
+    {
+        info.Size.cx = pData->CurrentDisplayDevice->CurrentSettings->dmPelsWidth;
+        info.Size.cy = pData->CurrentDisplayDevice->CurrentSettings->dmPelsHeight;
+        SendMessage(hwndMonSel, MSLM_SETMONITORINFO, index, (LPARAM)&info);
+    }
+}
+
+static int
+CompareSettings(PSETTINGS_ENTRY Entry, DWORD dmPelsWidth, DWORD dmPelsHeight,
+                DWORD dmBitsPerPel, DWORD dmDisplayFrequency)
+{
+    if (Entry->dmPelsWidth  == dmPelsWidth  &&
+        Entry->dmPelsHeight == dmPelsHeight &&
+        Entry->dmBitsPerPel == dmBitsPerPel &&
+        Entry->dmDisplayFrequency == dmDisplayFrequency)
+    {
+        return 0;
+    }
+    else
+    if ((Entry->dmPelsWidth  < dmPelsWidth) ||
+        (Entry->dmPelsWidth == dmPelsWidth && Entry->dmPelsHeight < dmPelsHeight) ||
+        (Entry->dmPelsWidth == dmPelsWidth && Entry->dmPelsHeight == dmPelsHeight &&
+         Entry->dmBitsPerPel < dmBitsPerPel))
+    {
+        return 1;
+    }
+    return -1;
 }
 
 static PSETTINGS_ENTRY
@@ -55,7 +88,7 @@ GetPossibleSettings(IN LPCTSTR DeviceName, OUT DWORD* pSettingsCount, OUT PSETTI
     PSETTINGS_ENTRY Settings = NULL;
     HDC hDC;
     PSETTINGS_ENTRY Current;
-    DWORD bpp, xres, yres, checkbpp;
+    DWORD bpp, xres, yres;
     DWORD curDispFreq;
 
     /* Get current settings */
@@ -68,7 +101,7 @@ GetPossibleSettings(IN LPCTSTR DeviceName, OUT DWORD* pSettingsCount, OUT PSETTI
     DeleteDC(hDC);
 
     /* List all settings */
-    devmode.dmSize = (WORD)sizeof(DEVMODE);
+    devmode.dmSize = (WORD)sizeof(devmode);
     devmode.dmDriverExtra = 0;
 
     if (!EnumDisplaySettingsEx(DeviceName, ENUM_CURRENT_SETTINGS, &devmode, dwFlags))
@@ -78,22 +111,17 @@ GetPossibleSettings(IN LPCTSTR DeviceName, OUT DWORD* pSettingsCount, OUT PSETTI
 
     while (EnumDisplaySettingsEx(DeviceName, iMode, &devmode, dwFlags))
     {
-        if ((devmode.dmBitsPerPel == 4 ||
-             devmode.dmBitsPerPel == 8 ||
-             devmode.dmBitsPerPel == 16 ||
-             devmode.dmBitsPerPel == 24 ||
-             devmode.dmBitsPerPel == 32) &&
-             devmode.dmDisplayFrequency == curDispFreq)
-        {
-            checkbpp=1;
-        }
-        else
-            checkbpp=0;
+        iMode++;
 
         if (devmode.dmPelsWidth < 640 ||
-            devmode.dmPelsHeight < 480 || checkbpp == 0)
+            devmode.dmPelsHeight < 480 ||
+            devmode.dmDisplayFrequency != curDispFreq ||
+            (devmode.dmBitsPerPel != 4 &&
+             devmode.dmBitsPerPel != 8 &&
+             devmode.dmBitsPerPel != 16 &&
+             devmode.dmBitsPerPel != 24 &&
+             devmode.dmBitsPerPel != 32))
         {
-            iMode++;
             continue;
         }
 
@@ -107,12 +135,10 @@ GetPossibleSettings(IN LPCTSTR DeviceName, OUT DWORD* pSettingsCount, OUT PSETTI
             Current->dmPelsHeight = devmode.dmPelsHeight;
             Current->dmBitsPerPel = devmode.dmBitsPerPel;
             Current->dmDisplayFrequency = devmode.dmDisplayFrequency;
-            while (Next != NULL && (
-                   Next->dmPelsWidth < Current->dmPelsWidth ||
-                   (Next->dmPelsWidth == Current->dmPelsWidth && Next->dmPelsHeight < Current->dmPelsHeight) ||
-                   (Next->dmPelsHeight == Current->dmPelsHeight &&
-                    Next->dmPelsWidth == Current->dmPelsWidth &&
-                    Next->dmBitsPerPel < Current->dmBitsPerPel )))
+            while (Next != NULL &&
+                   CompareSettings(Next, devmode.dmPelsWidth,
+                                   devmode.dmPelsHeight, devmode.dmBitsPerPel,
+                                   devmode.dmDisplayFrequency) > 0)
             {
                 Previous = Next;
                 Next = Next->Flink;
@@ -131,7 +157,6 @@ GetPossibleSettings(IN LPCTSTR DeviceName, OUT DWORD* pSettingsCount, OUT PSETTI
             }
             NbSettings++;
         }
-        iMode++;
     }
 
     *pSettingsCount = NbSettings;
@@ -165,8 +190,8 @@ AddDisplayDevice(IN PDATA pData, IN const DISPLAY_DEVICE *DisplayDevice)
     for (Current = newEntry->Settings; Current != NULL; Current = Current->Flink)
     {
         if (Current->Flink != NULL &&
-            ((Current->dmPelsWidth != Current->Flink->dmPelsWidth) &&
-            (Current->dmPelsHeight != Current->Flink->dmPelsHeight)))
+            ((Current->dmPelsWidth != Current->Flink->dmPelsWidth) ||
+             (Current->dmPelsHeight != Current->Flink->dmPelsHeight)))
         {
             ResolutionsCount++;
         }
@@ -182,8 +207,8 @@ AddDisplayDevice(IN PDATA pData, IN const DISPLAY_DEVICE *DisplayDevice)
     {
         if (Current->Flink == NULL ||
             (Current->Flink != NULL &&
-            ((Current->dmPelsWidth != Current->Flink->dmPelsWidth) &&
-            (Current->dmPelsHeight != Current->Flink->dmPelsHeight))))
+            ((Current->dmPelsWidth != Current->Flink->dmPelsWidth) ||
+             (Current->dmPelsHeight != Current->Flink->dmPelsHeight))))
         {
             newEntry->Resolutions[i].dmPelsWidth = Current->dmPelsWidth;
             newEntry->Resolutions[i].dmPelsHeight = Current->dmPelsHeight;
@@ -294,7 +319,7 @@ OnInitDialog(IN HWND hwndDlg)
 
     /* Get video cards list */
     pData->DisplayDeviceList = NULL;
-    displayDevice.cb = (DWORD)sizeof(DISPLAY_DEVICE);
+    displayDevice.cb = sizeof(displayDevice);
     while (EnumDisplayDevices(NULL, iDevNum, &displayDevice, 0x1))
     {
         if ((displayDevice.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) != 0)
@@ -368,7 +393,7 @@ OnInitDialog(IN HWND hwndDlg)
     }
 
     /* Initialize the color spectrum bitmaps */
-    for(i = 0; i < NUM_SPECTRUM_BITMAPS; i++)
+    for (i = 0; i < NUM_SPECTRUM_BITMAPS; i++)
     {
         pData->hSpectrumBitmaps[i] = LoadImageW(hApplet, MAKEINTRESOURCEW(IDB_SPECTRUM_4 + i), IMAGE_BITMAP, 0, 0, LR_DEFAULTCOLOR);
 
@@ -527,6 +552,8 @@ OnResolutionChanged(IN HWND hwndDlg, IN PDATA pData, IN DWORD NewPosition,
     PSETTINGS_ENTRY Current;
     DWORD dmNewPelsHeight = pData->CurrentDisplayDevice->Resolutions[NewPosition].dmPelsHeight;
     DWORD dmNewPelsWidth = pData->CurrentDisplayDevice->Resolutions[NewPosition].dmPelsWidth;
+    DWORD dmBitsPerPel;
+    DWORD dmDisplayFrequency;
 
     /* Find if new parameters are valid */
     Current = pData->CurrentDisplayDevice->CurrentSettings;
@@ -538,14 +565,19 @@ OnResolutionChanged(IN HWND hwndDlg, IN PDATA pData, IN DWORD NewPosition,
 
     PropSheet_Changed(GetParent(hwndDlg), hwndDlg);
 
-    if (dmNewPelsHeight < Current->dmPelsHeight)
+    dmBitsPerPel = Current->dmBitsPerPel;
+    dmDisplayFrequency = Current->dmDisplayFrequency;
+
+    if (CompareSettings(Current, dmNewPelsWidth,
+                        dmNewPelsHeight, dmBitsPerPel,
+                        dmDisplayFrequency) < 0)
     {
         Current = Current->Blink;
         while (Current != NULL)
         {
             if (Current->dmPelsHeight == dmNewPelsHeight
-             && Current->dmPelsWidth == dmNewPelsWidth
-             && Current->dmBitsPerPel == pData->CurrentDisplayDevice->CurrentSettings->dmBitsPerPel)
+             && Current->dmPelsWidth  == dmNewPelsWidth
+             && Current->dmBitsPerPel == dmBitsPerPel)
             {
                 pData->CurrentDisplayDevice->CurrentSettings = Current;
                 UpdateDisplay(hwndDlg, pData, bUpdateThumb);
@@ -560,8 +592,8 @@ OnResolutionChanged(IN HWND hwndDlg, IN PDATA pData, IN DWORD NewPosition,
         while (Current != NULL)
         {
             if (Current->dmPelsHeight == dmNewPelsHeight
-             && Current->dmPelsWidth == dmNewPelsWidth
-             && Current->dmBitsPerPel == pData->CurrentDisplayDevice->CurrentSettings->dmBitsPerPel)
+             && Current->dmPelsWidth  == dmNewPelsWidth
+             && Current->dmBitsPerPel == dmBitsPerPel)
             {
                 pData->CurrentDisplayDevice->CurrentSettings = Current;
                 UpdateDisplay(hwndDlg, pData, bUpdateThumb);
@@ -692,8 +724,8 @@ SettingsPageProc(IN HWND hwndDlg, IN UINT uMsg, IN WPARAM wParam, IN LPARAM lPar
                     /* Apply new settings */
                     LONG rc;
                     DEVMODE devmode;
-                    RtlZeroMemory(&devmode, sizeof(DEVMODE));
-                    devmode.dmSize = (WORD)sizeof(DEVMODE);
+                    RtlZeroMemory(&devmode, sizeof(devmode));
+                    devmode.dmSize = (WORD)sizeof(devmode);
                     devmode.dmPelsWidth = pData->CurrentDisplayDevice->CurrentSettings->dmPelsWidth;
                     devmode.dmPelsHeight = pData->CurrentDisplayDevice->CurrentSettings->dmPelsHeight;
                     devmode.dmBitsPerPel = pData->CurrentDisplayDevice->CurrentSettings->dmBitsPerPel;

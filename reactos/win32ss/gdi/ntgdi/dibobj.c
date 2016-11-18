@@ -48,7 +48,7 @@ static const RGBQUAD DefLogPaletteQuads[20] =   /* Copy of Default Logical Palet
     { 0xf0, 0xfb, 0xff, 0x00 },
     { 0xa4, 0xa0, 0xa0, 0x00 },
     { 0x80, 0x80, 0x80, 0x00 },
-    { 0x00, 0x00, 0xf0, 0x00 },
+    { 0x00, 0x00, 0xff, 0x00 },
     { 0x00, 0xff, 0x00, 0x00 },
     { 0x00, 0xff, 0xff, 0x00 },
     { 0xff, 0x00, 0x00, 0x00 },
@@ -248,6 +248,7 @@ IntSetDIBits(
     UINT  StartScan,
     UINT  ScanLines,
     CONST VOID  *Bits,
+    ULONG cjMaxBits,
     CONST BITMAPINFO  *bmi,
     UINT  ColorUse)
 {
@@ -258,8 +259,39 @@ IntSetDIBits(
     POINTL		ptSrc;
     EXLATEOBJ	exlo;
     PPALETTE    ppalDIB = 0;
+    ULONG cjSizeImage;
 
-    if (!bmi) return 0;
+    if (!bmi || !Bits) return 0;
+
+    /* Check for uncompressed formats */
+    if ((bmi->bmiHeader.biCompression == BI_RGB) ||
+             (bmi->bmiHeader.biCompression == BI_BITFIELDS))
+    {
+        /* Calculate the image size */
+        cjSizeImage = DIB_GetDIBImageBytes(bmi->bmiHeader.biWidth,
+                                           ScanLines,
+                                           bmi->bmiHeader.biBitCount);
+    }
+    /* Check if the header provided an image size */
+    else if (bmi->bmiHeader.biSizeImage != 0)
+    {
+        /* Use the given size */
+        cjSizeImage = bmi->bmiHeader.biSizeImage;
+    }
+    else
+    {
+        /* Compressed format without a size. This is invalid. */
+        DPRINT1("Compressed format without a size!");
+        return 0;
+    }
+
+    /* Check if the size that we have is ok */
+    if ((cjSizeImage > cjMaxBits) || (cjSizeImage == 0))
+    {
+        DPRINT1("Invalid bitmap size! cjSizeImage = %lu, cjMaxBits = %lu\n",
+                cjSizeImage, cjMaxBits);
+        return 0;
+    }
 
     SourceBitmap = GreCreateBitmapEx(bmi->bmiHeader.biWidth,
                                      ScanLines,
@@ -267,7 +299,7 @@ IntSetDIBits(
                                      BitmapFormat(bmi->bmiHeader.biBitCount,
                                                   bmi->bmiHeader.biCompression),
                                      bmi->bmiHeader.biHeight < 0 ? BMF_TOPDOWN : 0,
-                                     bmi->bmiHeader.biSizeImage,
+                                     cjSizeImage,
                                      (PVOID)Bits,
                                      0);
     if (!SourceBitmap)
@@ -734,7 +766,7 @@ GreGetDIBitsInternal(
         Info->bmiHeader.biWidth = psurf->SurfObj.sizlBitmap.cx;
         Info->bmiHeader.biHeight = (psurf->SurfObj.fjBitmap & BMF_TOPDOWN) ?
                                    -psurf->SurfObj.sizlBitmap.cy :
-                                   psurf->SurfObj.sizlBitmap.cy;;
+                                   psurf->SurfObj.sizlBitmap.cy;
         Info->bmiHeader.biPlanes = 1;
         Info->bmiHeader.biBitCount = BitsPerFormat(psurf->SurfObj.iBitmapFormat);
         Info->bmiHeader.biSizeImage = DIB_GetDIBImageBytes( Info->bmiHeader.biWidth,
@@ -762,8 +794,8 @@ GreGetDIBitsInternal(
     case 8:
         Info->bmiHeader.biClrUsed = 0;
 
-        /* If the bitmap if a DIB section and has the same format than what
-         * we're asked, go ahead! */
+        /* If the bitmap is a DIB section and has the same format as what
+         * is requested, go ahead! */
         if((psurf->hSecure) &&
                 (BitsPerFormat(psurf->SurfObj.iBitmapFormat) == bpp))
         {
@@ -831,26 +863,17 @@ GreGetDIBitsInternal(
 
                 case 8:
                 {
-                    INT r, g, b;
-                    RGBQUAD *color;
-                    memcpy(rgbQuads, DefLogPaletteQuads,
-                           10 * sizeof(RGBQUAD));
-                    memcpy(rgbQuads + 246, DefLogPaletteQuads + 10,
-                           10 * sizeof(RGBQUAD));
-                    color = rgbQuads + 10;
-                    for(r = 0; r <= 5; r++) /* FIXME */
+                    INT i;
+
+                    memcpy(rgbQuads, DefLogPaletteQuads, 10 * sizeof(RGBQUAD));
+                    memcpy(rgbQuads + 246, DefLogPaletteQuads + 10, 10 * sizeof(RGBQUAD));
+
+                    for (i = 10; i < 246; i++)
                     {
-                        for(g = 0; g <= 5; g++)
-                        {
-                            for(b = 0; b <= 5; b++)
-                            {
-                                color->rgbRed =   (r * 0xff) / 5;
-                                color->rgbGreen = (g * 0xff) / 5;
-                                color->rgbBlue =  (b * 0xff) / 5;
-                                color->rgbReserved = 0;
-                                color++;
-                            }
-                        }
+                        rgbQuads[i].rgbRed = (i & 0x07) << 5;
+                        rgbQuads[i].rgbGreen = (i & 0x38) << 2;
+                        rgbQuads[i].rgbBlue = i & 0xc0;
+                        rgbQuads[i].rgbReserved = 0;
                     }
                 }
                 }
@@ -1316,6 +1339,7 @@ IntCreateDIBitmap(
     ULONG compression,
     DWORD init,
     LPBYTE bits,
+    ULONG cjMaxBits,
     PBITMAPINFO data,
     DWORD coloruse)
 {
@@ -1359,7 +1383,11 @@ IntCreateDIBitmap(
             /* Undocumented flag which creates a DDB of the format specified by the bitmap info. */
             handle = IntCreateCompatibleBitmap(Dc, width, height, planes, bpp);
             if (!handle)
+            {
+                DPRINT1("IntCreateCompatibleBitmap() failed!\n");
                 return NULL;
+            }
+
             /* The palette must also match the given data */
             Surface = SURFACE_ShareLockSurface(handle);
             ASSERT(Surface);
@@ -1390,7 +1418,7 @@ IntCreateDIBitmap(
 
     if ((NULL != handle) && (CBM_INIT & init))
     {
-        IntSetDIBits(Dc, handle, 0, height, bits, data, coloruse);
+        IntSetDIBits(Dc, handle, 0, height, bits, cjMaxBits, data, coloruse);
     }
 
     return handle;
@@ -1417,12 +1445,18 @@ NtGdiCreateDIBitmapInternal(
     PBYTE safeBits = NULL;
     HBITMAP hbmResult = NULL;
 
+    if (pjInit == NULL)
+    {
+        fInit &= ~CBM_INIT;
+    }
+
     if(pjInit && (fInit & CBM_INIT))
     {
         if (cjMaxBits == 0) return NULL;
         safeBits = ExAllocatePoolWithTag(PagedPool, cjMaxBits, TAG_DIB);
         if(!safeBits)
         {
+            DPRINT1("Failed to allocate %lu bytes\n", cjMaxBits);
             EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
             return NULL;
         }
@@ -1445,6 +1479,7 @@ NtGdiCreateDIBitmapInternal(
 
     if(!NT_SUCCESS(Status))
     {
+        DPRINT1("Got an exception! pjInit = %p\n", pjInit);
         SetLastNtError(Status);
         goto cleanup;
     }
@@ -1491,6 +1526,7 @@ GreCreateDIBitmapInternal(
         hdcDest = NtGdiCreateCompatibleDC(0);
         if(!hdcDest)
         {
+            DPRINT1("NtGdiCreateCompatibleDC failed\n");
             return NULL;
         }
     }
@@ -1502,6 +1538,7 @@ GreCreateDIBitmapInternal(
     Dc = DC_LockDc(hdcDest);
     if (!Dc)
     {
+        DPRINT1("Failed to lock hdcDest %p\n", hdcDest);
         EngSetLastError(ERROR_INVALID_HANDLE);
         return NULL;
     }
@@ -1529,7 +1566,7 @@ GreCreateDIBitmapInternal(
         planes = 0;
         compression = 0;
     }
-    Bmp = IntCreateDIBitmap(Dc, cx, cy, planes, bpp, compression, fInit, pjInit, pbmi, iUsage);
+    Bmp = IntCreateDIBitmap(Dc, cx, cy, planes, bpp, compression, fInit, pjInit, cjMaxBits, pbmi, iUsage);
     DC_UnlockDc(Dc);
 
     if(!hDc)

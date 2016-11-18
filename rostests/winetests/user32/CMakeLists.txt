@@ -8,7 +8,7 @@ list(APPEND SOURCE
     dce.c
     dde.c
     dialog.c
-    edit.c
+    edit.c    
     generated.c
     input.c
     listbox.c

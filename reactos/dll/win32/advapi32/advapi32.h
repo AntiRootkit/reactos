@@ -2,7 +2,7 @@
  * COPYRIGHT:       See COPYING in the top level directory
  * PROJECT:         ReactOS System Libraries
  * FILE:            lib/advapi32/advapi32.h
- * PURPOSE:         Win32 Advanced API Libary Header
+ * PURPOSE:         Win32 Advanced API Library Header
  * PROGRAMMER:      Alex Ionescu (alex@relsoft.net)
  */
 #ifndef __ADVAPI32_H
@@ -35,6 +35,7 @@
 
 #include <services/services.h>
 #include <svcctl_c.h>
+#include <winreg_c.h>
 
 #include <wine/debug.h>
 #include <wine/unicode.h>

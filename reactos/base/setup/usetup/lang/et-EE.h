@@ -69,7 +69,7 @@ static MUI_ENTRY etEEWelcomePageEntries[] =
     {
         6,
         11,
-		"Selles paigaldamise osas kopeeritakse ReactOSi failid arvutisse ja",
+        "Selles paigaldamise osas kopeeritakse ReactOSi failid arvutisse ja",
         TEXT_STYLE_NORMAL
     },
     {
@@ -472,6 +472,7 @@ static MUI_ENTRY etEERepairPageEntries[] =
         0
     }
 };
+
 static MUI_ENTRY etEEComputerPageEntries[] =
 {
     {
@@ -730,7 +731,7 @@ static MUI_ENTRY etEEBootPageEntries[] =
     {
         6,
         13,
-		"Sisesta vormindatud flopiketas draivi A:",
+        "Sisesta vormindatud flopiketas draivi A:",
         TEXT_STYLE_NORMAL
     },
     {
@@ -825,24 +826,24 @@ static MUI_ENTRY etEESelectPartitionEntries[] =
     }
 };
 
-static MUI_ENTRY etEEConfirmDeletePartitionEntries[] =
+static MUI_ENTRY etEEConfirmDeleteSystemPartitionEntries[] =
 {
     {
         4,
         3,
-        " ReactOS " KERNEL_VERSION_STR " Setup ",
+        " ReactOS " KERNEL_VERSION_STR " paigaldamine ",
         TEXT_STYLE_UNDERLINE
     },
     {
         6,
         8,
-        "You asked Setup to delete the system partition.",
+        "You have chosen to delete the system partition.",
         TEXT_STYLE_NORMAL
     },
     {
         6,
         10,
-        "System partitions can contain diagnose programs, hardware configuration",
+        "System partitions can contain diagnostic programs, hardware configuration",
         TEXT_STYLE_NORMAL
     },
     {
@@ -866,7 +867,7 @@ static MUI_ENTRY etEEConfirmDeletePartitionEntries[] =
     {
         6,
         15,
-        "programs on the partiton, or when you are sure you want to delete them.",
+        "programs on the partition, or when you are sure you want to delete them.",
         TEXT_STYLE_NORMAL
     },
     {
@@ -970,7 +971,7 @@ static MUI_ENTRY etEEInstallDirectoryEntries[] =
     {
         6,
         9,
-		"Vali kaust, kuhu ReactOS paigaldada:",
+        "Vali kaust, kuhu ReactOS paigaldada:",
         TEXT_STYLE_NORMAL
     },
     {
@@ -1433,7 +1434,7 @@ MUI_ERROR etEEErrorEntries[] =
           "\n"
           "  \x07  Vajuta F3, et v„ljuda paigaldusest..\n"
           "  \x07  Vajuta ENTER, et j„tkata.",
-          "F3= V„lju  ENTER = J„tka"
+          "F3 = V„lju  ENTER = J„tka"
     },
     {
         //ERROR_NEW_PARTITION,
@@ -1517,7 +1518,7 @@ MUI_ERROR etEEErrorEntries[] =
     },
     {
         //ERROR_TXTSETUP_SECTION,
-		"TXTSETUP.SIF failist ei leitud 'Directories' sektsiooni.",
+        "TXTSETUP.SIF failist ei leitud 'Directories' sektsiooni.",
         "ENTER = Taask„ivita arvuti"
     },
     {
@@ -1600,7 +1601,6 @@ MUI_ERROR etEEErrorEntries[] =
     }
 };
 
-
 MUI_PAGE etEEPages[] =
 {
     {
@@ -1645,7 +1645,7 @@ MUI_PAGE etEEPages[] =
     },
     {
         CONFIRM_DELETE_SYSTEM_PARTITION_PAGE,
-        etEEConfirmDeletePartitionEntries
+        etEEConfirmDeleteSystemPartitionEntries
     },
     {
         SELECT_FILE_SYSTEM_PAGE,
@@ -1743,8 +1743,10 @@ MUI_STRING etEEStrings[] =
     "ReactOS paigaldatakse partitsioonile"},
     {STRING_CHECKINGPART,
     "Valitud partitsiooni kontrollitakse."},
+    {STRING_CONTINUE,
+    "ENTER = J„tka"},
     {STRING_QUITCONTINUE,
-    "F3= V„lju  ENTER = J„tka"},
+    "F3 = V„lju  ENTER = J„tka"},
     {STRING_REBOOTCOMPUTER,
     "ENTER = Taask„ivita arvuti"},
     {STRING_TXTSETUPFAILED,
@@ -1790,7 +1792,7 @@ MUI_STRING etEEStrings[] =
     {STRING_HDDINFOUNK1,
     "%I64u %s  Kävaketas %lu  (Port=%hu, Siin=%hu, Id=%hu)."},
     {STRING_HDDINFOUNK2,
-    "   %c%c  Type %lu    %I64u %s"},
+    "   %c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTDELETE,
     "%I64u %s  Kävaketas %lu  (Port=%hu, Siin=%hu, Id=%hu) - %wZ."},
     {STRING_HDDINFOUNK3,
@@ -1798,7 +1800,7 @@ MUI_STRING etEEStrings[] =
     {STRING_HDINFOPARTZEROED,
     "Kävaketas %lu (%I64u %s), Port=%hu, Siin=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK4,
-    "%c%c  Type %lu    %I64u %s"},
+    "%c%c  Type 0x%02X    %I64u %s"},
     {STRING_HDINFOPARTEXISTS,
     "Kävaketas %lu (%I64u %s), Port=%hu, Siin=%hu, Id=%hu (%wZ)."},
     {STRING_HDDINFOUNK5,

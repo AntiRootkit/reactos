@@ -36,16 +36,6 @@
 #include "../console/video.h"
 /**/
 
-/* MACROS *********************************************************************/
-
-//
-// These macros are defined for ease-of-use of some VGA I/O ports
-// whose addresses depend whether we are in Monochrome or Colour mode.
-//
-#define VGA_INSTAT1_READ    Bda->CrtBasePort + 6    // VGA_INSTAT1_READ_MONO or VGA_INSTAT1_READ_COLOR
-#define VGA_CRTC_INDEX      Bda->CrtBasePort        // VGA_CRTC_INDEX_MONO   or VGA_CRTC_INDEX_COLOR
-#define VGA_CRTC_DATA       Bda->CrtBasePort + 1    // VGA_CRTC_DATA_MONO    or VGA_CRTC_DATA_COLOR
-
 /* PRIVATE VARIABLES **********************************************************/
 
 /*
@@ -1991,6 +1981,13 @@ static BOOLEAN VidBiosScrollWindow(SCROLL_DIRECTION Direction,
 
     WORD WindowWidth, WindowHeight;
 
+    /* TODO: This function doesn't work in non-alphanumeric modes yet */
+    if (Bda->VideoMode > 3)
+    {
+        DPRINT1("VidBiosScrollWindow: not implemented for mode 0%Xh\n", Bda->VideoMode);
+        return FALSE;
+    }
+
     /* Fixup the rectangle if needed */
     Rectangle.Left   = min(max(Rectangle.Left  , 0), Bda->ScreenColumns - 1);
     Rectangle.Right  = min(max(Rectangle.Right , 0), Bda->ScreenColumns - 1);
@@ -2198,11 +2195,11 @@ static BOOLEAN VgaSetRegisters(PVGA_REGISTERS Registers)
     /* Unlock CRTC registers 0-7 */
     IOWriteB(VGA_CRTC_INDEX, VGA_CRTC_END_HORZ_BLANKING_REG);
     IOWriteB(VGA_CRTC_DATA , IOReadB(VGA_CRTC_DATA) | 0x80);
-    IOWriteB(VGA_CRTC_INDEX, VGA_CRTC_VERT_RETRACE_END_REG);
+    IOWriteB(VGA_CRTC_INDEX, VGA_CRTC_END_VERT_RETRACE_REG);
     IOWriteB(VGA_CRTC_DATA , IOReadB(VGA_CRTC_DATA) & ~0x80);
     // Make sure they remain unlocked
     Registers->CRT[VGA_CRTC_END_HORZ_BLANKING_REG] |= 0x80;
-    Registers->CRT[VGA_CRTC_VERT_RETRACE_END_REG] &= ~0x80;
+    Registers->CRT[VGA_CRTC_END_VERT_RETRACE_REG] &= ~0x80;
 
     /* Write the CRTC registers */
     for (i = 0; i < VGA_CRTC_MAX_REG; i++)
@@ -2463,16 +2460,25 @@ static BOOLEAN VidBiosSetVideoMode(BYTE ModeNumber)
     /* Retrieve the real mode number and check its validity */
     ModeNumber &= 0x7F;
     // if (ModeNumber >= ARRAYSIZE(VideoModes))
-    if (ModeNumber > BIOS_MAX_VIDEO_MODE)
-    {
-        DPRINT1("VidBiosSetVideoMode -- Mode %02Xh invalid\n", ModeNumber);
-        return FALSE;
-    }
 
     DPRINT1("Switching to mode %02Xh (%02Xh) %s clearing the screen; VgaRegisters = 0x%p\n",
             ModeNumber, OrgModeNumber, (DoNotClear ? "without" : "and"), VideoModes[ModeNumber].VgaRegisters);
 
+    if (ModeNumber > BIOS_MAX_VIDEO_MODE)
+    {
+        /* This could be an extended video mode, so call the VBE BIOS */
+        return VbeSetExtendedVideoMode(ModeNumber);
+    }
+
     if (!VgaSetRegisters(VideoModes[ModeNumber].VgaRegisters)) return FALSE;
+    if (VbeInitialized && Bda->VideoMode > BIOS_MAX_VIDEO_MODE)
+    {
+        /*
+         * Since we're switching from an extended video mode to a standard VGA
+         * mode, tell the VBE BIOS to reset the extended registers.
+         */
+        VbeResetExtendedRegisters();
+    }
 
     VgaChangePalette(ModeNumber);
 
@@ -3235,6 +3241,7 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
 
                     /* Set the overscan register */
                     // VgaSetSinglePaletteRegister(VGA_AC_OVERSCAN_REG, Buffer[VGA_AC_PAL_F_REG + 1]);
+                    IOReadB(VGA_INSTAT1_READ);
                     IOWriteB(VGA_AC_INDEX, VGA_AC_OVERSCAN_REG);
                     IOWriteB(VGA_AC_WRITE, Buffer[VGA_AC_PAL_F_REG + 1]);
 
@@ -3249,6 +3256,8 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                 {
                     /* Read the old AC mode control register value */
                     BYTE VgaAcControlReg;
+
+                    IOReadB(VGA_INSTAT1_READ);
                     IOWriteB(VGA_AC_INDEX, VGA_AC_CONTROL_REG);
                     VgaAcControlReg = IOReadB(VGA_AC_READ);
 
@@ -3264,6 +3273,7 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                         Bda->CrtModeControl &= ~(1 << 5);
                     }
 
+                    IOReadB(VGA_INSTAT1_READ);
                     IOWriteB(VGA_AC_INDEX, VGA_AC_CONTROL_REG);
                     IOWriteB(VGA_AC_WRITE, VgaAcControlReg);
 
@@ -3323,6 +3333,7 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                     }
 
                     /* Get the overscan register */
+                    IOReadB(VGA_INSTAT1_READ);
                     IOWriteB(VGA_AC_INDEX, VGA_AC_OVERSCAN_REG);
                     Buffer[VGA_AC_PAL_F_REG + 1] = IOReadB(VGA_AC_READ);
 
@@ -3363,6 +3374,31 @@ VOID WINAPI VidBiosVideoService(LPWORD Stack)
                         IOWriteB(VGA_DAC_DATA, *Buffer++);
                         IOWriteB(VGA_DAC_DATA, *Buffer++);
                         IOWriteB(VGA_DAC_DATA, *Buffer++);
+                    }
+
+                    break;
+                }
+
+                /* Set Video DAC Color Page */
+                case 0x13:
+                {
+                    if (getBL() == 0)
+                    {
+                        /* Set the highest bit of the AC Mode Control register to BH */
+                        IOReadB(VGA_INSTAT1_READ);
+                        IOWriteB(VGA_AC_INDEX, VGA_AC_CONTROL_REG);
+                        IOWriteB(VGA_AC_WRITE, (IOReadB(VGA_AC_READ) & 0x7F) | (getBH() << 7));
+                    }
+                    else if (getBL() == 1)
+                    {
+                        /* Set the AC Color Select register to BH */
+                        IOReadB(VGA_INSTAT1_READ);
+                        IOWriteB(VGA_AC_INDEX, VGA_AC_COLOR_SEL_REG);
+                        IOWriteB(VGA_AC_WRITE, getBH());
+                    }
+                    else
+                    {
+                        DPRINT1("BIOS Palette Control Sub-sub-command BL = 0x%02X INVALID\n", getBL());
                     }
 
                     break;
@@ -3979,6 +4015,9 @@ BOOLEAN VidBiosInitialize(VOID)
                   Font8x16, sizeof(Font8x16));
     RtlMoveMemory(SEG_OFF_TO_PTR(VIDEO_BIOS_DATA_SEG, FONT_8x14_OFFSET),
                   Font8x14, sizeof(Font8x14));
+
+    /* Make another copy of the lower half of the 8x8 font at F000:FA6E for compatibility */
+    RtlMoveMemory(SEG_OFF_TO_PTR(BIOS_SEGMENT, FONT_8x8_COMPAT_OFFSET), Font8x8, sizeof(Font8x8) / 2);
 
     VidBios32Initialize();
 

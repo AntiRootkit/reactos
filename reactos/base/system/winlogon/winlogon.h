@@ -46,7 +46,6 @@
 #include <wine/debug.h>
 WINE_DEFAULT_DEBUG_CHANNEL(winlogon);
 
-#include "setup.h"
 #include "resource.h"
 
 typedef BOOL (WINAPI * PFWLXNEGOTIATE)  (DWORD, DWORD *);
@@ -127,7 +126,7 @@ typedef struct _GINAINSTANCE
  * The real picture should look more like this:
  * 
  * STATE_INIT
- *    Initial state. Required for session initialization. After intialization,
+ *    Initial state. Required for session initialization. After initialization,
  *    the state will automatically change to STATE_LOGGED_OFF.
  *
  * STATE_LOGGED_OFF
@@ -162,7 +161,7 @@ typedef struct _GINAINSTANCE
  *    the dialog.
  *
  * STATE_LOCKED_SAS
- *    Winlogon shows the unlock dialog. Presing "Cancel" or a timeout will
+ *    Winlogon shows the unlock dialog. Pressing "Cancel" or a timeout will
  *    change the state back to STATE_LOCKED. Entering the right credentials and
  *    pressing "OK" unlocks the computer and changes the state to
  *    STATE_LOGGED_ON.
@@ -173,7 +172,7 @@ typedef struct _GINAINSTANCE
  *    and changes the state to STATE_LOGGED_OFF.
  *
  * STATE_SHUTTING_DOWN
- *    Winlogon shows the shutdown dialog. Presing "Cancel" or a timeout will
+ *    Winlogon shows the shutdown dialog. Pressing "Cancel" or a timeout will
  *    change the state back to STATE_LOGGED_ON_SAS. Pressing "OK" will change
  *    the state to STATE_SHUT_DOWN.
  *
@@ -276,7 +275,7 @@ extern PWLSESSION WLSession;
 BOOL
 CreateUserEnvironment(IN PWLSESSION Session);
 
-/* notifiy.c */
+/* notify.c */
 BOOL
 InitNotifications(VOID);
 
@@ -294,7 +293,7 @@ StartRpcServer(VOID);
 
 /* sas.c */
 BOOL
-SetDefaultLanguage(IN BOOL UserProfile);
+SetDefaultLanguage(IN PWLSESSION Session);
 
 BOOL
 InitializeSAS(IN OUT PWLSESSION Session);
@@ -306,8 +305,14 @@ InitializeScreenSaver(IN OUT PWLSESSION Session);
 VOID
 StartScreenSaver(IN PWLSESSION Session);
 
-/* winlogon.c */
+/* setup.c */
+DWORD
+GetSetupType(VOID);
 
+BOOL
+RunSetup(VOID);
+
+/* winlogon.c */
 BOOL
 PlaySoundRoutine(IN LPCWSTR FileName,
                  IN UINT Logon,

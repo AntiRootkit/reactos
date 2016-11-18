@@ -26,35 +26,36 @@ DBG_DEFAULT_CHANNEL(WARNING);
 
 /* FUNCTIONS ******************************************************************/
 
-VOID __cdecl BootMain(LPSTR CmdLine)
+VOID __cdecl BootMain(IN PCCH CmdLine)
 {
     CmdLineParse(CmdLine);
-    MachInit(CmdLine);
-    FsInit();
 
-    DebugInit();
+    /* Debugger pre-initialization */
+    DebugInit(FALSE);
 
     TRACE("BootMain() called.\n");
 
-    /* Check if the CPU is new enough */
-    FrLdrCheckCpuCompatiblity();
+    MachInit(CmdLine);
 
+    /* Check if the CPU is new enough */
+    FrLdrCheckCpuCompatibility(); // FIXME: Should be done inside MachInit!
+
+    /* UI pre-initialization */
     if (!UiInitialize(FALSE))
     {
         UiMessageBoxCritical("Unable to initialize UI.");
         goto Quit;
     }
 
+    /* Initialize memory manager */
     if (!MmInitializeMemoryManager())
     {
         UiMessageBoxCritical("Unable to initialize memory manager.");
         goto Quit;
     }
 
-#ifdef _M_IX86
-    HalpInitializePciStubs();
-    HalpInitBusHandler();
-#endif
+    /* Initialize I/O subsystem */
+    FsInit();
 
     RunLoader();
 

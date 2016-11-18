@@ -191,7 +191,7 @@ CDeviceView::Refresh(
     _In_ bool UpdateView
     )
 {
-    // Enum devices on a seperate thread to keep the gui responsive
+    // Enum devices on a separate thread to keep the gui responsive
 
     m_ViewType = Type;
 
@@ -291,6 +291,7 @@ CDeviceView::DisplayPropertySheet()
 void
 CDeviceView::SetFocus()
 {
+    ::SetFocus(m_hTreeView);
 }
 
 bool
@@ -821,7 +822,7 @@ CDeviceView::InsertIntoTreeView(
     tvi.iImage = Node->GetClassImage();
     tvi.iSelectedImage = Node->GetClassImage();
 
-    // try to cast it to a device node. This will only suceed if it's the correct type
+    // try to cast it to a device node. This will only succeed if it's the correct type
     CDeviceNode *DeviceNode = dynamic_cast<CDeviceNode *>(Node);
     if (DeviceNode && DeviceNode->GetOverlayImage())
     {
@@ -843,10 +844,10 @@ CDeviceView::BuildActionMenuForNode(
     _In_ bool MainMenu
     )
 {
-    // Create a seperator structure 
-    MENUITEMINFOW MenuSeperator = { 0 };
-    MenuSeperator.cbSize = sizeof(MENUITEMINFOW);
-    MenuSeperator.fType = MFT_SEPARATOR;
+    // Create a separator structure 
+    MENUITEMINFOW MenuSeparator = { 0 };
+    MenuSeparator.cbSize = sizeof(MENUITEMINFOW);
+    MenuSeparator.fType = MFT_SEPARATOR;
 
     // Setup the 
     MENUITEMINFOW MenuItemInfo = { 0 };
@@ -898,7 +899,7 @@ CDeviceView::BuildActionMenuForNode(
             i++;
         }
 
-        InsertMenuItemW(OwnerMenu, i, TRUE, &MenuSeperator);
+        InsertMenuItemW(OwnerMenu, i, TRUE, &MenuSeparator);
         i++;
     }
 
@@ -920,7 +921,7 @@ CDeviceView::BuildActionMenuForNode(
 
     if (Node->HasProperties())
     {
-        InsertMenuItemW(OwnerMenu, i, TRUE, &MenuSeperator);
+        InsertMenuItemW(OwnerMenu, i, TRUE, &MenuSeparator);
         i++;
 
         String.LoadStringW(g_hThisInstance, IDS_MENU_PROPERTIES);

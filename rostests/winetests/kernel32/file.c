@@ -1214,6 +1214,7 @@ static void test_CreateFileA(void)
     {NULL, 0, -1, 0, FALSE}
     };
     BY_HANDLE_FILE_INFORMATION  Finfo;
+    WCHAR curdir[MAX_PATH];
 
     ret = GetTempPathA(MAX_PATH, temp_path);
     ok(ret != 0, "GetTempPathA error %d\n", GetLastError());
@@ -1278,6 +1279,7 @@ static void test_CreateFileA(void)
     ret = CreateDirectoryA(dirname, NULL);
     ok( ret, "Createdirectory failed, gle=%d\n", GetLastError() );
     /* set current drive & directory to known location */
+    GetCurrentDirectoryW( MAX_PATH, curdir);
     SetCurrentDirectoryA( temp_path );
     i = 0;
     while (p[i].file)
@@ -1317,27 +1319,22 @@ static void test_CreateFileA(void)
                 skip("Do not have authority to access volumes. Test for %s skipped\n", filename);
         }
         /* otherwise validate results with expectations */
-        else if (p[i].todo_flag)
-            todo_wine ok(
-                (hFile == INVALID_HANDLE_VALUE &&
-                  (p[i].err == GetLastError() || p[i].err2 == GetLastError())) ||
-                (hFile != INVALID_HANDLE_VALUE && p[i].err == ERROR_SUCCESS),
-                "CreateFileA failed on %s, hFile %p, err=%u, should be %u\n",
-                filename, hFile, GetLastError(), p[i].err);
         else
-            ok(
-                (hFile == INVALID_HANDLE_VALUE &&
-                 (p[i].err == GetLastError() || p[i].err2 == GetLastError())) ||
-                (hFile != INVALID_HANDLE_VALUE && p[i].err == ERROR_SUCCESS),
+        {
+            todo_wine_if (p[i].todo_flag)
+                ok((hFile == INVALID_HANDLE_VALUE &&
+                   (p[i].err == GetLastError() || p[i].err2 == GetLastError())) ||
+                   (hFile != INVALID_HANDLE_VALUE && p[i].err == ERROR_SUCCESS),
                 "CreateFileA failed on %s, hFile %p, err=%u, should be %u\n",
                 filename, hFile, GetLastError(), p[i].err);
+        }
         if (hFile != INVALID_HANDLE_VALUE)
             CloseHandle( hFile );
         i++;
     }
     ret = RemoveDirectoryA(dirname);
     ok(ret, "RemoveDirectoryA: error %d\n", GetLastError());
-
+    SetCurrentDirectoryW(curdir);
 
     /* test opening directory as a directory */
     hFile = CreateFileA( temp_path, GENERIC_READ,
@@ -2509,11 +2506,86 @@ static char get_windows_drive(void)
     return windowsdir[0];
 }
 
+static
+struct
+{
+    const char *path;
+    BOOL expected;
+}
+const invalid_char_tests[] =
+{
+    { "./test-dir",                     TRUE },
+    { "./test-dir/",                    FALSE },
+    { ".\\test-dir",                    TRUE },
+    { ".\\test-dir\\",                  FALSE },
+    { "/>test-dir",                     FALSE },
+    { "<\"test->dir",                   FALSE },
+    { "<test->dir",                     FALSE },
+    { "><test->dir",                    FALSE },
+    { ">>test-dir",                     FALSE },
+    { ">test->dir",                     FALSE },
+    { ">test-dir",                      FALSE },
+    { "\"test-dir\"",                   FALSE },
+    { "\"test-file\"",                  FALSE },
+    { "test-/>dir",                     FALSE },
+    { "test-dir/",                      FALSE },
+    { "test-dir//",                     FALSE },
+    { "test-dir/:",                     FALSE },
+    { "test-dir/<",                     TRUE },
+    { "test-dir/>",                     TRUE },
+    { "test-dir/\"",                    TRUE },
+    { "test-dir/\\",                    FALSE },
+    { "test-dir/|",                     FALSE },
+    { "test-dir<",                      TRUE },
+    { "test-dir</",                     FALSE },
+    { "test-dir<<",                     TRUE },
+    { "test-dir<<<><><>\"\"\"\"<<<>",   TRUE },
+    { "test-dir<>",                     TRUE },
+    { "test-dir<\"",                    TRUE },
+    { "test-dir>",                      TRUE },
+    { "test-dir>/",                     FALSE },
+    { "test-dir><",                     TRUE },
+    { "test-dir>>",                     TRUE },
+    { "test-dir>\"",                    TRUE },
+    { "test-dir\"",                     TRUE },
+    { "test-dir\"/",                    FALSE },
+    { "test-dir\"<",                    TRUE },
+    { "test-dir\">",                    TRUE },
+    { "test-dir\"\"",                   TRUE },
+    { "test-dir\"\"\"\"\"",             TRUE },
+    { "test-dir\\",                     FALSE },
+    { "test-dir\\/",                    FALSE },
+    { "test-dir\\<",                    TRUE },
+    { "test-dir\\>",                    TRUE },
+    { "test-dir\\\"",                   TRUE },
+    { "test-dir\\\\",                   FALSE },
+    { "test-file/",                     FALSE },
+    { "test-file/<",                    FALSE },
+    { "test-file/>",                    FALSE },
+    { "test-file/\"",                   FALSE },
+    { "test-file<",                     TRUE },
+    { "test-file<<",                    TRUE },
+    { "test-file<>",                    TRUE },
+    { "test-file<\"",                   TRUE },
+    { "test-file>",                     TRUE },
+    { "test-file><",                    TRUE },
+    { "test-file>>",                    TRUE },
+    { "test-file>\"",                   TRUE },
+    { "test-file\"",                    TRUE },
+    { "test-file\"<",                   TRUE },
+    { "test-file\">",                   TRUE },
+    { "test-file\"\"",                  TRUE },
+    { "test-file\\",                    FALSE },
+    { "test-file\\<",                   FALSE },
+    { "test-file\\>",                   FALSE },
+    { "test-file\\\"",                  FALSE },
+};
+
 static void test_FindFirstFileA(void)
 {
     HANDLE handle;
     WIN32_FIND_DATAA data;
-    int err;
+    int err, i;
     char buffer[5] = "C:\\";
     char buffer2[100];
     char nonexistent[MAX_PATH];
@@ -2681,6 +2753,30 @@ static void test_FindFirstFileA(void)
     err = GetLastError();
     ok ( handle == INVALID_HANDLE_VALUE, "FindFirstFile on %s should fail\n", buffer2 );
     ok ( err == ERROR_PATH_NOT_FOUND, "Bad Error number %d\n", err );
+
+    /* try FindFirstFileA with invalid characters */
+    CreateDirectoryA("test-dir", NULL);
+    _lclose(_lcreat("test-file", 0));
+
+    for (i = 0; i < sizeof(invalid_char_tests) / sizeof(invalid_char_tests[0]); i++)
+    {
+        handle = FindFirstFileA(invalid_char_tests[i].path, &data);
+        if (invalid_char_tests[i].expected)
+        {
+            ok(handle != INVALID_HANDLE_VALUE, "FindFirstFileA on %s should succeed\n",
+               invalid_char_tests[i].path);
+        }
+        else
+        {
+            ok(handle == INVALID_HANDLE_VALUE, "FindFirstFileA on %s should fail\n",
+               invalid_char_tests[i].path);
+        }
+        if (handle != INVALID_HANDLE_VALUE)
+            FindClose(handle);
+    }
+
+    DeleteFileA("test-file");
+    RemoveDirectoryA("test-dir");
 }
 
 static void test_FindNextFileA(void)
@@ -3096,7 +3192,7 @@ static void test_read_write(void)
         "wrong error %u\n", GetLastError() );
     ok( bytes == 0, "read %x bytes\n", bytes );
 
-    VirtualFree( mem, 0, MEM_FREE );
+    VirtualFree( mem, 0, MEM_RELEASE );
 
     ret = CloseHandle(hFile);
     ok( ret, "CloseHandle: error %d\n", GetLastError());
@@ -3355,6 +3451,11 @@ static void test_overlapped(void)
     ok( GetLastError() == ERROR_IO_INCOMPLETE || GetLastError() == ERROR_INVALID_HANDLE /* win9x */,
         "wrong error %u\n", GetLastError() );
     ok( r == FALSE, "should return false\n");
+
+    r = GetOverlappedResult( 0, &ov, &result, TRUE );
+    ok( r == TRUE, "should return TRUE\n" );
+    ok( result == 0xabcd, "wrong result %u\n", result );
+    ok( ov.Internal == STATUS_PENDING, "expected STATUS_PENDING, got %08lx\n", ov.Internal );
 
     ResetEvent( ov.hEvent );
 
@@ -3751,17 +3852,13 @@ static void test_CreateFile(void)
         if (i == 0 || i == 5)
         {
 /* FIXME: remove once Wine is fixed */
-if (i == 5) todo_wine
-            ok(GetLastError() == ERROR_INVALID_PARAMETER, "%d: expected ERROR_INVALID_PARAMETER, got %d\n", i, GetLastError());
-else
+todo_wine_if (i == 5)
             ok(GetLastError() == ERROR_INVALID_PARAMETER, "%d: expected ERROR_INVALID_PARAMETER, got %d\n", i, GetLastError());
         }
         else
         {
 /* FIXME: remove once Wine is fixed */
-if (i == 1) todo_wine
-            ok(GetLastError() == ERROR_ACCESS_DENIED, "%d: expected ERROR_ACCESS_DENIED, got %d\n", i, GetLastError());
-else
+todo_wine_if (i == 1)
             ok(GetLastError() == ERROR_ACCESS_DENIED, "%d: expected ERROR_ACCESS_DENIED, got %d\n", i, GetLastError());
         }
 
@@ -3773,9 +3870,7 @@ else
         else
         {
 /* FIXME: remove once Wine is fixed */
-if (i == 1) todo_wine
-            ok(GetLastError() == ERROR_ACCESS_DENIED, "%d: expected ERROR_ACCESS_DENIED, got %d\n", i, GetLastError());
-else
+todo_wine_if (i == 1)
             ok(GetLastError() == ERROR_ACCESS_DENIED, "%d: expected ERROR_ACCESS_DENIED, got %d\n", i, GetLastError());
         }
     }
@@ -3948,8 +4043,8 @@ static void test_GetFileInformationByHandleEx(void)
     ret = pGetFileInformationByHandleEx(file, FileStandardInfo, buffer, sizeof(buffer));
     ok(ret, "GetFileInformationByHandleEx: failed to get FileStandardInfo, %u\n", GetLastError());
     standardInfo = (FILE_STANDARD_INFO *)buffer;
-    ok(standardInfo->NumberOfLinks == 1, "GetFileInformationByHandleEx: Unexpcted number of links\n");
-    ok(standardInfo->DeletePending == FALSE, "GetFileInformationByHandleEx: Unexpcted pending delete\n");
+    ok(standardInfo->NumberOfLinks == 1, "GetFileInformationByHandleEx: Unexpected number of links\n");
+    ok(standardInfo->DeletePending == FALSE, "GetFileInformationByHandleEx: Unexpected pending delete\n");
     ok(standardInfo->Directory == FALSE, "GetFileInformationByHandleEx: Incorrect directory flag\n");
 
     /* Test FileNameInfo */
@@ -4354,17 +4449,10 @@ static void test_file_access(void)
             else
             {
                 /* FIXME: Remove once Wine is fixed */
-                if ((td[j].access & (GENERIC_READ | GENERIC_WRITE)) ||
-                    (!(td[i].access & (GENERIC_WRITE | FILE_WRITE_DATA)) && (td[j].access & FILE_WRITE_DATA)) ||
-                    (!(td[i].access & (GENERIC_READ | FILE_READ_DATA)) && (td[j].access & FILE_READ_DATA)) ||
-                    (!(td[i].access & (GENERIC_WRITE)) && (td[j].access & FILE_APPEND_DATA)))
-                {
-todo_wine
-                ok(!ret, "DuplicateHandle(%#x => %#x) should fail\n", td[i].access, td[j].access);
-todo_wine
-                ok(GetLastError() == ERROR_ACCESS_DENIED, "expected ERROR_ACCESS_DENIED, got %d\n", GetLastError());
-                }
-                else
+                todo_wine_if((td[j].access & (GENERIC_READ | GENERIC_WRITE) ||
+                             (!(td[i].access & (GENERIC_WRITE | FILE_WRITE_DATA)) && (td[j].access & FILE_WRITE_DATA)) ||
+                             (!(td[i].access & (GENERIC_READ | FILE_READ_DATA)) && (td[j].access & FILE_READ_DATA)) ||
+                             (!(td[i].access & (GENERIC_WRITE)) && (td[j].access & FILE_APPEND_DATA))))
                 {
                 ok(!ret, "DuplicateHandle(%#x => %#x) should fail\n", td[i].access, td[j].access);
                 ok(GetLastError() == ERROR_ACCESS_DENIED, "expected ERROR_ACCESS_DENIED, got %d\n", GetLastError());
@@ -4449,9 +4537,28 @@ static void test_GetFinalPathNameByHandleA(void)
     strcpy(dos_path, dos_prefix);
     strcat(dos_path, long_path);
 
+    count = pGetFinalPathNameByHandleA(INVALID_HANDLE_VALUE, NULL, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    ok(count == 0, "Expected length 0, got %u\n", count);
+    ok(GetLastError() == ERROR_INVALID_HANDLE, "Expected ERROR_INVALID_HANDLE, got %u\n", GetLastError());
+
     file = CreateFileA(test_path, GENERIC_READ | GENERIC_WRITE, 0, NULL,
                        CREATE_ALWAYS, FILE_FLAG_DELETE_ON_CLOSE, 0);
     ok(file != INVALID_HANDLE_VALUE, "CreateFileA error %u\n", GetLastError());
+
+    if (0) {
+        /* Windows crashes on NULL path */
+        count = pGetFinalPathNameByHandleA(file, NULL, MAX_PATH, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+        ok(count == 0, "Expected length 0, got %u\n", count);
+        ok(GetLastError() == ERROR_INVALID_HANDLE, "Expected ERROR_INVALID_HANDLE, got %u\n", GetLastError());
+    }
+
+    /* Test 0-length path */
+    count = pGetFinalPathNameByHandleA(file, result_path, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    ok(count == strlen(dos_path), "Expected length %u, got %u\n", lstrlenA(dos_path), count);
+
+    /* Test 0 and NULL path */
+    count = pGetFinalPathNameByHandleA(file, NULL, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    ok(count == strlen(dos_path), "Expected length %u, got %u\n", lstrlenA(dos_path), count);
 
     /* Test VOLUME_NAME_DOS with sufficient buffer size */
     memset(result_path, 0x11, sizeof(result_path));
@@ -4514,6 +4621,10 @@ static void test_GetFinalPathNameByHandleW(void)
     ok(count == 0, "Expected length 0, got %u\n", count);
     ok(GetLastError() == ERROR_INVALID_HANDLE, "Expected ERROR_INVALID_HANDLE, got %u\n", GetLastError());
 
+    count = pGetFinalPathNameByHandleW(INVALID_HANDLE_VALUE, NULL, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    ok(count == 0, "Expected length 0, got %u\n", count);
+    ok(GetLastError() == ERROR_INVALID_HANDLE, "Expected ERROR_INVALID_HANDLE, got %u\n", GetLastError());
+
     count = GetTempPathW(MAX_PATH, temp_path);
     ok(count, "Failed to get temp path, error %u\n", GetLastError());
     ret = GetTempFileNameW(temp_path, prefix, 0, test_path);
@@ -4526,6 +4637,23 @@ static void test_GetFinalPathNameByHandleW(void)
     file = CreateFileW(test_path, GENERIC_READ | GENERIC_WRITE, 0, NULL,
                        CREATE_ALWAYS, FILE_FLAG_DELETE_ON_CLOSE, 0);
     ok(file != INVALID_HANDLE_VALUE, "CreateFileW error %u\n", GetLastError());
+
+    if (0) {
+        /* Windows crashes on NULL path */
+        count = pGetFinalPathNameByHandleW(file, NULL, MAX_PATH, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+        ok(count == 0, "Expected length 0, got %u\n", count);
+        ok(GetLastError() == ERROR_INVALID_HANDLE, "Expected ERROR_INVALID_HANDLE, got %u\n", GetLastError());
+    }
+
+    /* Test 0-length path */
+    count = pGetFinalPathNameByHandleW(file, result_path, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    ok(count == lstrlenW(dos_path) + 1 ||
+            broken(count == lstrlenW(dos_path) + 2), "Expected length %u, got %u\n", lstrlenW(dos_path) + 1, count);
+
+    /* Test 0 and NULL path */
+    count = pGetFinalPathNameByHandleW(file, NULL, 0, FILE_NAME_NORMALIZED | VOLUME_NAME_DOS);
+    ok(count == lstrlenW(dos_path) + 1 ||
+            broken(count == lstrlenW(dos_path) + 2), "Expected length %u, got %u\n", lstrlenW(dos_path) + 1, count);
 
     /* Test VOLUME_NAME_DOS with sufficient buffer size */
     memset(result_path, 0x11, sizeof(result_path));

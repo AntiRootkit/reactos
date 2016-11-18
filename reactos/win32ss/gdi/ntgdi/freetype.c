@@ -3316,7 +3316,7 @@ GreExtTextOutW(
     IN INT YStart,
     IN UINT fuOptions,
     IN OPTIONAL PRECTL lprc,
-    IN LPWSTR String,
+    IN LPCWSTR String,
     IN INT Count,
     IN OPTIONAL LPINT Dx,
     IN DWORD dwCodePage)
@@ -3408,9 +3408,15 @@ GreExtTextOutW(
         IntLPtoDP(dc, (POINT *)lprc, 2);
     }
 
-    Start.x = XStart;
-    Start.y = YStart;
-    IntLPtoDP(dc, &Start, 1);
+    if(pdcattr->lTextAlign & TA_UPDATECP)
+    {
+        Start.x = pdcattr->ptlCurrent.x;
+        Start.y = pdcattr->ptlCurrent.y;
+    } else {
+        Start.x = XStart;
+        Start.y = YStart;
+        IntLPtoDP(dc, &Start, 1);
+    }
 
     RealXStart = ((LONGLONG)Start.x + dc->ptlDCOrig.x) << 6;
     YStart = Start.y + dc->ptlDCOrig.y;
@@ -3842,6 +3848,11 @@ GreExtTextOutW(
 
         String++;
     }
+
+    if (pdcattr->lTextAlign & TA_UPDATECP) {
+        pdcattr->ptlCurrent.x = DestRect.right - dc->ptlDCOrig.x;
+    }
+
     IntUnLockFreeType;
 
     DC_vFinishBlit(dc, NULL) ;
@@ -3885,7 +3896,7 @@ NtGdiExtTextOutW(
     RECTL SafeRect;
     BYTE LocalBuffer[STACK_TEXT_BUFFER_SIZE];
     PVOID Buffer = LocalBuffer;
-    LPWSTR SafeString = NULL;
+    LPCWSTR SafeString = NULL;
     LPINT SafeDx = NULL;
     ULONG BufSize, StringSize, DxSize = 0;
 
@@ -3922,7 +3933,7 @@ NtGdiExtTextOutW(
         _SEH2_TRY
         {
             /* Put the Dx before the String to assure alignment of 4 */
-            SafeString = (LPWSTR)(((ULONG_PTR)Buffer) + DxSize);
+            SafeString = (LPCWSTR)(((ULONG_PTR)Buffer) + DxSize);
 
             /* Probe and copy the string */
             ProbeForRead(UnsafeString, StringSize, 1);
@@ -4368,102 +4379,6 @@ NtGdiGetCharWidthW(
     return TRUE;
 }
 
-#if 0
-DWORD
-FASTCALL
-GreGetGlyphIndicesW(
-    _In_ HDC hdc,
-    _In_reads_(cwc) LPWSTR pwc,
-    _In_ INT cwc,
-    _Out_writes_opt_(cwc) LPWORD pgi,
-    _In_ DWORD iMode,
-    _In_ DWORD dwUnknown)
-{
-    PDC dc;
-    PDC_ATTR pdcattr;
-    PTEXTOBJ TextObj;
-    PFONTGDI FontGDI;
-    HFONT hFont = 0;
-    OUTLINETEXTMETRICW *potm;
-    INT i;
-    FT_Face face;
-    WCHAR DefChar = 0xffff;
-    PWSTR Buffer = NULL;
-    ULONG Size;
-
-    if ((!pwc) && (!pgi)) return cwc;
-
-    dc = DC_LockDc(hdc);
-    if (!dc)
-    {
-        EngSetLastError(ERROR_INVALID_HANDLE);
-        return GDI_ERROR;
-    }
-    pdcattr = dc->pdcattr;
-    hFont = pdcattr->hlfntNew;
-    TextObj = RealizeFontInit(hFont);
-    DC_UnlockDc(dc);
-    if (!TextObj)
-    {
-        EngSetLastError(ERROR_INVALID_HANDLE);
-        return GDI_ERROR;
-    }
-
-    FontGDI = ObjToGDI(TextObj->Font, FONT);
-    TEXTOBJ_UnlockText(TextObj);
-
-    Buffer = ExAllocatePoolWithTag(PagedPool, cwc*sizeof(WORD), GDITAG_TEXT);
-    if (!Buffer)
-    {
-        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
-        return GDI_ERROR;
-    }
-
-    if (iMode & GGI_MARK_NONEXISTING_GLYPHS) DefChar = 0x001f;  /* Indicate non existence */
-    else
-    {
-        Size = IntGetOutlineTextMetrics(FontGDI, 0, NULL);
-        potm = ExAllocatePoolWithTag(PagedPool, Size, GDITAG_TEXT);
-        if (!potm)
-        {
-            EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
-            cwc = GDI_ERROR;
-            goto ErrorRet;
-        }
-        IntGetOutlineTextMetrics(FontGDI, Size, potm);
-        DefChar = potm->otmTextMetrics.tmDefaultChar; // May need this.
-        ExFreePoolWithTag(potm, GDITAG_TEXT);
-    }
-
-    IntLockFreeType;
-    face = FontGDI->face;
-
-    for (i = 0; i < cwc; i++)
-    {
-        Buffer[i] = FT_Get_Char_Index(face, pwc[i]);
-        if (Buffer[i] == 0)
-        {
-            if (DefChar == 0xffff && FT_IS_SFNT(face))
-            {
-                TT_OS2 *pOS2 = FT_Get_Sfnt_Table(face, ft_sfnt_os2);
-                DefChar = (pOS2->usDefaultChar ? FT_Get_Char_Index(face, pOS2->usDefaultChar) : 0);
-            }
-            Buffer[i] = DefChar;
-        }
-    }
-
-    IntUnLockFreeType;
-
-    if (pgi != NULL)
-    {
-        RtlCopyMemory(pgi, Buffer, cwc * sizeof(WORD));
-    }
-
-ErrorRet:
-    if (Buffer) ExFreePoolWithTag(Buffer, GDITAG_TEXT);
-    return cwc;
-}
-#endif // 0
 
 /*
 * @implemented
@@ -4487,7 +4402,6 @@ NtGdiGetGlyphIndicesW(
     NTSTATUS Status = STATUS_SUCCESS;
     OUTLINETEXTMETRICW *potm;
     INT i;
-    FT_Face face;
     WCHAR DefChar = 0xffff;
     PWSTR Buffer = NULL;
     ULONG Size, pwcSize;
@@ -4506,7 +4420,6 @@ NtGdiGetGlyphIndicesW(
     dc = DC_LockDc(hdc);
     if (!dc)
     {
-        EngSetLastError(ERROR_INVALID_HANDLE);
         return GDI_ERROR;
     }
     pdcattr = dc->pdcattr;
@@ -4515,7 +4428,6 @@ NtGdiGetGlyphIndicesW(
     DC_UnlockDc(dc);
     if (!TextObj)
     {
-        EngSetLastError(ERROR_INVALID_HANDLE);
         return GDI_ERROR;
     }
 
@@ -4525,23 +4437,33 @@ NtGdiGetGlyphIndicesW(
     Buffer = ExAllocatePoolWithTag(PagedPool, cwc*sizeof(WORD), GDITAG_TEXT);
     if (!Buffer)
     {
-        EngSetLastError(ERROR_NOT_ENOUGH_MEMORY);
         return GDI_ERROR;
     }
 
-    if (iMode & GGI_MARK_NONEXISTING_GLYPHS) DefChar = 0x001f;  /* Indicate non existence */
+    if (iMode & GGI_MARK_NONEXISTING_GLYPHS)
+    {
+        DefChar = 0xffff;
+    }
     else
     {
-        Size = IntGetOutlineTextMetrics(FontGDI, 0, NULL);
-        potm = ExAllocatePoolWithTag(PagedPool, Size, GDITAG_TEXT);
-        if (!potm)
+        if (FT_IS_SFNT(FontGDI->face))
         {
-            Status = STATUS_NO_MEMORY;
-            goto ErrorRet;
+            TT_OS2 *pOS2 = FT_Get_Sfnt_Table(FontGDI->face, ft_sfnt_os2);
+            DefChar = (pOS2->usDefaultChar ? FT_Get_Char_Index(FontGDI->face, pOS2->usDefaultChar) : 0);
         }
-        IntGetOutlineTextMetrics(FontGDI, Size, potm);
-        DefChar = potm->otmTextMetrics.tmDefaultChar; // May need this.
-        ExFreePoolWithTag(potm, GDITAG_TEXT);
+        else
+        {
+            Size = IntGetOutlineTextMetrics(FontGDI, 0, NULL);
+            potm = ExAllocatePoolWithTag(PagedPool, Size, GDITAG_TEXT);
+            if (!potm)
+            {
+                cwc = GDI_ERROR;
+                goto ErrorRet;
+            }
+            IntGetOutlineTextMetrics(FontGDI, Size, potm);
+            DefChar = potm->otmTextMetrics.tmDefaultChar;
+            ExFreePoolWithTag(potm, GDITAG_TEXT);
+        }
     }
 
     pwcSize = cwc * sizeof(WCHAR);
@@ -4567,17 +4489,10 @@ NtGdiGetGlyphIndicesW(
     if (!NT_SUCCESS(Status)) goto ErrorRet;
 
     IntLockFreeType;
-    face = FontGDI->face;
-
-    if (DefChar == 0xffff && FT_IS_SFNT(face))
-    {
-        TT_OS2 *pOS2 = FT_Get_Sfnt_Table(face, ft_sfnt_os2);
-        DefChar = (pOS2->usDefaultChar ? FT_Get_Char_Index(face, pOS2->usDefaultChar) : 0);
-    }
 
     for (i = 0; i < cwc; i++)
     {
-        Buffer[i] = FT_Get_Char_Index(face, Safepwc[i]);
+        Buffer[i] = FT_Get_Char_Index(FontGDI->face, Safepwc[i]);
         if (Buffer[i] == 0)
         {
             Buffer[i] = DefChar;
@@ -4604,7 +4519,6 @@ ErrorRet:
         ExFreePoolWithTag(Safepwc, GDITAG_TEXT);
     }
     if (NT_SUCCESS(Status)) return cwc;
-    SetLastNtError(Status);
     return GDI_ERROR;
 }
 

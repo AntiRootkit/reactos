@@ -26,7 +26,7 @@
 /* @makedep: banner.bmp */
 IDB_BANNER BITMAP "res/banner.bmp"
 
-#include <reactos/manifest_dll.rc>
+#include <reactos/manifest_hosted.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)
@@ -54,6 +54,9 @@ IDB_BANNER BITMAP "res/banner.bmp"
 #endif
 #ifdef LANGUAGE_IT_IT
     #include "lang/credui_It.rc"
+#endif
+#ifdef LANGUAGE_JA_JP
+    #include "lang/credui_Ja.rc"
 #endif
 #ifdef LANGUAGE_KO_KR
     #include "lang/credui_Ko.rc"

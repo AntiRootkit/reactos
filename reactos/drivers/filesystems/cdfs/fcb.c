@@ -97,6 +97,7 @@ CdfsCreateFCB(PCWSTR FileName)
     Fcb->RFCB.Resource = &Fcb->MainResource;
     Fcb->RFCB.IsFastIoPossible = FastIoIsNotPossible;
     InitializeListHead(&Fcb->ShortNameList);
+    FsRtlInitializeFileLock(&Fcb->FileLock, NULL, NULL);
 
     return(Fcb);
 }
@@ -107,6 +108,7 @@ CdfsDestroyFCB(PFCB Fcb)
 {
     PLIST_ENTRY Entry;
 
+    FsRtlUninitializeFileLock(&Fcb->FileLock);
     ExDeleteResourceLite(&Fcb->PagingIoResource);
     ExDeleteResourceLite(&Fcb->MainResource);
 
@@ -487,16 +489,16 @@ CdfsDirFindFile(PDEVICE_EXTENSION DeviceExt,
     DirSize = DirectoryFcb->Entry.DataLengthL;
     StreamOffset.QuadPart = (LONGLONG)DirectoryFcb->Entry.ExtentLocationL * (LONGLONG)BLOCKSIZE;
 
-    if (!CcMapData(DeviceExt->StreamFileObject,
-        &StreamOffset,
-        BLOCKSIZE,
-        TRUE,
-        &Context,
-        &Block))
+    _SEH2_TRY
+    {
+        CcMapData(DeviceExt->StreamFileObject, &StreamOffset, BLOCKSIZE, MAP_WAIT, &Context, &Block);
+    }
+    _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
     {
         DPRINT("CcMapData() failed\n");
-        return STATUS_UNSUCCESSFUL;
+        _SEH2_YIELD(return _SEH2_GetExceptionCode());
     }
+    _SEH2_END;
 
     Offset = 0;
     BlockOffset = 0;
@@ -573,15 +575,17 @@ CdfsDirFindFile(PDEVICE_EXTENSION DeviceExt,
             Offset = ROUND_UP(Offset, BLOCKSIZE);
             BlockOffset = 0;
 
-            if (!CcMapData(DeviceExt->StreamFileObject,
-                &StreamOffset,
-                BLOCKSIZE, TRUE,
-                &Context, &Block))
+            _SEH2_TRY
+            {
+                CcMapData(DeviceExt->StreamFileObject, &StreamOffset, BLOCKSIZE, MAP_WAIT, &Context, &Block);
+            }
+            _SEH2_EXCEPT(EXCEPTION_EXECUTE_HANDLER)
             {
                 DPRINT("CcMapData() failed\n");
                 RtlFreeUnicodeString(&FileToFindUpcase);
-                return(STATUS_UNSUCCESSFUL);
+                _SEH2_YIELD(return _SEH2_GetExceptionCode());
             }
+            _SEH2_END;
             Record = (PDIR_RECORD)((ULONG_PTR)Block + BlockOffset);
         }
 
@@ -636,7 +640,7 @@ CdfsGetFCBForFile(PDEVICE_EXTENSION Vcb,
     }
     parentFCB = NULL;
 
-    /* Parse filename and check each path element for existance and access */
+    /* Parse filename and check each path element for existence and access */
     while (CdfsGetNextPathElement(currentElement) != 0)
     {
         /*  Skip blank directory levels */

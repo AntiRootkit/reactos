@@ -2,9 +2,9 @@
 
 #include "resource.h"
 
-#define REACTOS_STR_FILE_DESCRIPTION  "ReactOS Virtual Drive Utility Version 1.0"
-#define REACTOS_STR_INTERNAL_NAME     "subst"
-#define REACTOS_STR_ORIGINAL_FILENAME "subst.exe"
+#define REACTOS_STR_FILE_DESCRIPTION    "ReactOS Drive Letter Mapper Utility"
+#define REACTOS_STR_INTERNAL_NAME       "subst"
+#define REACTOS_STR_ORIGINAL_FILENAME   "subst.exe"
 #include <reactos/version.rc>
 
 /* UTF-8 */
@@ -48,4 +48,7 @@
 #endif
 #ifdef LANGUAGE_ZH_CN
     #include "lang/zh-CN.rc"
+#endif
+#ifdef LANGUAGE_ZH_TW
+    #include "lang/zh-TW.rc"
 #endif

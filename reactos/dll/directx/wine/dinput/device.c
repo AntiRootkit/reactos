@@ -512,7 +512,7 @@ failed:
     return DIERR_OUTOFMEMORY;
 }
 
-/* find an object by it's offset in a data format */
+/* find an object by its offset in a data format */
 static int offset_to_object(const DataFormat *df, int offset)
 {
     int i;
@@ -769,6 +769,7 @@ HRESULT _set_action_map(LPDIRECTINPUTDEVICE8W iface, LPDIACTIONFORMATW lpdiaf, L
     DIOBJECTDATAFORMAT *obj_df = NULL;
     DIPROPDWORD dp;
     DIPROPRANGE dpr;
+    DIPROPSTRING dps;
     WCHAR username[MAX_PATH];
     DWORD username_size = MAX_PATH;
     int i, action = 0, num_actions = 0;
@@ -848,6 +849,16 @@ HRESULT _set_action_map(LPDIRECTINPUTDEVICE8W iface, LPDIACTIONFORMATW lpdiaf, L
         GetUserNameW(username, &username_size);
     else
         lstrcpynW(username, lpszUserName, MAX_PATH);
+
+    dps.diph.dwSize = sizeof(dps);
+    dps.diph.dwHeaderSize = sizeof(DIPROPHEADER);
+    dps.diph.dwObj = 0;
+    dps.diph.dwHow = DIPH_DEVICE;
+    if (dwFlags & DIDSAM_NOUSER)
+        dps.wsz[0] = '\0';
+    else
+        lstrcpynW(dps.wsz, username, sizeof(dps.wsz)/sizeof(WCHAR));
+    IDirectInputDevice8_SetProperty(iface, DIPROP_USERNAME, &dps.diph);
 
     /* Save the settings to disk */
     save_mapping_settings(iface, lpdiaf, username);
@@ -1014,10 +1025,10 @@ HRESULT WINAPI IDirectInputDevice2WImpl_SetCooperativeLevel(LPDIRECTINPUTDEVICE8
 
     if (hwnd && GetWindowLongW(hwnd, GWL_STYLE) & WS_CHILD) return E_HANDLE;
 
-    if (dwflags == (DISCL_NONEXCLUSIVE | DISCL_BACKGROUND))
+    if (!hwnd && dwflags == (DISCL_NONEXCLUSIVE | DISCL_BACKGROUND))
         hwnd = GetDesktopWindow();
 
-    if (!hwnd) return E_HANDLE;
+    if (!IsWindow(hwnd)) return E_HANDLE;
 
     /* For security reasons native does not allow exclusive background level
        for mouse and keyboard only */
@@ -1237,6 +1248,15 @@ HRESULT WINAPI IDirectInputDevice2WImpl_GetProperty(LPDIRECTINPUTDEVICE8W iface,
             TRACE("buffersize = %d\n", pd->dwData);
             break;
         }
+        case (DWORD_PTR) DIPROP_USERNAME:
+        {
+            LPDIPROPSTRING ps = (LPDIPROPSTRING)pdiph;
+
+            if (pdiph->dwSize != sizeof(DIPROPSTRING)) return DIERR_INVALIDPARAM;
+
+            lstrcpynW(ps->wsz, This->username, sizeof(ps->wsz)/sizeof(WCHAR));
+            break;
+        }
         case (DWORD_PTR) DIPROP_VIDPID:
             FIXME("DIPROP_VIDPID not implemented\n");
             return DIERR_UNSUPPORTED;
@@ -1308,6 +1328,15 @@ HRESULT WINAPI IDirectInputDevice2WImpl_SetProperty(
             This->queue_len  = pd->dwData;
 
             LeaveCriticalSection(&This->crit);
+            break;
+        }
+        case (DWORD_PTR) DIPROP_USERNAME:
+        {
+            LPCDIPROPSTRING ps = (LPCDIPROPSTRING)pdiph;
+
+            if (pdiph->dwSize != sizeof(DIPROPSTRING)) return DIERR_INVALIDPARAM;
+
+            lstrcpynW(This->username, ps->wsz, sizeof(This->username)/sizeof(WCHAR));
             break;
         }
         default:

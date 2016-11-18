@@ -1382,7 +1382,7 @@ static HRESULT WINAPI BindInfo_GetBindString(IInternetBindInfo *iface, ULONG ulS
         CHECK_EXPECT(GetBindString_USER_AGENT);
         ok(cEl == 1, "cEl=%d, expected 1\n", cEl);
         if(pcElFetched) {
-            ok(*pcElFetched == 0, "*pcElFetch=%d, expectd 0\n", *pcElFetched);
+            ok(*pcElFetched == 0, "*pcElFetch=%d, expected 0\n", *pcElFetched);
             *pcElFetched = 1;
         }
         if(ppwzStr) {
@@ -1394,14 +1394,14 @@ static HRESULT WINAPI BindInfo_GetBindString(IInternetBindInfo *iface, ULONG ulS
         CHECK_EXPECT(GetBindString_POST_COOKIE);
         ok(cEl == 1, "cEl=%d, expected 1\n", cEl);
         if(pcElFetched)
-            ok(*pcElFetched == 0, "*pcElFetch=%d, expectd 0\n", *pcElFetched);
+            ok(*pcElFetched == 0, "*pcElFetch=%d, expected 0\n", *pcElFetched);
         return S_OK;
     case BINDSTRING_URL: {
         DWORD size;
 
         CHECK_EXPECT(GetBindString_URL);
         ok(cEl == 1, "cEl=%d, expected 1\n", cEl);
-        ok(*pcElFetched == 0, "*pcElFetch=%d, expectd 0\n", *pcElFetched);
+        ok(*pcElFetched == 0, "*pcElFetch=%d, expected 0\n", *pcElFetched);
         *pcElFetched = 1;
 
         size = (lstrlenW(binding_urls[tested_protocol])+1)*sizeof(WCHAR);
@@ -2585,9 +2585,7 @@ static void test_file_protocol_url(LPCWSTR url)
             hres = IInternetProtocol_UnlockRequest(protocol);
             ok(hres == S_OK, "UnlockRequest failed: %08x\n", hres);
             hres = IInternetProtocol_Read(protocol, buf, 2, &cb);
-            if(file_with_hash) /* FIXME: An effect of UnlockRequest call? */
-                todo_wine ok(hres == S_OK, "Read failed: %08x\n", hres);
-            else
+            todo_wine_if(file_with_hash) /* FIXME: An effect of UnlockRequest call? */
                 ok(hres == S_OK, "Read failed: %08x\n", hres);
             hres = IInternetProtocol_Terminate(protocol, 0);
             ok(hres == S_OK, "Terminate failed: %08x\n", hres);

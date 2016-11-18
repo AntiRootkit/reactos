@@ -46,6 +46,7 @@ static CHAR string1[MAX_PATH], string2[MAX_PATH], string3[MAX_PATH];
        format, string1, string2, string3);
 
 static HMODULE hmoduleRichEdit;
+static BOOL is_lang_japanese;
 
 static HWND new_window(LPCSTR lpClassName, DWORD dwStyle, HWND parent) {
   HWND hwnd;
@@ -486,6 +487,28 @@ static void test_EM_LINELENGTH(void)
         offset_test[i][0], result, offset_test[i][1]);
   }
 
+  /* Test with multibyte character */
+  if (!is_lang_japanese)
+    skip("Skip multibyte character tests on non-Japanese platform\n");
+  else
+  {
+    const char *text1 =
+          "wine\n"
+          "richedit\x8e\xf0\n"
+          "wine";
+    int offset_test1[3][2] = {
+           {0, 4},  /* Line 1: |wine\n */
+           {5, 9},  /* Line 2: |richedit\x8e\xf0\n */
+           {15, 4}, /* Line 3: |wine */
+    };
+    SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)text1);
+    for (i = 0; i < sizeof(offset_test1)/sizeof(offset_test1[0]); i++) {
+      result = SendMessageA(hwndRichEdit, EM_LINELENGTH, offset_test1[i][0], 0);
+      ok(result == offset_test1[i][1], "Length of line at offset %d is %ld, expected %d\n",
+         offset_test1[i][0], result, offset_test1[i][1]);
+    }
+  }
+
   DestroyWindow(hwndRichEdit);
 }
 
@@ -578,6 +601,7 @@ static void test_EM_POSFROMCHAR(void)
   POINTL pt;
   LOCALESIGNATURE sig;
   BOOL rtl;
+  PARAFORMAT2 fmt;
   static const char text[] = "aa\n"
       "this is a long line of text that should be longer than the "
       "control's width\n"
@@ -703,6 +727,18 @@ static void test_EM_POSFROMCHAR(void)
   /* Try a negative position. */
   SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pt, -1);
   ok(pt.x == 1, "pt.x = %d\n", pt.x);
+
+  /* test negative indentation */
+  SendMessageA(hwndRichEdit, WM_SETTEXT, 0,
+          (LPARAM)"{\\rtf1\\pard\\fi-200\\li-200\\f1 TestSomeText\\par}");
+  SendMessageA(hwndRichEdit, EM_POSFROMCHAR, (WPARAM)&pt, 0);
+  ok(pt.x == 1, "pt.x = %d\n", pt.x);
+
+  fmt.cbSize = sizeof(fmt);
+  SendMessageA(hwndRichEdit, EM_GETPARAFORMAT, 0, (LPARAM)&fmt);
+  ok(fmt.dxStartIndent == -400, "got %d\n", fmt.dxStartIndent);
+  ok(fmt.dxOffset == 200, "got %d\n", fmt.dxOffset);
+  ok(fmt.wAlignment == PFA_LEFT, "got %d\n", fmt.wAlignment);
 
   DestroyWindow(hwndRichEdit);
 }
@@ -1519,6 +1555,19 @@ static void test_EM_GETTEXTRANGE(void)
     ok(result == strlen(text2), "EM_GETTEXTRANGE returned %ld\n", result);
     ok(!strcmp(text2, buffer), "EM_GETTEXTRANGE filled %s\n", buffer);
 
+    /* Test with multibyte character */
+    if (!is_lang_japanese)
+        skip("Skip multibyte character tests on non-Japanese platform\n");
+    else
+    {
+        SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"abcdef\x8e\xf0ghijk");
+        textRange.chrg.cpMin = 4;
+        textRange.chrg.cpMax = 8;
+        result = SendMessageA(hwndRichEdit, EM_GETTEXTRANGE, 0, (LPARAM)&textRange);
+        todo_wine ok(result == 5, "EM_GETTEXTRANGE returned %ld\n", result);
+        todo_wine ok(!strcmp("ef\x8e\xf0g", buffer), "EM_GETTEXTRANGE filled %s\n", buffer);
+    }
+
     DestroyWindow(hwndRichEdit);
 }
 
@@ -1535,15 +1584,27 @@ static void test_EM_GETSELTEXT(void)
 
     SendMessageA(hwndRichEdit, EM_SETSEL, 4, 11);
     result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, 0, (LPARAM)buffer);
-    ok(result == 7, "EM_GETTEXTRANGE returned %ld\n", result);
-    ok(!strcmp(expect, buffer), "EM_GETTEXTRANGE filled %s\n", buffer);
+    ok(result == 7, "EM_GETSELTEXT returned %ld\n", result);
+    ok(!strcmp(expect, buffer), "EM_GETSELTEXT filled %s\n", buffer);
 
     SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)text2);
 
     SendMessageA(hwndRichEdit, EM_SETSEL, 4, 11);
     result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, 0, (LPARAM)buffer);
-    ok(result == 7, "EM_GETTEXTRANGE returned %ld\n", result);
-    ok(!strcmp(expect, buffer), "EM_GETTEXTRANGE filled %s\n", buffer);
+    ok(result == 7, "EM_GETSELTEXT returned %ld\n", result);
+    ok(!strcmp(expect, buffer), "EM_GETSELTEXT filled %s\n", buffer);
+
+    /* Test with multibyte character */
+    if (!is_lang_japanese)
+        skip("Skip multibyte character tests on non-Japanese platform\n");
+    else
+    {
+        SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"abcdef\x8e\xf0ghijk");
+        SendMessageA(hwndRichEdit, EM_SETSEL, 4, 8);
+        result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, 0, (LPARAM)buffer);
+        todo_wine ok(result == 5, "EM_GETSELTEXT returned %ld\n", result);
+        todo_wine ok(!strcmp("ef\x8e\xf0g", buffer), "EM_GETSELTEXT filled %s\n", buffer);
+    }
 
     DestroyWindow(hwndRichEdit);
 }
@@ -1720,6 +1781,7 @@ static void test_EM_AUTOURLDETECT(void)
     "This is some text with #X on it",
     "This is some text with @X on it",
     "This is some text with \\X on it",
+    "This is some text with _X on it",
   };
   /* All of these cause the URL detection to be extended by one more byte,
      thus demonstrating that the tested character is considered as part
@@ -1733,6 +1795,33 @@ static void test_EM_AUTOURLDETECT(void)
     "This is some text with X# on it",
     "This is some text with X@ on it",
     "This is some text with X\\ on it",
+    "This is some text with X_ on it",
+  };
+  /* These delims act as neutral breaks.  Whether the url is ended
+     or not depends on the next non-neutral character.  We'll test
+     with Y unchanged, in which case the url should include the
+     deliminator and the Y.  We'll also test with the Y changed
+     to a space, in which case the url stops before the
+     deliminator. */
+  const char * templates_neutral_delim[] = {
+    "This is some text with X-Y on it",
+    "This is some text with X--Y on it",
+    "This is some text with X!Y on it",
+    "This is some text with X[Y on it",
+    "This is some text with X]Y on it",
+    "This is some text with X{Y on it",
+    "This is some text with X}Y on it",
+    "This is some text with X(Y on it",
+    "This is some text with X)Y on it",
+    "This is some text with X\"Y on it",
+    "This is some text with X;Y on it",
+    "This is some text with X:Y on it",
+    "This is some text with X'Y on it",
+    "This is some text with X?Y on it",
+    "This is some text with X<Y on it",
+    "This is some text with X>Y on it",
+    "This is some text with X.Y on it",
+    "This is some text with X,Y on it",
   };
   char buffer[1024];
 
@@ -1911,6 +2000,55 @@ static void test_EM_AUTOURLDETECT(void)
             "CFE_LINK incorrectly set in (%d-%d), text: %s\n", end_offset +2, end_offset +3, buffer);
         }
       }
+    }
+
+    for (j = 0; j < sizeof(templates_neutral_delim) / sizeof(const char *); j++) {
+      char * at_pos, * end_pos;
+      int at_offset;
+      int end_offset;
+
+      if (!urls[i].is_url) continue;
+
+      at_pos = strchr(templates_neutral_delim[j], 'X');
+      at_offset = at_pos - templates_neutral_delim[j];
+      memcpy(buffer, templates_neutral_delim[j], at_offset);
+      buffer[at_offset] = '\0';
+      strcat(buffer, urls[i].text);
+      strcat(buffer, templates_neutral_delim[j] + at_offset + 1);
+
+      end_pos = strchr(buffer, 'Y');
+      end_offset = end_pos - buffer;
+
+      SendMessageA(hwndRichEdit, EM_AUTOURLDETECT, TRUE, 0);
+      SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)buffer);
+
+      /* This assumes no templates start with the URL itself, and that they
+         have at least two characters before the URL text */
+      ok(!check_CFE_LINK_selection(hwndRichEdit, 0, 1),
+         "CFE_LINK incorrectly set in (%d-%d), text: %s\n", 0, 1, buffer);
+      ok(!check_CFE_LINK_selection(hwndRichEdit, at_offset -2, at_offset -1),
+         "CFE_LINK incorrectly set in (%d-%d), text: %s\n", at_offset -2, at_offset -1, buffer);
+      ok(!check_CFE_LINK_selection(hwndRichEdit, at_offset -1, at_offset),
+         "CFE_LINK incorrectly set in (%d-%d), text: %s\n", at_offset -1, at_offset, buffer);
+
+      ok(check_CFE_LINK_selection(hwndRichEdit, at_offset, at_offset +1),
+         "CFE_LINK not set in (%d-%d), text: %s\n", at_offset, at_offset +1, buffer);
+      ok(check_CFE_LINK_selection(hwndRichEdit, end_offset -1, end_offset),
+         "CFE_LINK not set in (%d-%d), text: %s\n", end_offset -1, end_offset, buffer);
+      ok(check_CFE_LINK_selection(hwndRichEdit, end_offset, end_offset +1),
+         "CFE_LINK not set in (%d-%d), text: %s\n", end_offset, end_offset +1, buffer);
+
+      *end_pos = ' ';
+
+      SendMessageA(hwndRichEdit, EM_AUTOURLDETECT, TRUE, 0);
+      SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)buffer);
+
+      ok(check_CFE_LINK_selection(hwndRichEdit, at_offset, at_offset +1),
+         "CFE_LINK not set in (%d-%d), text: %s\n", at_offset, at_offset +1, buffer);
+      ok(!check_CFE_LINK_selection(hwndRichEdit, end_offset -1, end_offset),
+         "CFE_LINK set in (%d-%d), text: %s\n", end_offset -1, end_offset, buffer);
+      ok(!check_CFE_LINK_selection(hwndRichEdit, end_offset, end_offset +1),
+         "CFE_LINK set in (%d-%d), text: %s\n", end_offset, end_offset +1, buffer);
     }
 
     DestroyWindow(hwndRichEdit);
@@ -3233,11 +3371,12 @@ static void test_EM_SETUNDOLIMIT(void)
   
   SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"x");
   cr.cpMin = 0;
-  cr.cpMax = 1;
+  cr.cpMax = -1;
+  SendMessageA(hwndRichEdit, EM_EXSETSEL, 0, (LPARAM)&cr);
+
   SendMessageA(hwndRichEdit, WM_COPY, 0, 0);
     /*Load "x" into the clipboard. Paste is an easy, undo'able operation.
       also, multiple pastes don't combine like WM_CHAR would */
-  SendMessageA(hwndRichEdit, EM_EXSETSEL, 0, (LPARAM)&cr);
 
   /* first case - check the default */
   SendMessageA(hwndRichEdit,EM_EMPTYUNDOBUFFER, 0,0);
@@ -3676,8 +3815,9 @@ static void test_EM_SETTEXTEX(void)
 
   setText.codepage = CP_ACP;
   setText.flags = ST_SELECTION;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText,
-              (LPARAM)"{\\rtf 1\\par 2\\par 3\\par 4\\par 5\\par 6\\par 7\\par 8\\par 9\\par}");
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText,
+                        (LPARAM)"{\\rtf 1\\par 2\\par 3\\par 4\\par 5\\par 6\\par 7\\par 8\\par 9\\par}");
+  todo_wine ok(result == 18, "EM_SETTEXTEX returned %d, expected 18\n", result);
   si.cbSize = sizeof(si);
   si.fMask = SIF_ALL;
   GetScrollInfo(hwndRichEdit, SB_VERT, &si);
@@ -3692,8 +3832,9 @@ static void test_EM_SETTEXTEX(void)
   hwndRichEdit = new_richedit(NULL);
   setText.codepage = CP_ACP;
   setText.flags = ST_SELECTION;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText,
-              (LPARAM)"{\\rtf 1\\par 2\\par 3\\par 4\\par 5\\par 6\\par 7\\par 8\\par 9\\par}");
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText,
+                        (LPARAM)"{\\rtf 1\\par 2\\par 3\\par 4\\par 5\\par 6\\par 7\\par 8\\par 9\\par}");
+  todo_wine ok(result == 18, "EM_SETTEXTEX returned %d, expected 18\n", result);
   si.cbSize = sizeof(si);
   si.fMask = SIF_ALL;
   GetScrollInfo(hwndRichEdit, SB_VERT, &si);
@@ -3706,8 +3847,9 @@ static void test_EM_SETTEXTEX(void)
    * but this time it is because the selection is at the beginning. */
   setText.codepage = CP_ACP;
   setText.flags = ST_DEFAULT;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText,
-              (LPARAM)"{\\rtf 1\\par 2\\par 3\\par 4\\par 5\\par 6\\par 7\\par 8\\par 9\\par}");
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText,
+                        (LPARAM)"{\\rtf 1\\par 2\\par 3\\par 4\\par 5\\par 6\\par 7\\par 8\\par 9\\par}");
+  ok(result == 1, "EM_SETTEXTEX returned %d, expected 1\n", result);
   si.cbSize = sizeof(si);
   si.fMask = SIF_ALL;
   GetScrollInfo(hwndRichEdit, SB_VERT, &si);
@@ -3724,7 +3866,8 @@ static void test_EM_SETTEXTEX(void)
   getText.lpUsedDefChar = NULL;
 
   setText.flags = 0;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem1);
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem1);
+  ok(result == 1, "EM_SETTEXTEX returned %d, expected 1\n", result);
   SendMessageA(hwndRichEdit, EM_GETTEXTEX, (WPARAM)&getText, (LPARAM)buf);
   ok(lstrcmpW(buf, TestItem1) == 0,
       "EM_GETTEXTEX results not what was set by EM_SETTEXTEX\n");
@@ -3739,7 +3882,8 @@ static void test_EM_SETTEXTEX(void)
   getText.lpDefaultChar = NULL;
   getText.lpUsedDefChar = NULL;
   setText.flags = 0;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem2);
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem2);
+  ok(result == 1, "EM_SETTEXTEX returned %d, expected 1\n", result);
   SendMessageA(hwndRichEdit, EM_GETTEXTEX, (WPARAM)&getText, (LPARAM)buf);
   ok(lstrcmpW(buf, TestItem2) == 0,
       "EM_GETTEXTEX results not what was set by EM_SETTEXTEX\n");
@@ -3755,7 +3899,7 @@ static void test_EM_SETTEXTEX(void)
   getText.flags = GT_DEFAULT;
   getText.lpDefaultChar = NULL;
   getText.lpUsedDefChar = NULL;
-  memset(buf, 0, MAX_BUF_LEN);
+  memset(buf, 0, sizeof(buf));
   SendMessageA(hwndRichEdit, EM_GETTEXTEX, (WPARAM)&getText, (LPARAM)buf);
   ok(lstrcmpW(buf, TestItem2) == 0,
       "EM_GETTEXTEX results not what was set by EM_SETTEXTEX\n");
@@ -3770,7 +3914,7 @@ static void test_EM_SETTEXTEX(void)
   getText.flags = GT_USECRLF;   /* <-- asking for CR -> CRLF conversion */
   getText.lpDefaultChar = NULL;
   getText.lpUsedDefChar = NULL;
-  memset(buf, 0, MAX_BUF_LEN);
+  memset(buf, 0, sizeof(buf));
   SendMessageA(hwndRichEdit, EM_GETTEXTEX, (WPARAM)&getText, (LPARAM)buf);
   ok(lstrcmpW(buf, TestItem1) == 0,
       "EM_GETTEXTEX results not what was set by EM_SETTEXTEX\n");
@@ -3784,7 +3928,8 @@ static void test_EM_SETTEXTEX(void)
   getText.lpDefaultChar = NULL;
   getText.lpUsedDefChar = NULL;
   setText.flags = 0;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem3);
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem3);
+  ok(result == 1, "EM_SETTEXTEX returned %d, expected 1\n", result);
   SendMessageA(hwndRichEdit, EM_GETTEXTEX, (WPARAM)&getText, (LPARAM)buf);
   ok(lstrcmpW(buf, TestItem3_after) == 0,
       "EM_SETTEXTEX did not convert properly\n");
@@ -3797,7 +3942,8 @@ static void test_EM_SETTEXTEX(void)
   getText.lpDefaultChar = NULL;
   getText.lpUsedDefChar = NULL;
   setText.flags = 0;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem3alt);
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem3alt);
+  ok(result == 1, "EM_SETTEXTEX returned %d, expected 1\n", result);
   SendMessageA(hwndRichEdit, EM_GETTEXTEX, (WPARAM)&getText, (LPARAM)buf);
   ok(lstrcmpW(buf, TestItem3_after) == 0,
       "EM_SETTEXTEX did not convert properly\n");
@@ -3810,7 +3956,8 @@ static void test_EM_SETTEXTEX(void)
   getText.lpDefaultChar = NULL;
   getText.lpUsedDefChar = NULL;
   setText.flags = 0;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem4);
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem4);
+  ok(result == 1, "EM_SETTEXTEX returned %d, expected 1\n", result);
   SendMessageA(hwndRichEdit, EM_GETTEXTEX, (WPARAM)&getText, (LPARAM)buf);
   ok(lstrcmpW(buf, TestItem4_after) == 0,
       "EM_SETTEXTEX did not convert properly\n");
@@ -3825,7 +3972,8 @@ static void test_EM_SETTEXTEX(void)
 
   /* put some text back: !ST_SELECTION && Unicode && !\rtf */
   setText.flags = 0;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem1);
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem1);
+  ok(result == 1, "EM_SETTEXTEX returned %d, expected 1\n", result);
   /* select some text */
   cr.cpMax = 1;
   cr.cpMin = 3;
@@ -3840,7 +3988,8 @@ static void test_EM_SETTEXTEX(void)
   
   /* put some text back: !ST_SELECTION && Unicode && !\rtf */
   setText.flags = 0;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem1);
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)TestItem1);
+  ok(result == 1, "EM_SETTEXTEX returned %d, expected 1\n", result);
   /* select some text */
   cr.cpMax = 1;
   cr.cpMin = 3;
@@ -3878,7 +4027,8 @@ static void test_EM_SETTEXTEX(void)
   getText.lpUsedDefChar = NULL;
 
   setText.flags = 0;
-  SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)buf);
+  result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)buf);
+  ok(result == 1, "EM_SETTEXTEX returned %d, expected 1\n", result);
   SendMessageA(hwndRichEdit, EM_GETTEXTEX, (WPARAM)&getText, (LPARAM)buf);
   ok(lstrcmpW(buf, TestItem1) == 0,
       "EM_GETTEXTEX results not what was set by EM_SETTEXTEX\n");
@@ -3996,6 +4146,41 @@ static void test_EM_SETTEXTEX(void)
   ok(result == 15, "EM_SETTEXTEX: Test UTF8 with BOM returned %d, expected 15\n", result);
   result = strcmp(bufACP, "TestUTF8WithBOM");
   ok(result == 0, "EM_SETTEXTEX: Test UTF8 with BOM set wrong text: Result: %s\n", bufACP);
+
+  /* Test multibyte character */
+  if (!is_lang_japanese)
+    skip("Skip multibyte character tests on non-Japanese platform\n");
+  else
+  {
+    SendMessageA(hwndRichEdit, EM_SETSEL, 0, -1);
+    setText.flags = ST_SELECTION;
+    setText.codepage = CP_ACP;
+    result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)"abc\x8e\xf0");
+    todo_wine ok(result == 5, "EM_SETTEXTEX incorrectly returned %d, expected 5\n", result);
+    result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)bufACP);
+    ok(result == 5, "WM_GETTEXT incorrectly returned %d, expected 5\n", result);
+    ok(!strcmp(bufACP, "abc\x8e\xf0"),
+       "EM_SETTEXTEX: Test multibyte character set wrong text: Result: %s\n", bufACP);
+
+    setText.flags = ST_DEFAULT;
+    setText.codepage = CP_ACP;
+    result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)"abc\x8e\xf0");
+    ok(result == 1, "EM_SETTEXTEX incorrectly returned %d, expected 1\n", result);
+    result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)bufACP);
+    ok(result == 5, "WM_GETTEXT incorrectly returned %d, expected 5\n", result);
+    ok(!strcmp(bufACP, "abc\x8e\xf0"),
+       "EM_SETTEXTEX: Test multibyte character set wrong text: Result: %s\n", bufACP);
+
+    SendMessageA(hwndRichEdit, EM_SETSEL, 0, -1);
+    setText.flags = ST_SELECTION;
+    setText.codepage = CP_ACP;
+    result = SendMessageA(hwndRichEdit, EM_SETTEXTEX, (WPARAM)&setText, (LPARAM)"{\\rtf abc\x8e\xf0}");
+    todo_wine ok(result == 4, "EM_SETTEXTEX incorrectly returned %d, expected 4\n", result);
+    result = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)bufACP);
+    ok(result == 5, "WM_GETTEXT incorrectly returned %d, expected 5\n", result);
+    todo_wine ok(!strcmp(bufACP, "abc\x8e\xf0"),
+                 "EM_SETTEXTEX: Test multibyte character set wrong text: Result: %s\n", bufACP);
+  }
 
   DestroyWindow(hwndRichEdit);
 }
@@ -4484,13 +4669,9 @@ static void check_EM_EXSETSEL(HWND hwnd, const struct exsetsel_s *setsel, int id
 
     SendMessageA(hwnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
 
-    if (setsel->todo) {
-        todo_wine {
-            ok(start == setsel->expected_getsel_start && end == setsel->expected_getsel_end, "EM_EXSETSEL(%d): expected (%d,%d) actual:(%d,%d)\n", id, setsel->expected_getsel_start, setsel->expected_getsel_end, start, end);
-        }
-    } else {
-        ok(start == setsel->expected_getsel_start && end == setsel->expected_getsel_end, "EM_EXSETSEL(%d): expected (%d,%d) actual:(%d,%d)\n", id, setsel->expected_getsel_start, setsel->expected_getsel_end, start, end);
-    }
+    todo_wine_if (setsel->todo)
+        ok(start == setsel->expected_getsel_start && end == setsel->expected_getsel_end, "EM_EXSETSEL(%d): expected (%d,%d) actual:(%d,%d)\n",
+            id, setsel->expected_getsel_start, setsel->expected_getsel_end, start, end);
 }
 
 static void test_EM_EXSETSEL(void)
@@ -4508,6 +4689,27 @@ static void test_EM_EXSETSEL(void)
         check_EM_EXSETSEL(hwndRichEdit, &exsetsel_tests[i], i);
     }
 
+    if (!is_lang_japanese)
+        skip("Skip multibyte character tests on non-Japanese platform\n");
+    else
+    {
+        CHARRANGE cr;
+        char bufA[MAX_BUF_LEN] = {0};
+        LRESULT result;
+
+        /* Test with multibyte character */
+        SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"abcdef\x8e\xf0ghijk");
+        /*                                                 012345     6  78901 */
+        cr.cpMin = 4, cr.cpMax = 8;
+        result =  SendMessageA(hwndRichEdit, EM_EXSETSEL, 0, (LPARAM)&cr);
+        ok(result == 8, "EM_EXSETSEL return %ld expected 8\n", result);
+        result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, sizeof(bufA), (LPARAM)bufA);
+        ok(!strcmp(bufA, "ef\x8e\xf0g"), "EM_GETSELTEXT return incorrect string\n");
+        SendMessageA(hwndRichEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
+        ok(cr.cpMin == 4, "Selection start incorrectly: %d expected 4\n", cr.cpMin);
+        ok(cr.cpMax == 8, "Selection end incorrectly: %d expected 8\n", cr.cpMax);
+    }
+
     DestroyWindow(hwndRichEdit);
 }
 
@@ -4521,18 +4723,14 @@ static void check_EM_SETSEL(HWND hwnd, const struct exsetsel_s *setsel, int id) 
 
     SendMessageA(hwnd, EM_GETSEL, (WPARAM)&start, (LPARAM)&end);
 
-    if (setsel->todo) {
-        todo_wine {
-            ok(start == setsel->expected_getsel_start && end == setsel->expected_getsel_end, "EM_SETSEL(%d): expected (%d,%d) actual:(%d,%d)\n", id, setsel->expected_getsel_start, setsel->expected_getsel_end, start, end);
-        }
-    } else {
-        ok(start == setsel->expected_getsel_start && end == setsel->expected_getsel_end, "EM_SETSEL(%d): expected (%d,%d) actual:(%d,%d)\n", id, setsel->expected_getsel_start, setsel->expected_getsel_end, start, end);
-    }
+    todo_wine_if (setsel->todo)
+        ok(start == setsel->expected_getsel_start && end == setsel->expected_getsel_end, "EM_SETSEL(%d): expected (%d,%d) actual:(%d,%d)\n",
+            id, setsel->expected_getsel_start, setsel->expected_getsel_end, start, end);
 }
 
 static void test_EM_SETSEL(void)
 {
-    char buffA[32];
+    char buffA[32] = {0};
     HWND hwndRichEdit = new_richedit(NULL);
     int i;
     const int num_tests = sizeof(exsetsel_tests)/sizeof(struct exsetsel_s);
@@ -4551,6 +4749,25 @@ static void test_EM_SETSEL(void)
     SendMessageA(hwndRichEdit, EM_GETSELTEXT, 0, (LPARAM)buffA);
     ok(buffA[0] == 0, "selection text %s\n", buffA);
 
+    if (!is_lang_japanese)
+        skip("Skip multibyte character tests on non-Japanese platform\n");
+    else
+    {
+        int sel_start, sel_end;
+        LRESULT result;
+
+        /* Test with multibyte character */
+        SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"abcdef\x8e\xf0ghijk");
+        /*                                                 012345     6  78901 */
+        result =  SendMessageA(hwndRichEdit, EM_SETSEL, 4, 8);
+        ok(result == 8, "EM_SETSEL return %ld expected 8\n", result);
+        result = SendMessageA(hwndRichEdit, EM_GETSELTEXT, sizeof(buffA), (LPARAM)buffA);
+        ok(!strcmp(buffA, "ef\x8e\xf0g"), "EM_GETSELTEXT return incorrect string\n");
+        result = SendMessageA(hwndRichEdit, EM_GETSEL, (WPARAM)&sel_start, (LPARAM)&sel_end);
+        ok(sel_start == 4, "Selection start incorrectly: %d expected 4\n", sel_start);
+        ok(sel_end == 8, "Selection end incorrectly: %d expected 8\n", sel_end);
+    }
+
     DestroyWindow(hwndRichEdit);
 }
 
@@ -4561,6 +4778,8 @@ static void test_EM_REPLACESEL(int redraw)
     int r;
     GETTEXTEX getText;
     CHARRANGE cr;
+    CHAR rtfstream[] = "{\\rtf1 TestSomeText}";
+    CHAR urtfstream[] = "{\\urtf1 TestSomeText}";
 
     /* sending some text to the window */
     SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"testing selection");
@@ -4833,8 +5052,78 @@ static void test_EM_REPLACESEL(int redraw)
     r = SendMessageA(hwndRichEdit, EM_GETLINECOUNT, 0, 0);
     ok(r == 7, "EM_GETLINECOUNT returned %d, expected 7\n", r);
 
+    /* Test with  multibyte character */
+    if (!is_lang_japanese)
+        skip("Skip multibyte character tests on non-Japanese platform\n");
+    else
+    {
+        SendMessageA(hwndRichEdit, WM_SETTEXT, 0, 0);
+        r = SendMessageA(hwndRichEdit, EM_REPLACESEL, 0, (LPARAM)"abc\x8e\xf0");
+        todo_wine ok(r == 5, "EM_REPLACESEL returned %d, expected 5\n", r);
+        r = SendMessageA(hwndRichEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
+        ok(r == 0, "EM_EXGETSEL returned %d, expected 0\n", r);
+        ok(cr.cpMin == 4, "EM_EXGETSEL returned cpMin=%d, expected 4\n", cr.cpMin);
+        ok(cr.cpMax == 4, "EM_EXGETSEL returned cpMax=%d, expected 4\n", cr.cpMax);
+        r = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
+        ok(!strcmp(buffer, "abc\x8e\xf0"), "WM_GETTEXT returned incorrect string\n");
+        ok(r == 5, "WM_GETTEXT returned %d, expected 5\n", r);
+
+        SendMessageA(hwndRichEdit, WM_SETTEXT, 0, 0);
+        r = SendMessageA(hwndRichEdit, EM_REPLACESEL, 0, (LPARAM)"{\\rtf abc\x8e\xf0}");
+        todo_wine ok(r == 4, "EM_REPLACESEL returned %d, expected 4\n", r);
+        r = SendMessageA(hwndRichEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
+        ok(r == 0, "EM_EXGETSEL returned %d, expected 0\n", r);
+        todo_wine ok(cr.cpMin == 4, "EM_EXGETSEL returned cpMin=%d, expected 4\n", cr.cpMin);
+        todo_wine ok(cr.cpMax == 4, "EM_EXGETSEL returned cpMax=%d, expected 4\n", cr.cpMax);
+        r = SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
+        todo_wine ok(!strcmp(buffer, "abc\x8e\xf0"), "WM_GETTEXT returned incorrect string\n");
+        todo_wine ok(r == 5, "WM_GETTEXT returned %d, expected 5\n", r);
+    }
+
+    SendMessageA(hwndRichEdit, WM_SETTEXT, 0, 0);
+    r = SendMessageA(hwndRichEdit, EM_REPLACESEL, 0, (LPARAM)rtfstream);
+    todo_wine ok(r == 12, "EM_REPLACESEL returned %d, expected 12\n", r);
+    r = SendMessageA(hwndRichEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
+    ok(0 == r, "EM_EXGETSEL returned %d, expected 0\n", r);
+    todo_wine ok(cr.cpMin == 12, "EM_EXGETSEL returned cpMin=%d, expected 12\n", cr.cpMin);
+    todo_wine ok(cr.cpMax == 12, "EM_EXGETSEL returned cpMax=%d, expected 12\n", cr.cpMax);
+    SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
+    todo_wine ok(!strcmp(buffer, "TestSomeText"), "WM_GETTEXT returned incorrect string\n");
+
+    SendMessageA(hwndRichEdit, WM_SETTEXT, 0, 0);
+    r = SendMessageA(hwndRichEdit, EM_REPLACESEL, 0, (LPARAM)urtfstream);
+    todo_wine ok(r == 12, "EM_REPLACESEL returned %d, expected 12\n", r);
+    r = SendMessageA(hwndRichEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
+    ok(0 == r, "EM_EXGETSEL returned %d, expected 0\n", r);
+    todo_wine ok(cr.cpMin == 12, "EM_EXGETSEL returned cpMin=%d, expected 12\n", cr.cpMin);
+    todo_wine ok(cr.cpMax == 12, "EM_EXGETSEL returned cpMax=%d, expected 12\n", cr.cpMax);
+    SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
+    todo_wine ok(!strcmp(buffer, "TestSomeText"), "WM_GETTEXT returned incorrect string\n");
+
+    SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"Wine");
+    SendMessageA(hwndRichEdit, EM_SETSEL, 1, 2);
+    todo_wine r = SendMessageA(hwndRichEdit, EM_REPLACESEL, 0, (LPARAM)rtfstream);
+    todo_wine ok(r == 12, "EM_REPLACESEL returned %d, expected 12\n", r);
+    r = SendMessageA(hwndRichEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
+    ok(0 == r, "EM_EXGETSEL returned %d, expected 0\n", r);
+    todo_wine ok(cr.cpMin == 13, "EM_EXGETSEL returned cpMin=%d, expected 13\n", cr.cpMin);
+    todo_wine ok(cr.cpMax == 13, "EM_EXGETSEL returned cpMax=%d, expected 13\n", cr.cpMax);
+    SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
+    todo_wine ok(!strcmp(buffer, "WTestSomeTextne"), "WM_GETTEXT returned incorrect string\n");
+
+    SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)"{\\rtf1 Wine}");
+    SendMessageA(hwndRichEdit, EM_SETSEL, 1, 2);
+    todo_wine r = SendMessageA(hwndRichEdit, EM_REPLACESEL, 0, (LPARAM)rtfstream);
+    todo_wine ok(r == 12, "EM_REPLACESEL returned %d, expected 12\n", r);
+    r = SendMessageA(hwndRichEdit, EM_EXGETSEL, 0, (LPARAM)&cr);
+    ok(0 == r, "EM_EXGETSEL returned %d, expected 0\n", r);
+    todo_wine ok(cr.cpMin == 13, "EM_EXGETSEL returned cpMin=%d, expected 13\n", cr.cpMin);
+    todo_wine ok(cr.cpMax == 13, "EM_EXGETSEL returned cpMax=%d, expected 13\n", cr.cpMax);
+    SendMessageA(hwndRichEdit, WM_GETTEXT, 1024, (LPARAM)buffer);
+    todo_wine ok(!strcmp(buffer, "WTestSomeTextne"), "WM_GETTEXT returned incorrect string\n");
+
     if (!redraw)
-        /* This is needed to avoid interferring with keybd_event calls
+        /* This is needed to avoid interfering with keybd_event calls
          * on other tests that simulate keyboard events. */
         SendMessageA(hwndRichEdit, WM_SETREDRAW, TRUE, 0);
 
@@ -5205,9 +5494,10 @@ static void test_EM_STREAMIN(void)
   EDITSTREAM es;
   char buffer[1024] = {0}, tmp[16];
   CHARRANGE range;
+  PARAFORMAT2 fmt;
 
-  const char * streamText0 = "{\\rtf1 TestSomeText}";
-  const char * streamText0a = "{\\rtf1 TestSomeText\\par}";
+  const char * streamText0 = "{\\rtf1\\fi100\\li200\\rtlpar\\qr TestSomeText}";
+  const char * streamText0a = "{\\rtf1\\fi100\\li200\\rtlpar\\qr TestSomeText\\par}";
   const char * streamText0b = "{\\rtf1 TestSomeText\\par\\par}";
   const char * ptr;
 
@@ -5264,6 +5554,17 @@ static void test_EM_STREAMIN(void)
   ok (result  == 0,
       "EM_STREAMIN: Test 0 set wrong text: Result: %s\n",buffer);
   ok(es.dwError == 0, "EM_STREAMIN: Test 0 set error %d, expected %d\n", es.dwError, 0);
+  /* Show that para fmts are ignored */
+  range.cpMin = 2;
+  range.cpMax = 2;
+  result = SendMessageA(hwndRichEdit, EM_EXSETSEL, 0, (LPARAM)&range);
+  memset(&fmt, 0xcc, sizeof(fmt));
+  fmt.cbSize = sizeof(fmt);
+  result = SendMessageA(hwndRichEdit, EM_GETPARAFORMAT, 0, (LPARAM)&fmt);
+  ok(fmt.dxStartIndent == 0, "got %d\n", fmt.dxStartIndent);
+  ok(fmt.dxOffset == 0, "got %d\n", fmt.dxOffset);
+  ok(fmt.wAlignment == PFA_LEFT, "got %d\n", fmt.wAlignment);
+  ok((fmt.wEffects & PFE_RTLPARA) == 0, "got %x\n", fmt.wEffects);
 
   /* Native richedit 2.0 ignores last \par */
   ptr = streamText0a;
@@ -5280,6 +5581,17 @@ static void test_EM_STREAMIN(void)
   ok (result  == 0,
       "EM_STREAMIN: Test 0-a set wrong text: Result: %s\n",buffer);
   ok(es.dwError == 0, "EM_STREAMIN: Test 0-a set error %d, expected %d\n", es.dwError, 0);
+  /* This time para fmts are processed */
+  range.cpMin = 2;
+  range.cpMax = 2;
+  result = SendMessageA(hwndRichEdit, EM_EXSETSEL, 0, (LPARAM)&range);
+  memset(&fmt, 0xcc, sizeof(fmt));
+  fmt.cbSize = sizeof(fmt);
+  result = SendMessageA(hwndRichEdit, EM_GETPARAFORMAT, 0, (LPARAM)&fmt);
+  ok(fmt.dxStartIndent == 300, "got %d\n", fmt.dxStartIndent);
+  ok(fmt.dxOffset == -100, "got %d\n", fmt.dxOffset);
+  ok(fmt.wAlignment == PFA_RIGHT, "got %d\n", fmt.wAlignment);
+  ok((fmt.wEffects & PFE_RTLPARA) == PFE_RTLPARA, "got %x\n", fmt.wEffects);
 
   /* Native richedit 2.0 ignores last \par, next-to-last \par appears */
   es.dwCookie = (DWORD_PTR)&streamText0b;
@@ -6735,22 +7047,15 @@ static void test_format_rect(void)
     GetClientRect(hwnd, &clientRect);
 
     expected = clientRect;
-    expected.left += 1;
-    expected.right -= 1;
+    InflateRect(&expected, -1, 0);
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     for (n = -3; n <= 3; n++)
     {
       rc = clientRect;
-      rc.top += n;
-      rc.left += n;
-      rc.bottom -= n;
-      rc.right -= n;
+      InflateRect(&rc, -n, -n);
       SendMessageA(hwnd, EM_SETRECT, 0, (LPARAM)&rc);
 
       expected = rc;
@@ -6759,22 +7064,16 @@ static void test_format_rect(void)
       expected.bottom = min(clientRect.bottom, rc.bottom);
       expected.right = min(clientRect.right, rc.right);
       SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-      ok(rc.top == expected.top && rc.left == expected.left &&
-         rc.bottom == expected.bottom && rc.right == expected.right,
-         "[n=%d] rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-         n, rc.top, rc.left, rc.bottom, rc.right,
-         expected.top, expected.left, expected.bottom, expected.right);
+      ok(EqualRect(&rc, &expected), "[n=%d] rect %s != %s\n", n, wine_dbgstr_rect(&rc),
+         wine_dbgstr_rect(&expected));
     }
 
     rc = clientRect;
     SendMessageA(hwnd, EM_SETRECT, 0, (LPARAM)&rc);
     expected = clientRect;
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     /* Adding the selectionbar adds the selectionbar width to the left side. */
     SendMessageA(hwnd, EM_SETOPTIONS, ECOOP_OR, ECO_SELECTIONBAR);
@@ -6782,21 +7081,15 @@ static void test_format_rect(void)
     ok(options & ECO_SELECTIONBAR, "EM_SETOPTIONS failed to add selectionbar.\n");
     expected.left += 8; /* selection bar width */
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     rc = clientRect;
     SendMessageA(hwnd, EM_SETRECT, 0, (LPARAM)&rc);
     expected = clientRect;
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     /* Removing the selectionbar subtracts the selectionbar width from the left side,
      * even if the left side is already 0. */
@@ -6805,22 +7098,16 @@ static void test_format_rect(void)
     ok(!(options & ECO_SELECTIONBAR), "EM_SETOPTIONS failed to remove selectionbar.\n");
     expected.left -= 8; /* selection bar width */
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     /* Set the absolute value of the formatting rectangle. */
     rc = clientRect;
     SendMessageA(hwnd, EM_SETRECT, 0, (LPARAM)&rc);
     expected = clientRect;
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "[n=%d] rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       n, rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "[n=%d] rect %s != %s\n", n, wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     /* MSDN documents the EM_SETRECT message as using the rectangle provided in
      * LPARAM as being a relative offset when the WPARAM value is 1, but these
@@ -6832,11 +7119,8 @@ static void test_format_rect(void)
     expected = rc;
     SendMessageA(hwnd, EM_SETRECT, 1, (LPARAM)&rc);
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     /* For some reason it does not limit the values to the client rect with
      * a WPARAM value of 1. */
@@ -6847,11 +7131,8 @@ static void test_format_rect(void)
     expected = rc;
     SendMessageA(hwnd, EM_SETRECT, 1, (LPARAM)&rc);
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     /* Reset to default rect and check how the format rect adjusts to window
      * resize and how it copes with very small windows */
@@ -6861,40 +7142,28 @@ static void test_format_rect(void)
     GetClientRect(hwnd, &clientRect);
 
     expected = clientRect;
-    expected.left += 1;
-    expected.right -= 1;
+    InflateRect(&expected, -1, 0);
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     MoveWindow(hwnd, 0, 0, 0, 30, FALSE);
     GetClientRect(hwnd, &clientRect);
 
     expected = clientRect;
-    expected.left += 1;
-    expected.right -= 1;
+    InflateRect(&expected, -1, 0);
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     MoveWindow(hwnd, 0, 0, 100, 0, FALSE);
     GetClientRect(hwnd, &clientRect);
 
     expected = clientRect;
-    expected.left += 1;
-    expected.right -= 1;
+    InflateRect(&expected, -1, 0);
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     DestroyWindow(hwnd);
 
@@ -6907,32 +7176,21 @@ static void test_format_rect(void)
     GetClientRect(hwnd, &clientRect);
 
     expected = clientRect;
-    expected.left += 1;
     expected.top += 1;
-    expected.right -= 1;
+    InflateRect(&expected, -1, 0);
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     rc = clientRect;
-    rc.top += 5;
-    rc.left += 5;
-    rc.bottom -= 5;
-    rc.right -= 5;
+    InflateRect(&rc, -5, -5);
     expected = rc;
     expected.top -= 1;
-    expected.left -= 1;
-    expected.right += 1;
+    InflateRect(&expected, 1, 0);
     SendMessageA(hwnd, EM_SETRECT, 0, (LPARAM)&rc);
     SendMessageA(hwnd, EM_GETRECT, 0, (LPARAM)&rc);
-    ok(rc.top == expected.top && rc.left == expected.left &&
-       rc.bottom == expected.bottom && rc.right == expected.right,
-       "rect a(t=%d, l=%d, b=%d, r=%d) != e(t=%d, l=%d, b=%d, r=%d)\n",
-       rc.top, rc.left, rc.bottom, rc.right,
-       expected.top, expected.left, expected.bottom, expected.right);
+    ok(EqualRect(&rc, &expected), "rect %s != %s\n", wine_dbgstr_rect(&rc),
+       wine_dbgstr_rect(&expected));
 
     DestroyWindow(hwnd);
 }
@@ -7620,15 +7878,10 @@ static void test_EM_FINDWORDBREAK_W(void)
         wbuf[1] = 0;
         SendMessageW(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)wbuf);
         result = SendMessageW(hwndRichEdit, EM_FINDWORDBREAK, WB_ISDELIMITER,0);
-        if (wbuf[0] == 0x20 || wbuf[0] == 0xf020)
-            todo_wine
-                ok(result == delimiter_tests[i].isdelimiter,
-                   "wanted ISDELIMITER_W(0x%x) %d, got %d\n",
-                   delimiter_tests[i].c, delimiter_tests[i].isdelimiter,result);
-        else
+        todo_wine_if (wbuf[0] == 0x20 || wbuf[0] == 0xf020)
             ok(result == delimiter_tests[i].isdelimiter,
-               "wanted ISDELIMITER_W(0x%x) %d, got %d\n",
-               delimiter_tests[i].c, delimiter_tests[i].isdelimiter, result);
+                "wanted ISDELIMITER_W(0x%x) %d, got %d\n",
+                delimiter_tests[i].c, delimiter_tests[i].isdelimiter, result);
     }
     DestroyWindow(hwndRichEdit);
 }
@@ -7658,12 +7911,7 @@ static void test_EM_FINDWORDBREAK_A(void)
         buf[1] = 0;
         SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)buf);
         result = SendMessageA(hwndRichEdit, EM_FINDWORDBREAK, WB_ISDELIMITER, 0);
-        if (buf[0] == 0x20)
-            todo_wine
-                ok(result == delimiter_tests[i].isdelimiter,
-                   "wanted ISDELIMITER_A(0x%x) %d, got %d\n",
-                   delimiter_tests[i].c, delimiter_tests[i].isdelimiter,result);
-        else
+        todo_wine_if (buf[0] == 0x20)
             ok(result == delimiter_tests[i].isdelimiter,
                "wanted ISDELIMITER_A(0x%x) %d, got %d\n",
                delimiter_tests[i].c, delimiter_tests[i].isdelimiter, result);
@@ -7847,7 +8095,7 @@ static void test_reset_default_para_fmt( void )
     SendMessageA( richedit, WM_CUT, 0, 0 );
 
     SendMessageA( richedit, EM_GETPARAFORMAT, 0, (LPARAM)&fmt );
-    ok( fmt.wAlignment == def_align, "got %d exppect %d\n", fmt.wAlignment, def_align );
+    ok( fmt.wAlignment == def_align, "got %d expect %d\n", fmt.wAlignment, def_align );
 
     DestroyWindow( richedit );
 }
@@ -8014,7 +8262,7 @@ static void test_alignment_style(void)
         SendMessageW(richedit, WM_CUT, 0, 0);
 
         SendMessageW(richedit, EM_GETPARAFORMAT, 0, (LPARAM)&pf);
-        ok(pf.wAlignment == align_mask[i], "got %d exppect %d\n", pf.wAlignment, align_mask[i]);
+        ok(pf.wAlignment == align_mask[i], "got %d expect %d\n", pf.wAlignment, align_mask[i]);
 
         DestroyWindow(richedit);
     }
@@ -8031,8 +8279,129 @@ static void test_alignment_style(void)
     pf.cbSize = sizeof(PARAFORMAT2);
     pf.dwMask = -1;
     SendMessageW(richedit, EM_GETPARAFORMAT, SCF_SELECTION, (LPARAM)&pf);
-    ok(pf.wAlignment == ES_CENTER, "got %d expected ES_CENTER\n", pf.wAlignment);
+    ok(pf.wAlignment == PFA_LEFT, "got %d expected PFA_LEFT\n", pf.wAlignment);
     DestroyWindow(richedit);
+}
+
+static void test_WM_GETTEXTLENGTH(void)
+{
+    HWND hwndRichEdit = new_richedit(NULL);
+    static const char text1[] = "aaa\r\nbbb\r\nccc\r\nddd\r\neee";
+    static const char text2[] = "aaa\r\nbbb\r\nccc\r\nddd\r\neee\r\n";
+    static const char text3[] = "abcdef\x8e\xf0";
+    int result;
+
+    SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)text1);
+    result = SendMessageA(hwndRichEdit, WM_GETTEXTLENGTH, 0, 0);
+    ok(result == lstrlenA(text1), "WM_GETTEXTLENGTH returned %d, expected %d\n",
+       result, lstrlenA(text1));
+
+    SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)text2);
+    result = SendMessageA(hwndRichEdit, WM_GETTEXTLENGTH, 0, 0);
+    ok(result == lstrlenA(text2), "WM_GETTEXTLENGTH returned %d, expected %d\n",
+       result, lstrlenA(text2));
+
+    /* Test with multibyte character */
+    if (!is_lang_japanese)
+        skip("Skip multibyte character tests on non-Japanese platform\n");
+    else
+    {
+        SendMessageA(hwndRichEdit, WM_SETTEXT, 0, (LPARAM)text3);
+        result = SendMessageA(hwndRichEdit, WM_GETTEXTLENGTH, 0, 0);
+        todo_wine ok(result == 8, "WM_GETTEXTLENGTH returned %d, expected 8\n", result);
+    }
+
+    DestroyWindow(hwndRichEdit);
+}
+
+static void test_rtf_specials(void)
+{
+    const char *specials = "{\\rtf1\\emspace\\enspace\\bullet\\lquote"
+        "\\rquote\\ldblquote\\rdblquote\\ltrmark\\rtlmark\\zwj\\zwnj}";
+    const WCHAR expect_specials[] = {' ',' ',0x2022,0x2018,0x2019,0x201c,
+                                     0x201d,0x200e,0x200f,0x200d,0x200c};
+    const char *pard = "{\\rtf1 ABC\\rtlpar\\par DEF\\par HIJ\\pard\\par}";
+    HWND edit = new_richeditW( NULL );
+    EDITSTREAM es;
+    WCHAR buf[80];
+    LRESULT result;
+    PARAFORMAT2 fmt;
+
+    es.dwCookie = (DWORD_PTR)&specials;
+    es.dwError = 0;
+    es.pfnCallback = test_EM_STREAMIN_esCallback;
+    result = SendMessageA( edit, EM_STREAMIN, SF_RTF, (LPARAM)&es );
+    ok( result == 11, "got %ld\n", result );
+
+    result = SendMessageW( edit, WM_GETTEXT, sizeof(buf)/sizeof(buf[0]), (LPARAM)buf );
+    ok( result == sizeof(expect_specials)/sizeof(expect_specials[0]), "got %ld\n", result );
+    ok( !memcmp( buf, expect_specials, sizeof(expect_specials) ), "got %s\n", wine_dbgstr_w(buf) );
+
+    /* Show that \rtlpar propagates to the second paragraph and is
+       reset by \pard in the third. */
+    es.dwCookie = (DWORD_PTR)&pard;
+    result = SendMessageA( edit, EM_STREAMIN, SF_RTF, (LPARAM)&es );
+    ok( result == 11, "got %ld\n", result );
+
+    fmt.cbSize = sizeof(fmt);
+    SendMessageW( edit, EM_SETSEL, 1, 1 );
+    SendMessageW( edit, EM_GETPARAFORMAT, 0, (LPARAM)&fmt );
+    ok( fmt.dwMask & PFM_RTLPARA, "rtl para mask not set\n" );
+    ok( fmt.wEffects & PFE_RTLPARA, "rtl para not set\n" );
+    SendMessageW( edit, EM_SETSEL, 5, 5 );
+    SendMessageW( edit, EM_GETPARAFORMAT, 0, (LPARAM)&fmt );
+    ok( fmt.dwMask & PFM_RTLPARA, "rtl para mask not set\n" );
+    ok( fmt.wEffects & PFE_RTLPARA, "rtl para not set\n" );
+    SendMessageW( edit, EM_SETSEL, 9, 9 );
+    SendMessageW( edit, EM_GETPARAFORMAT, 0, (LPARAM)&fmt );
+    ok( fmt.dwMask & PFM_RTLPARA, "rtl para mask not set\n" );
+    ok( !(fmt.wEffects & PFE_RTLPARA), "rtl para set\n" );
+
+    DestroyWindow( edit );
+}
+
+static void test_background(void)
+{
+    HWND hwndRichEdit = new_richedit(NULL);
+
+    /* set the background color to black */
+    ValidateRect(hwndRichEdit, NULL);
+    SendMessageA(hwndRichEdit, EM_SETBKGNDCOLOR, FALSE, RGB(0, 0, 0));
+    ok(GetUpdateRect(hwndRichEdit, NULL, FALSE), "Update rectangle is empty!\n");
+
+    DestroyWindow(hwndRichEdit);
+}
+
+static void test_window_classes(void)
+{
+    static const struct
+    {
+        const char *class;
+        BOOL success;
+    } test[] =
+    {
+        { "RichEdit", FALSE },
+        { "RichEdit20A", TRUE },
+        { "RichEdit20W", TRUE },
+        { "RichEdit50A", FALSE },
+        { "RichEdit50W", FALSE }
+    };
+    int i;
+    HWND hwnd;
+
+    for (i = 0; i < sizeof(test)/sizeof(test[0]); i++)
+    {
+        SetLastError(0xdeadbeef);
+        hwnd = CreateWindowExA(0, test[i].class, NULL, WS_POPUP, 0, 0, 0, 0, 0, 0, 0, NULL);
+todo_wine_if(!strcmp(test[i].class, "RichEdit50A") || !strcmp(test[i].class, "RichEdit50W"))
+        ok(!hwnd == !test[i].success, "CreateWindow(%s) should %s\n",
+           test[i].class, test[i].success ? "succeed" : "fail");
+        if (!hwnd)
+todo_wine
+            ok(GetLastError() == ERROR_CANNOT_FIND_WND_CLASS, "got %d\n", GetLastError());
+        else
+            DestroyWindow(hwnd);
+    }
 }
 
 START_TEST( editor )
@@ -8042,7 +8411,9 @@ START_TEST( editor )
    * RICHED20.DLL, so the linker doesn't actually link to it. */
   hmoduleRichEdit = LoadLibraryA("riched20.dll");
   ok(hmoduleRichEdit != NULL, "error: %d\n", (int) GetLastError());
+  is_lang_japanese = (PRIMARYLANGID(GetUserDefaultLangID()) == LANG_JAPANESE);
 
+  test_window_classes();
   test_WM_CHAR();
   test_EM_FINDTEXT(FALSE);
   test_EM_FINDTEXT(TRUE);
@@ -8078,6 +8449,7 @@ START_TEST( editor )
   test_EM_FORMATRANGE();
   test_unicode_conversions();
   test_EM_GETTEXTLENGTHEX();
+  test_WM_GETTEXTLENGTH();
   test_EM_REPLACESEL(1);
   test_EM_REPLACESEL(0);
   test_WM_NOTIFY();
@@ -8102,6 +8474,8 @@ START_TEST( editor )
   test_EM_SETREADONLY();
   test_EM_SETFONTSIZE();
   test_alignment_style();
+  test_rtf_specials();
+  test_background();
 
   /* Set the environment variable WINETEST_RICHED20 to keep windows
    * responsive and open for 30 seconds. This is useful for debugging.

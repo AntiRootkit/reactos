@@ -111,9 +111,6 @@
 #define IDS_DRIVE_REMOVABLE      76
 #define IDS_FS_UNKNOWN           77
 
-#define IDS_LOGOFF_TITLE  78
-#define IDS_LOGOFF_PROMPT 79
-
 #define IDS_CREATEFOLDER_DENIED   128
 #define IDS_CREATEFOLDER_CAPTION  129
 #define IDS_DELETEITEM_CAPTION    130
@@ -133,7 +130,6 @@
 #define IDS_SHELL_ABOUT_AUTHORS   144
 #define IDS_SHELL_ABOUT_BACK      145
 #define FCIDM_SHVIEW_NEW          146
-#define FCIDM_SHVIEW_VIEW         147
 #define IDS_CONTROLPANEL          148
 #define IDS_NEWFOLDER             149
 #define IDS_COLUMN_EXTENSION      151
@@ -169,6 +165,7 @@
 #define IDS_FILE_TYPES            174
 #define IDS_FILE_DETAILS          175
 #define IDS_FILE_DETAILSADV       176
+#define IDS_FILE_EXT_TYPE         999
 #define IDS_BYTES_FORMAT          177
 #define IDS_OPEN_WITH_RECOMMENDED 178
 #define IDS_OPEN_WITH_OTHER       179
@@ -225,6 +222,10 @@
 
 /* Note: those strings are referenced from the registry */
 #define IDS_RECYCLEBIN_FOLDER_NAME 8964
+#define IDS_PRINTERS_DESCRIPTION   12696
+#define IDS_FONTS_DESCRIPTION      22920
+#define IDS_ADMINISTRATIVETOOLS_DESCRIPTION 22921
+#define IDS_FOLDER_OPTIONS_DESCRIPTION 22924
 #define IDS_ADMINISTRATIVETOOLS    22982
 #define IDS_FOLDER_OPTIONS         22985
 #define IDS_FONTS                  22981
@@ -241,6 +242,7 @@
 #define IDD_RUN                1
 #define IDC_RUNDLG_DESCRIPTION 12289
 #define IDC_RUNDLG_BROWSE      12288
+#define IDC_RUNDLG_ICON        12297
 #define IDC_RUNDLG_EDITPATH    12298
 #define IDC_RUNDLG_LABEL       12305
 
@@ -282,9 +284,20 @@
 #define IDD_SHORTCUT_EXTENDED_PROPERTIES 16
 
 /* Folder Options */
-#define IDD_FOLDER_OPTIONS_GENERAL   17
-#define IDD_FOLDER_OPTIONS_VIEW      18
-#define IDD_FOLDER_OPTIONS_FILETYPES 19
+#define IDD_FOLDER_OPTIONS_GENERAL         17
+#define IDD_FOLDER_OPTIONS_VIEW            18
+#define IDD_FOLDER_OPTIONS_FILETYPES       19
+#define IDC_FOLDER_OPTIONS_TASKICON        30109
+#define IDC_FOLDER_OPTIONS_FOLDERICON      30110
+#define IDC_FOLDER_OPTIONS_CLICKICON       30111
+#define IDC_FOLDER_OPTIONS_COMMONTASKS     14001
+#define IDC_FOLDER_OPTIONS_CLASSICFOLDERS  14002
+#define IDC_FOLDER_OPTIONS_SAMEWINDOW      14004
+#define IDC_FOLDER_OPTIONS_OWNWINDOW       14005
+#define IDC_FOLDER_OPTIONS_SINGLECLICK     14007
+#define IDC_FOLDER_OPTIONS_ULBROWSER       14008
+#define IDC_FOLDER_OPTIONS_ULPOINT         14009
+#define IDC_FOLDER_OPTIONS_DOUBLECLICK     14010
 
 /* Yes to all msgbox */
 #define IDD_YESTOALL_MSGBOX  20
@@ -563,18 +576,21 @@
  * AVI resources
  *
  * windows shell32 has 14 of them: 150-152 and 160-170
- * FIXME: Add 150-152
+ * FIXME: Add 165, 166
  */
 
-#define IDA_SHELL_COPY          160
-#define IDA_SHELL_COPY1         161
-#define IDA_SHELL_COPY2         167
-#define IDA_SHELL_COPY3         168
-#define IDA_SHELL_RECYCLE       162
-#define IDA_SHELL_EMPTY_RECYCLE 163
-#define IDA_SHELL_DELETE        164
-#define IDA_SHELL_DELETE1       169
-#define IDA_SHELL_DOWNLOAD      170
+#define IDA_SHELL_AUTOPLAY        150
+#define IDA_SHELL_SEARCHING_INDEX 151
+#define IDA_SHELL_COMPUTER_SEARCH 152
+#define IDA_SHELL_COPY            160
+#define IDA_SHELL_COPY1           161
+#define IDA_SHELL_RECYCLE         162
+#define IDA_SHELL_EMPTY_RECYCLE   163
+#define IDA_SHELL_DELETE          164
+#define IDA_SHELL_COPY2           167
+#define IDA_SHELL_COPY3           168
+#define IDA_SHELL_DELETE1         169
+#define IDA_SHELL_DOWNLOAD        170
 
 /* Desktop Browser commands */
 #define FCIDM_DESKBROWSER_CLOSE      0xA004
@@ -584,6 +600,7 @@
 
 /* Shell view commands */
 #define FCIDM_SHVIEW_ARRANGE         0x7001
+#define FCIDM_SHVIEW_VIEW            0x7002
 #define FCIDM_SHVIEW_DELETE          0x7011
 #define FCIDM_SHVIEW_PROPERTIES      0x7013
 #define FCIDM_SHVIEW_CUT             0x7018
@@ -647,3 +664,4 @@
 #define IDR_QUERYASSOCIATIONS   152
 #define IDR_MERGEDFOLDER        153
 #define IDR_REBARBANDSITE       154
+#define IDR_SHELL               155

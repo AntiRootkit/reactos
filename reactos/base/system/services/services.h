@@ -43,13 +43,14 @@ typedef struct _SERVICE_GROUP
 typedef struct _SERVICE_IMAGE
 {
     LIST_ENTRY ImageListEntry;
+    LPWSTR pszImagePath;
+    LPWSTR pszAccountName;
     DWORD dwImageRunCount;
 
     HANDLE hControlPipe;
     HANDLE hProcess;
     DWORD dwProcessId;
-
-    WCHAR szImagePath[1];
+    HANDLE hToken;
 } SERVICE_IMAGE, *PSERVICE_IMAGE;
 
 
@@ -71,7 +72,7 @@ typedef struct _SERVICE
 
     ULONG Flags;
 
-    PSECURITY_DESCRIPTOR lpSecurityDescriptor;
+    PSECURITY_DESCRIPTOR pSecurityDescriptor;
 
     BOOLEAN ServiceVisited;
 
@@ -85,7 +86,7 @@ typedef struct _START_LOCK
 {
     DWORD Tag;             /* Must be LOCK_TAG */
     DWORD TimeWhenLocked;  /* Number of seconds since 1970 */
-    PSID LockOwnerSid;     /* It is NULL if the SCM aquired the lock */
+    PSID LockOwnerSid;     /* It is NULL if the SCM acquired the lock */
 } START_LOCK, *PSTART_LOCK;
 
 
@@ -125,6 +126,21 @@ DWORD
 ScmReadDependencies(HKEY hServiceKey,
                     LPWSTR *lpDependencies,
                     DWORD *lpdwDependenciesLength);
+
+DWORD
+ScmSetServicePassword(
+    IN PCWSTR pszServiceName,
+    IN PCWSTR pszPassword);
+
+DWORD
+ScmWriteSecurityDescriptor(
+    _In_ HKEY hServiceKey,
+    _In_ PSECURITY_DESCRIPTOR pSecurityDescriptor);
+
+DWORD
+ScmReadSecurityDescriptor(
+    _In_ HKEY hServiceKey,
+    _Out_ PSECURITY_DESCRIPTOR *ppSecurityDescriptor);
 
 
 /* controlset.c */
@@ -190,6 +206,16 @@ VOID ScmQueryServiceLockStatusA(OUT LPQUERY_SERVICE_LOCK_STATUSA lpLockStatus);
 /* rpcserver.c */
 
 VOID ScmStartRpcServer(VOID);
+
+
+/* security.c */
+
+DWORD ScmInitializeSecurity(VOID);
+VOID ScmShutdownSecurity(VOID);
+
+DWORD
+ScmCreateDefaultServiceSD(
+    PSECURITY_DESCRIPTOR *ppSecurityDescriptor);
 
 
 /* services.c */

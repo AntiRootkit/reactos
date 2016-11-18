@@ -31,6 +31,8 @@
 #define FONT_8x16_OFFSET        0x0900
 #define FONT_8x14_OFFSET        0x1900
 
+#define FONT_8x8_COMPAT_OFFSET  0xFA6E
+
 #define VIDEO_STATE_INFO_OFFSET 0x3000 // == 0x1900 + (sizeof(Font8x14) == 0x0E00) + 0x0900 for padding
 
 #define VIDEO_BIOS_ROM_SIZE     0x4000
@@ -101,6 +103,16 @@ typedef struct _VGA_DYNAMIC_FUNC_TABLE
 } VGA_DYNAMIC_FUNC_TABLE, *PVGA_DYNAMIC_FUNC_TABLE;
 
 #pragma pack(pop)
+
+/* MACROS *********************************************************************/
+
+//
+// These macros are defined for ease-of-use of some VGA I/O ports
+// whose addresses depend whether we are in Monochrome or Colour mode.
+//
+#define VGA_INSTAT1_READ    Bda->CrtBasePort + 6    // VGA_INSTAT1_READ_MONO or VGA_INSTAT1_READ_COLOR
+#define VGA_CRTC_INDEX      Bda->CrtBasePort        // VGA_CRTC_INDEX_MONO   or VGA_CRTC_INDEX_COLOR
+#define VGA_CRTC_DATA       Bda->CrtBasePort + 1    // VGA_CRTC_DATA_MONO    or VGA_CRTC_DATA_COLOR
 
 /* FUNCTIONS ******************************************************************/
 

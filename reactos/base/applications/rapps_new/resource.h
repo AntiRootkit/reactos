@@ -11,6 +11,7 @@
 #define IDI_APPS                 17
 #define IDI_APPUPD               18
 #define IDI_CATEGORY             19
+#define IDI_UPDATE_DB            20
 
 /* Icons for categories */
 #define IDI_CAT_AUDIO            50
@@ -96,6 +97,12 @@
 #define IDS_INFORMATION          117
 #define IDS_UNABLE_TO_REMOVE     118
 #define IDS_UNABLE_TO_DOWNLOAD   119
+#define IDS_UNABLE_TO_DOWNLOAD2  120
+#define IDS_CERT_DOES_NOT_MATCH  121
+#define IDS_INTEG_CHECK_TITLE    122
+#define IDS_INTEG_CHECK_FAIL     123
+#define IDS_INTERRUPTED_DOWNLOAD 124
+#define IDS_UNABLE_TO_WRITE      125
 
 /* Tooltips */
 #define IDS_TOOLTIP_INSTALL      200
@@ -104,6 +111,7 @@
 #define IDS_TOOLTIP_SETTINGS     203
 #define IDS_TOOLTIP_REFRESH      204
 #define IDS_TOOLTIP_EXIT         205
+#define IDS_TOOLTIP_UPDATE_DB            206
 
 /* Columns info */
 #define IDS_APP_NAME             250
@@ -129,7 +137,7 @@
 #define IDS_INFO_MODIFYPATH      295
 #define IDS_INFO_INSTALLDATE     296
 
-/* Info for availabled apps */
+/* Info for available apps */
 #define IDS_AINFO_VERSION        350
 #define IDS_AINFO_DESCRIPTION    351
 #define IDS_AINFO_SIZE           352

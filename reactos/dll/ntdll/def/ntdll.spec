@@ -655,7 +655,7 @@
 653 stdcall RtlGetDaclSecurityDescriptor(ptr ptr ptr ptr)
 654 stdcall RtlGetElementGenericTable(ptr long)
 655 stdcall RtlGetElementGenericTableAvl(ptr long)
-# stdcall RtlGetFrame
+656 stdcall RtlGetFrame()
 657 stdcall RtlGetFullPathName_U(wstr long ptr ptr)
 658 stdcall RtlGetFullPathName_UstrEx(ptr ptr ptr ptr ptr ptr ptr ptr)
 659 stdcall RtlGetGroupSecurityDescriptor(ptr ptr ptr)
@@ -771,7 +771,7 @@
 @ stdcall -arch=x86_64 RtlLookupFunctionEntry(long ptr ptr)
 767 stdcall RtlMakeSelfRelativeSD(ptr ptr ptr)
 768 stdcall RtlMapGenericMask(long ptr)
-# stdcall RtlMapSecurityErrorToNtStatus
+769 stdcall RtlMapSecurityErrorToNtStatus(long)
 770 stdcall RtlMoveMemory(ptr ptr long)
 771 stdcall RtlMultiAppendUnicodeStringBuffer(ptr long ptr)
 772 stdcall RtlMultiByteToUnicodeN(ptr long ptr ptr long)
@@ -791,17 +791,17 @@
 786 stdcall RtlNumberGenericTableElementsAvl(ptr)
 787 stdcall RtlNumberOfClearBits(ptr)
 788 stdcall RtlNumberOfSetBits(ptr)
-# stdcall RtlOemStringToUnicodeSize(ptr)
+789 stdcall RtlOemStringToUnicodeSize(ptr) RtlxOemStringToUnicodeSize
 790 stdcall RtlOemStringToUnicodeString(ptr ptr long)
 791 stdcall RtlOemToUnicodeN(ptr long ptr ptr long)
 792 stdcall RtlOpenCurrentUser(long ptr)
 793 stdcall RtlPcToFileHeader(ptr ptr)
 794 stdcall RtlPinAtomInAtomTable(ptr long)
-# stdcall RtlPopFrame
+795 stdcall RtlPopFrame(ptr)
 796 stdcall RtlPrefixString(ptr ptr long)
 797 stdcall RtlPrefixUnicodeString(ptr ptr long)
 798 stdcall RtlProtectHeap(ptr long)
-# stdcall RtlPushFrame
+799 stdcall RtlPushFrame(ptr)
 800 stdcall RtlQueryAtomInAtomTable(ptr long ptr ptr ptr ptr)
 801 stdcall RtlQueryDepthSList(ptr)
 802 stdcall RtlQueryEnvironmentVariable_U(ptr ptr ptr)
@@ -909,11 +909,11 @@
 903 stdcall RtlTryEnterCriticalSection(ptr)
 # stdcall RtlUnhandledExceptionFilter2
 905 stdcall RtlUnhandledExceptionFilter(ptr)
-# stdcall RtlUnicodeStringToAnsiSize(ptr)
+906 stdcall RtlUnicodeStringToAnsiSize(ptr) RtlxUnicodeStringToAnsiSize
 907 stdcall RtlUnicodeStringToAnsiString(ptr ptr long)
 908 stdcall RtlUnicodeStringToCountedOemString(ptr ptr long)
 909 stdcall RtlUnicodeStringToInteger(ptr long ptr)
-# stdcall RtlUnicodeStringToOemSize(ptr)
+910 stdcall RtlUnicodeStringToOemSize(ptr) RtlxUnicodeStringToOemSize
 911 stdcall RtlUnicodeStringToOemString(ptr ptr long)
 912 stdcall RtlUnicodeToCustomCPN(ptr ptr long ptr wstr long)
 913 stdcall RtlUnicodeToMultiByteN(ptr long ptr ptr long)
@@ -969,7 +969,7 @@
 961 stdcall RtlxAnsiStringToUnicodeSize(ptr)
 962 stdcall RtlxOemStringToUnicodeSize(ptr)
 963 stdcall RtlxUnicodeStringToAnsiSize(ptr)
-964 stdcall RtlxUnicodeStringToOemSize(ptr) ; RtlUnicodeStringToOemSize
+964 stdcall RtlxUnicodeStringToOemSize(ptr)
 965 stdcall -ret64 VerSetConditionMask(double long long)
 966 stdcall ZwAcceptConnectPort(ptr long ptr long long ptr) NtAcceptConnectPort
 967 stdcall ZwAccessCheck(ptr long long ptr ptr ptr ptr ptr) NtAccessCheck

@@ -1332,12 +1332,18 @@ HRESULT WINAPI CShellLink::SetDescription(LPCWSTR pszName)
     TRACE("(%p)->(desc=%s)\n", this, debugstr_w(pszName));
 
     HeapFree(GetProcessHeap(), 0, sDescription);
-    sDescription = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
-                                     (wcslen(pszName) + 1) * sizeof(WCHAR));
-    if (!sDescription)
-        return E_OUTOFMEMORY;
+    if (pszName)
+    {
+        sDescription = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
+                                         (wcslen(pszName) + 1) * sizeof(WCHAR));
+        if (!sDescription)
+            return E_OUTOFMEMORY;
 
-    wcscpy(sDescription, pszName);
+        wcscpy(sDescription, pszName);
+    }
+    else
+        sDescription = NULL;
+
     bDirty = TRUE;
 
     return S_OK;
@@ -1360,11 +1366,17 @@ HRESULT WINAPI CShellLink::SetWorkingDirectory(LPCWSTR pszDir)
     TRACE("(%p)->(dir=%s)\n", this, debugstr_w(pszDir));
 
     HeapFree(GetProcessHeap(), 0, sWorkDir);
-    sWorkDir = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
-                                 (wcslen(pszDir) + 1) * sizeof (WCHAR));
-    if (!sWorkDir)
-        return E_OUTOFMEMORY;
-    wcscpy(sWorkDir, pszDir);
+    if (pszDir)
+    {
+        sWorkDir = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
+                                     (wcslen(pszDir) + 1) * sizeof (WCHAR));
+        if (!sWorkDir)
+            return E_OUTOFMEMORY;
+        wcscpy(sWorkDir, pszDir);
+    }
+    else
+        sWorkDir = NULL;
+
     bDirty = TRUE;
 
     return S_OK;
@@ -1387,12 +1399,18 @@ HRESULT WINAPI CShellLink::SetArguments(LPCWSTR pszArgs)
     TRACE("(%p)->(args=%s)\n", this, debugstr_w(pszArgs));
 
     HeapFree(GetProcessHeap(), 0, sArgs);
-    sArgs = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
-                              (wcslen(pszArgs) + 1) * sizeof (WCHAR));
-    if (!sArgs)
-        return E_OUTOFMEMORY;
+    if (pszArgs)
+    {
+        sArgs = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
+                                  (wcslen(pszArgs) + 1) * sizeof (WCHAR));
+        if (!sArgs)
+            return E_OUTOFMEMORY;
 
-    wcscpy(sArgs, pszArgs);
+        wcscpy(sArgs, pszArgs);
+    }
+    else
+        sArgs = NULL;
+
     bDirty = TRUE;
 
     return S_OK;
@@ -1473,11 +1491,16 @@ HRESULT WINAPI CShellLink::SetIconLocation(LPCWSTR pszIconPath, INT iIcon)
     TRACE("(%p)->(path=%s iicon=%u)\n", this, debugstr_w(pszIconPath), iIcon);
 
     HeapFree(GetProcessHeap(), 0, sIcoPath);
-    sIcoPath = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
-                                  (wcslen(pszIconPath) + 1) * sizeof (WCHAR));
-    if (!sIcoPath)
-        return E_OUTOFMEMORY;
-    wcscpy(sIcoPath, pszIconPath);
+    if (pszIconPath)
+    {
+        sIcoPath = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
+                                      (wcslen(pszIconPath) + 1) * sizeof (WCHAR));
+        if (!sIcoPath)
+            return E_OUTOFMEMORY;
+        wcscpy(sIcoPath, pszIconPath);
+    }
+    else
+        sIcoPath = NULL;
 
     iIcoNdx = iIcon;
     bDirty = TRUE;
@@ -1490,11 +1513,17 @@ HRESULT WINAPI CShellLink::SetRelativePath(LPCWSTR pszPathRel, DWORD dwReserved)
     TRACE("(%p)->(path=%s %x)\n", this, debugstr_w(pszPathRel), dwReserved);
 
     HeapFree(GetProcessHeap(), 0, sPathRel);
-    sPathRel = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
-                                  (wcslen(pszPathRel) + 1) * sizeof (WCHAR));
-    if (!sPathRel)
-        return E_OUTOFMEMORY;
-    wcscpy(sPathRel, pszPathRel);
+    if (pszPathRel)
+    {
+        sPathRel = (LPWSTR)HeapAlloc(GetProcessHeap(), 0,
+                                      (wcslen(pszPathRel) + 1) * sizeof (WCHAR));
+        if (!sPathRel)
+            return E_OUTOFMEMORY;
+        wcscpy(sPathRel, pszPathRel);
+    }
+    else
+        sPathRel = NULL;
+
     bDirty = TRUE;
 
     return ShellLink_UpdatePath(sPathRel, sPath, sWorkDir, &sPath);
@@ -1946,6 +1975,13 @@ INT_PTR CALLBACK ExtendedShortcutProc(HWND hwndDlg, UINT uMsg,
     return FALSE;
 }
 
+EXTERN_C HRESULT
+WINAPI
+SHOpenFolderAndSelectItems(LPITEMIDLIST pidlFolder,
+                           UINT cidl,
+                           PCUITEMID_CHILD_ARRAY apidl,
+                           DWORD dwFlags);
+
 /**************************************************************************
  * SH_ShellLinkDlgProc
  *
@@ -2079,6 +2115,7 @@ INT_PTR CALLBACK CShellLink::SH_ShellLinkDlgProc(HWND hwndDlg, UINT uMsg, WPARAM
             switch(LOWORD(wParam))
             {
                 case 14020:
+                    SHOpenFolderAndSelectItems(pThis->pPidl, 0, NULL, 0);
                     ///
                     /// FIXME
                     /// open target directory
@@ -2211,7 +2248,7 @@ HRESULT WINAPI CShellLink::DragLeave()
     if (mDropTarget)
     {
         hr = mDropTarget->DragLeave();
-        mDropTarget->Release();
+        mDropTarget.Release();
     }
 
     return hr;
@@ -2231,33 +2268,25 @@ HRESULT WINAPI CShellLink::Drop(IDataObject *pDataObject,
 /**************************************************************************
  *      IShellLink_ConstructFromFile
  */
-HRESULT WINAPI IShellLink_ConstructFromFile(IUnknown *pUnkOuter, REFIID riid, LPCITEMIDLIST pidl, LPVOID *ppv)
+HRESULT WINAPI IShellLink_ConstructFromPath(WCHAR *path, REFIID riid, LPVOID *ppv)
 {
-    CComPtr<IUnknown> psl;
+    CComPtr<IPersistFile> ppf;
+    HRESULT hr = CShellLink::_CreatorClass::CreateInstance(NULL, IID_PPV_ARG(IPersistFile, &ppf));
+    if (FAILED(hr))
+        return hr;
 
-    HRESULT hr = CShellLink::_CreatorClass::CreateInstance(NULL, riid, (void**)&psl);
+    hr = ppf->Load(path, 0);
+    if (FAILED(hr))
+        return hr;
 
-    if (SUCCEEDED(hr))
-    {
-        CComPtr<IPersistFile> ppf;
+    return ppf->QueryInterface(riid, ppv);
+}
 
-        *ppv = NULL;
+HRESULT WINAPI IShellLink_ConstructFromFile(IShellFolder * psf, LPCITEMIDLIST pidl, REFIID riid, LPVOID *ppv)
+{
+    WCHAR path[MAX_PATH];
+    if (!ILGetDisplayNameExW(psf, pidl, path, 0))
+        return E_FAIL;
 
-        hr = psl->QueryInterface(IID_PPV_ARG(IPersistFile, &ppf));
-
-        if (SUCCEEDED(hr))
-        {
-            WCHAR path[MAX_PATH];
-
-            if (SHGetPathFromIDListW(pidl, path))
-                hr = ppf->Load(path, 0);
-            else
-                hr = E_FAIL;
-
-            if (SUCCEEDED(hr))
-                *ppv = psl.Detach();
-        }
-    }
-
-    return hr;
+    return IShellLink_ConstructFromPath(path, riid, ppv);
 }

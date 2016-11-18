@@ -271,7 +271,7 @@ NtfsOpenFile(PDEVICE_EXTENSION DeviceExt,
         }
     }
 
-    //FIXME: Get cannonical path name (remove .'s, ..'s and extra separators)
+    //FIXME: Get canonical path name (remove .'s, ..'s and extra separators)
 
     DPRINT("PathName to open: %S\n", FileName);
 
@@ -351,14 +351,13 @@ NtfsCreateFile(PDEVICE_OBJECT DeviceObject,
         return STATUS_INVALID_PARAMETER;
     }
 
-    FileObject = Stack->FileObject;
-
-    if (RequestedDisposition == FILE_CREATE ||
-        RequestedDisposition == FILE_OVERWRITE_IF ||
-        RequestedDisposition == FILE_SUPERSEDE)
+    /* Deny create if the volume is locked */
+    if (DeviceExt->Flags & VCB_VOLUME_LOCKED)
     {
         return STATUS_ACCESS_DENIED;
     }
+
+    FileObject = Stack->FileObject;
 
     if ((RequestedOptions & FILE_OPEN_BY_FILE_ID) == FILE_OPEN_BY_FILE_ID)
     {
@@ -498,6 +497,12 @@ NtfsCreateFile(PDEVICE_OBJECT DeviceObject,
             DPRINT1("Denying write request on NTFS volume\n");
             return STATUS_ACCESS_DENIED;
         }
+    }
+
+    if (NT_SUCCESS(Status))
+    {
+        Fcb->OpenHandleCount++;
+        DeviceExt->OpenHandleCount++;
     }
 
     /*

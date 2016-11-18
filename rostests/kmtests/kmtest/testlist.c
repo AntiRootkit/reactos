@@ -7,11 +7,13 @@
 
 #include <kmt_test.h>
 
+KMT_TESTFUNC Test_CcCopyRead;
 KMT_TESTFUNC Test_Example;
 KMT_TESTFUNC Test_FindFile;
 KMT_TESTFUNC Test_IoCreateFile;
 KMT_TESTFUNC Test_IoDeviceObject;
 KMT_TESTFUNC Test_IoReadWrite;
+KMT_TESTFUNC Test_NtCreateSection;
 KMT_TESTFUNC Test_PoIrp;
 KMT_TESTFUNC Test_RtlAvlTree;
 KMT_TESTFUNC Test_RtlException;
@@ -27,11 +29,13 @@ KMT_TESTFUNC Test_TcpIpConnect;
 /* tests with a leading '-' will not be listed */
 const KMT_TEST TestList[] =
 {
+    { "CcCopyRead",         Test_CcCopyRead },
     { "-Example",           Test_Example },
     { "FindFile",           Test_FindFile },
     { "IoCreateFile",       Test_IoCreateFile },
     { "IoDeviceObject",     Test_IoDeviceObject },
     { "IoReadWrite",        Test_IoReadWrite },
+    { "NtCreateSection",    Test_NtCreateSection },
     { "PoIrp",              Test_PoIrp },
     { "RtlAvlTree",         Test_RtlAvlTree },
     { "RtlException",       Test_RtlException },

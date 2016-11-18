@@ -4,8 +4,8 @@ add_definitions(
     -DWIN32)
 
 include_directories(
-    ${REACTOS_SOURCE_DIR}/include/reactos/wine
-    ${REACTOS_SOURCE_DIR}/include/reactos/libs/libmpg123)
+    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/wine
+    ${REACTOS_SOURCE_DIR}/sdk/include/reactos/libs/libmpg123)
 
 spec2def(winemp3.acm winemp3.acm.spec)
 
@@ -16,10 +16,5 @@ add_library(winemp3.acm SHARED
 set_module_type(winemp3.acm win32dll)
 set_target_properties(winemp3.acm PROPERTIES SUFFIX "")
 target_link_libraries(winemp3.acm wine libmpg123 oldnames)
-
-if(CMAKE_C_COMPILER_ID STREQUAL "Clang")
-    target_link_libraries(winemp3.acm mingwex)
-endif()
-
 add_importlibs(winemp3.acm winmm user32 msvcrt kernel32 ntdll)
 add_cd_file(TARGET winemp3.acm DESTINATION reactos/system32 FOR all)

@@ -25,9 +25,10 @@ static const TBBUTTON Buttons[] =
     { 2, ID_MODIFY,    TBSTATE_ENABLED, BTNS_BUTTON | BTNS_AUTOSIZE, {0}, 0, (INT_PTR)szModifyBtn},
     { 5, 0,            TBSTATE_ENABLED, BTNS_SEP, {0}, 0, 0},
     { 3, ID_REFRESH,   TBSTATE_ENABLED, BTNS_BUTTON | BTNS_AUTOSIZE, {0}, 0, 0},
+    { 4, ID_RESETDB,   TBSTATE_ENABLED, BTNS_BUTTON | BTNS_AUTOSIZE, {0}, 0, 0},
     { 5, 0,            TBSTATE_ENABLED, BTNS_SEP, {0}, 0, 0},
-    { 4, ID_SETTINGS,  TBSTATE_ENABLED, BTNS_BUTTON | BTNS_AUTOSIZE, {0}, 0, 0},
-    { 5, ID_EXIT,      TBSTATE_ENABLED, BTNS_BUTTON | BTNS_AUTOSIZE, {0}, 0, 0}
+    { 5, ID_SETTINGS,  TBSTATE_ENABLED, BTNS_BUTTON | BTNS_AUTOSIZE, {0}, 0, 0},
+    { 6, ID_EXIT,      TBSTATE_ENABLED, BTNS_BUTTON | BTNS_AUTOSIZE, {0}, 0, 0}
 };
 
 
@@ -60,6 +61,10 @@ ToolBarOnGetDispInfo(LPTOOLTIPTEXT lpttt)
 
         case ID_REFRESH:
             lpttt->lpszText = MAKEINTRESOURCE(IDS_TOOLTIP_REFRESH);
+            break;
+            
+        case ID_RESETDB:
+            lpttt->lpszText = MAKEINTRESOURCE(IDS_TOOLTIP_UPDATE_DB);
             break;
     }
 }
@@ -104,6 +109,7 @@ InitImageList(VOID)
     AddImageToImageList(hImageList, IDI_UNINSTALL);
     AddImageToImageList(hImageList, IDI_MODIFY);
     AddImageToImageList(hImageList, IDI_REFRESH);
+    AddImageToImageList(hImageList, IDI_UPDATE_DB);
     AddImageToImageList(hImageList, IDI_SETTINGS);
     AddImageToImageList(hImageList, IDI_EXIT);
 
@@ -131,7 +137,7 @@ CreateSearchBar(VOID)
 
     SendMessageW(hSearchBar, WM_SETFONT, (WPARAM)GetStockObject(DEFAULT_GUI_FONT), 0);
 
-    LoadStringW(hInst, IDS_SEARCH_TEXT, szBuf, sizeof(szBuf) / sizeof(WCHAR));
+    LoadStringW(hInst, IDS_SEARCH_TEXT, szBuf, _countof(szBuf));
     SetWindowTextW(hSearchBar, szBuf);
 
     SetParent(hSearchBar, hToolBar); 
@@ -142,12 +148,12 @@ CreateSearchBar(VOID)
 BOOL
 CreateToolBar(HWND hwnd)
 {
-    INT NumButtons = sizeof(Buttons) / sizeof(Buttons[0]);
+    INT NumButtons = _countof(Buttons);
     HIMAGELIST hImageList;
 
-    LoadStringW(hInst, IDS_INSTALL, szInstallBtn, sizeof(szInstallBtn) / sizeof(WCHAR));
-    LoadStringW(hInst, IDS_UNINSTALL, szUninstallBtn, sizeof(szUninstallBtn) / sizeof(WCHAR));
-    LoadStringW(hInst, IDS_MODIFY, szModifyBtn, sizeof(szModifyBtn) / sizeof(WCHAR));
+    LoadStringW(hInst, IDS_INSTALL, szInstallBtn, _countof(szInstallBtn));
+    LoadStringW(hInst, IDS_UNINSTALL, szUninstallBtn, _countof(szUninstallBtn));
+    LoadStringW(hInst, IDS_MODIFY, szModifyBtn, _countof(szModifyBtn));
 
     hToolBar = CreateWindowExW(0,
                                TOOLBARCLASSNAMEW,

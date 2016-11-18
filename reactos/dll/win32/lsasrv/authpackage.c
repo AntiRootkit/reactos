@@ -2,7 +2,7 @@
  * PROJECT:     Local Security Authority Server DLL
  * LICENSE:     GPL - See COPYING in the top level directory
  * FILE:        dll/win32/lsasrv/authpackage.c
- * PURPOSE:     Authenticaton package management routines
+ * PURPOSE:     Authentication package management routines
  * COPYRIGHT:   Copyright 2013 Eric Kohl
  */
 
@@ -32,7 +32,9 @@ typedef PVOID PLSA_CLIENT_REQUEST;
 
 typedef NTSTATUS (NTAPI *PLSA_CREATE_LOGON_SESSION)(PLUID);
 typedef NTSTATUS (NTAPI *PLSA_DELETE_LOGON_SESSION)(PLUID);
-
+typedef NTSTATUS (NTAPI *PLSA_ADD_CREDENTIAL)(PLUID, ULONG, PLSA_STRING, PLSA_STRING);
+typedef NTSTATUS (NTAPI *PLSA_GET_CREDENTIALS)(PLUID, ULONG, PULONG, BOOLEAN, PLSA_STRING, PULONG, PLSA_STRING);
+typedef NTSTATUS (NTAPI *PLSA_DELETE_CREDENTIAL)(PLUID, ULONG, PLSA_STRING);
 typedef PVOID (NTAPI *PLSA_ALLOCATE_LSA_HEAP)(ULONG);
 typedef VOID (NTAPI *PLSA_FREE_LSA_HEAP)(PVOID);
 typedef NTSTATUS (NTAPI *PLSA_ALLOCATE_CLIENT_BUFFER)(PLSA_CLIENT_REQUEST, ULONG, PVOID*);
@@ -46,9 +48,9 @@ typedef struct LSA_DISPATCH_TABLE
 {
     PLSA_CREATE_LOGON_SESSION CreateLogonSession;
     PLSA_DELETE_LOGON_SESSION DeleteLogonSession;
-    PVOID /*PLSA_ADD_CREDENTIAL */ AddCredential;
-    PVOID /*PLSA_GET_CREDENTIALS */ GetCredentials;
-    PVOID /*PLSA_DELETE_CREDENTIAL */ DeleteCredential;
+    PLSA_ADD_CREDENTIAL AddCredential;
+    PLSA_GET_CREDENTIALS GetCredentials;
+    PLSA_DELETE_CREDENTIAL DeleteCredential;
     PLSA_ALLOCATE_LSA_HEAP AllocateLsaHeap;
     PLSA_FREE_LSA_HEAP FreeLsaHeap;
     PLSA_ALLOCATE_CLIENT_BUFFER AllocateClientBuffer;
@@ -481,9 +483,9 @@ LsapInitAuthPackages(VOID)
     /* Initialize the dispatch table */
     DispatchTable.CreateLogonSession = &LsapCreateLogonSession;
     DispatchTable.DeleteLogonSession = &LsapDeleteLogonSession;
-    DispatchTable.AddCredential = NULL;
-    DispatchTable.GetCredentials = NULL;
-    DispatchTable.DeleteCredential = NULL;
+    DispatchTable.AddCredential = &LsapAddCredential;
+    DispatchTable.GetCredentials = &LsapGetCredentials;
+    DispatchTable.DeleteCredential = &LsapDeleteCredential;
     DispatchTable.AllocateLsaHeap = &LsapAllocateHeap;
     DispatchTable.FreeLsaHeap = &LsapFreeHeap;
     DispatchTable.AllocateClientBuffer = &LsapAllocateClientBuffer;
@@ -948,7 +950,7 @@ LsapAppendSidToGroups(
         Groups->GroupCount = 1;
 
         Groups->Groups[0].Sid = Sid;
-        Groups->Groups[0].Attributes = 
+        Groups->Groups[0].Attributes =
             SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_MANDATORY;
 
         *TokenGroups = Groups;
@@ -983,7 +985,7 @@ LsapAppendSidToGroups(
         }
 
         Groups->Groups[Groups->GroupCount].Sid = Sid;
-        Groups->Groups[Groups->GroupCount].Attributes = 
+        Groups->Groups[Groups->GroupCount].Attributes =
             SE_GROUP_ENABLED | SE_GROUP_ENABLED_BY_DEFAULT | SE_GROUP_MANDATORY;
 
         Groups->GroupCount++;
@@ -1378,7 +1380,12 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
     SECURITY_LOGON_TYPE LogonType;
     NTSTATUS Status;
 
-    TRACE("(%p %p)\n", RequestMsg, LogonContext);
+    PUNICODE_STRING UserName = NULL;
+    PUNICODE_STRING LogonDomainName = NULL;
+//    UNICODE_STRING LogonServer;
+
+
+    TRACE("LsapLogonUser(%p %p)\n", RequestMsg, LogonContext);
 
     PackageId = RequestMsg->LogonUser.Request.AuthenticationPackage;
     LogonType = RequestMsg->LogonUser.Request.LogonType;
@@ -1403,7 +1410,7 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
             return STATUS_INSUFFICIENT_RESOURCES;
         }
 
-        /* Read the authentication info from the callers adress space */
+        /* Read the authentication info from the callers address space */
         Status = NtReadVirtualMemory(LogonContext->ClientProcessHandle,
                                      RequestMsg->LogonUser.Request.AuthenticationInformation,
                                      LocalAuthInfo,
@@ -1602,9 +1609,25 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
         goto done;
     }
 
-    TokenHandle = NULL;
+//    TokenHandle = NULL;
 
-    Status = LsapSetLogonSessionData(&RequestMsg->LogonUser.Reply.LogonId);
+    if (LogonType == Interactive ||
+        LogonType == Batch ||
+        LogonType == Service)
+    {
+        UserName = &((PMSV1_0_INTERACTIVE_LOGON)LocalAuthInfo)->UserName;
+        LogonDomainName = &((PMSV1_0_INTERACTIVE_LOGON)LocalAuthInfo)->LogonDomainName;
+    }
+    else
+    {
+        FIXME("LogonType %lu is not supported yet!\n", LogonType);
+    }
+
+    Status = LsapSetLogonSessionData(&RequestMsg->LogonUser.Reply.LogonId,
+                                     LogonType,
+                                     UserName,
+                                     LogonDomainName,
+                                     TokenInfo1->User.User.Sid);
     if (!NT_SUCCESS(Status))
     {
         ERR("LsapSetLogonSessionData failed (Status 0x%08lx)\n", Status);
@@ -1612,11 +1635,11 @@ LsapLogonUser(PLSA_API_MSG RequestMsg,
     }
 
 done:
-    if (!NT_SUCCESS(Status))
-    {
+//    if (!NT_SUCCESS(Status))
+//    {
         if (TokenHandle != NULL)
             NtClose(TokenHandle);
-    }
+//    }
 
     /* Free the local groups */
     if (LocalGroups != NULL)

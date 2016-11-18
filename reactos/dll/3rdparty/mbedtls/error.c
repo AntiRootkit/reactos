@@ -34,6 +34,7 @@
 #include "mbedtls/platform.h"
 #else
 #define mbedtls_snprintf snprintf
+#define mbedtls_time_t   time_t
 #endif
 
 #if defined(MBEDTLS_ERROR_C)
@@ -182,6 +183,8 @@ void mbedtls_strerror( int ret, char *buf, size_t buflen )
             mbedtls_snprintf( buf, buflen, "CIPHER - Decryption of block requires a full block" );
         if( use_ret == -(MBEDTLS_ERR_CIPHER_AUTH_FAILED) )
             mbedtls_snprintf( buf, buflen, "CIPHER - Authentication failed (for AEAD modes)" );
+        if( use_ret == -(MBEDTLS_ERR_CIPHER_INVALID_CONTEXT) )
+            mbedtls_snprintf( buf, buflen, "CIPHER - The context is invalid, eg because it was free()ed" );
 #endif /* MBEDTLS_CIPHER_C */
 
 #if defined(MBEDTLS_DHM_C)
@@ -430,6 +433,8 @@ void mbedtls_strerror( int ret, char *buf, size_t buflen )
             mbedtls_snprintf( buf, buflen, "SSL - The operation timed out" );
         if( use_ret == -(MBEDTLS_ERR_SSL_CLIENT_RECONNECT) )
             mbedtls_snprintf( buf, buflen, "SSL - The client initiated a reconnect from the same port" );
+        if( use_ret == -(MBEDTLS_ERR_SSL_UNEXPECTED_RECORD) )
+            mbedtls_snprintf( buf, buflen, "SSL - Record header looks valid but is not expected" );
 #endif /* MBEDTLS_SSL_TLS_C */
 
 #if defined(MBEDTLS_X509_USE_C) || defined(MBEDTLS_X509_CREATE_C)

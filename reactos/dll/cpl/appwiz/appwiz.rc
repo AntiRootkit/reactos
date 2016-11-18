@@ -22,7 +22,7 @@ IDI_APPINETICO ICON "resources/1505.ico"
 IDB_WATERMARK BITMAP "resources/watermark.bmp"
 IDB_SHORTCUT BITMAP "resources/shortcut.bmp"
 
-#include <reactos/manifest_dll.rc>
+#include <reactos/manifest_hosted.rc>
 
 /* UTF-8 */
 #pragma code_page(65001)
@@ -54,6 +54,9 @@ IDB_SHORTCUT BITMAP "resources/shortcut.bmp"
 #ifdef LANGUAGE_IT_IT
     #include "lang/it-IT.rc"
 #endif
+#ifdef LANGUAGE_JA_JP
+    #include "lang/ja-JP.rc"
+#endif
 #ifdef LANGUAGE_NB_NO
     #include "lang/no-NO.rc"
 #endif
@@ -83,4 +86,7 @@ IDB_SHORTCUT BITMAP "resources/shortcut.bmp"
 #endif
 #ifdef LANGUAGE_ZH_CN
     #include "lang/zh-CN.rc"
+#endif
+#ifdef LANGUAGE_ZH_TW
+    #include "lang/zh-TW.rc"
 #endif
