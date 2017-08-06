@@ -117,8 +117,35 @@ AppearancePage_OnInit(HWND hwndDlg)
     g->pThemes = LoadThemes();
     if (g->pThemes)
     {
-        if (!GetActiveTheme(g->pThemes, &g->ActiveTheme))
-            g->ActiveTheme.ThemeActive = FALSE;
+        BOOL bLoadedTheme = FALSE;
+
+        if (g_GlobalData.pwszAction && 
+            g_GlobalData.pwszFile && 
+            wcscmp(g_GlobalData.pwszAction, L"OpenMSTheme") == 0)
+        {
+            bLoadedTheme = FindOrAppendTheme(g->pThemes, 
+                                             g_GlobalData.pwszFile,
+                                             NULL,
+                                             NULL,
+                                             &g->ActiveTheme);
+        }
+
+        if (bLoadedTheme)
+        {
+            g->bThemeChanged = TRUE;
+            g->bSchemeChanged = TRUE;
+
+            PostMessageW(GetParent(hwndDlg), PSM_CHANGED, (WPARAM)hwndDlg, 0);
+
+            AppearancePage_LoadSelectedScheme(hwndDlg, g);
+        }
+        else
+        {
+            if (!GetActiveTheme(g->pThemes, &g->ActiveTheme))
+            {
+                g->ActiveTheme.ThemeActive = FALSE;
+            }
+        }
 
         /*
          * Keep a copy of the selected classic theme in order to select this

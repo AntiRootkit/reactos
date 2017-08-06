@@ -662,7 +662,10 @@ LanguagePage(PINPUT_RECORD Ir)
     /* If there's just a single language in the list skip
      * the language selection process altogether! */
     if (GenericListHasSingleEntry(LanguageList))
+    {
+        LanguageId = (LANGID)(wcstol(SelectedLanguageId, NULL, 16) & 0xFFFF);
         return INTRO_PAGE;
+    }
 
     DrawGenericList(LanguageList,
                     2,
@@ -4439,9 +4442,6 @@ BootLoaderHarddiskMbrPage(PINPUT_RECORD Ir)
     wcscpy(SourceMbrPathBuffer, SourceRootPath.Buffer);
     wcscat(SourceMbrPathBuffer, L"\\loader\\dosmbr.bin");
 
-    DPRINT1("Install MBR bootcode: %S ==> %S\n",
-            SourceMbrPathBuffer, DestinationDevicePathBuffer);
-
     if (IsThereAValidBootSector(DestinationDevicePathBuffer))
     {
         /* Save current MBR */
@@ -4457,6 +4457,8 @@ BootLoaderHarddiskMbrPage(PINPUT_RECORD Ir)
         }
     }
 
+    DPRINT1("Install MBR bootcode: %S ==> %S\n",
+            SourceMbrPathBuffer, DestinationDevicePathBuffer);
     Status = InstallMbrBootCodeToDisk(SourceMbrPathBuffer,
                                       DestinationDevicePathBuffer);
     if (!NT_SUCCESS(Status))

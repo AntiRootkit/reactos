@@ -1901,6 +1901,14 @@ NtQueryDirectoryFile(IN HANDLE FileHandle,
         return Status;
     }
 
+    /* Are there two associated completion routines? */
+    if (FileObject->CompletionContext != NULL && ApcRoutine != NULL)
+    {
+        ObDereferenceObject(FileObject);
+        if (AuxBuffer) ExFreePoolWithTag(AuxBuffer, TAG_SYSB);
+        return STATUS_INVALID_PARAMETER;
+    }
+
     /* Check if we have an even handle */
     if (EventHandle)
     {
@@ -1914,6 +1922,7 @@ NtQueryDirectoryFile(IN HANDLE FileHandle,
         if (!NT_SUCCESS(Status))
         {
             /* Fail */
+            if (AuxBuffer) ExFreePoolWithTag(AuxBuffer, TAG_SYSB);
             ObDereferenceObject(FileObject);
             return Status;
         }
@@ -2115,6 +2124,7 @@ NtQueryInformationFile(IN HANDLE FileHandle,
         }
         _SEH2_END;
     }
+#if DBG
     else
     {
         /* Validate the information class */
@@ -2132,6 +2142,7 @@ NtQueryInformationFile(IN HANDLE FileHandle,
             return STATUS_INFO_LENGTH_MISMATCH;
         }
     }
+#endif
 
     /* Reference the Handle */
     Status = ObReferenceObjectByHandle(FileHandle,
@@ -2238,8 +2249,17 @@ NtQueryInformationFile(IN HANDLE FileHandle,
             }
             _SEH2_END;
 
-            /* Unlock FO */
-            IopUnlockFileObject(FileObject);
+            /* Free the event if we had one */
+            if (LocalEvent)
+            {
+                ExFreePoolWithTag(Event, TAG_IO);
+            }
+
+            /* If FO was locked, unlock it */
+            if (FileObject->Flags & FO_SYNCHRONOUS_IO)
+            {
+                IopUnlockFileObject(FileObject);
+            }
 
             /* We're done with FastIO! */
             ObDereferenceObject(FileObject);

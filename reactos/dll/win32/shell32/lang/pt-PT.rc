@@ -38,8 +38,6 @@ BEGIN
         MENUITEM "", -1, MFT_SEPARATOR
         MENUITEM "Co&lar", FCIDM_SHVIEW_INSERT
         MENUITEM "Colar a&talho", FCIDM_SHVIEW_INSERTLINK
-        MENUITEM "", -1, MFT_SEPARATOR
-        MENUITEM "Propriedades", FCIDM_SHVIEW_PROPERTIES
     END
 END
 
@@ -434,8 +432,8 @@ BEGIN
     PUSHBUTTON "Applicar a T&odas as Pastas", 14001, 60, 50, 80, 14, WS_TABSTOP
     PUSHBUTTON "&Reiniciar todas as Pastas", 14002, 150, 50, 80, 14, WS_TABSTOP
     LTEXT "Definições avançadas:", -1, 7, 80, 100, 10
-    CONTROL "", 14003, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHAREIMAGELISTS | WS_BORDER | WS_TABSTOP, 7, 90, 249, 120
-    PUSHBUTTON "Restaurar valores por &Defeito", 14004, 180, 210, 80, 14, WS_TABSTOP
+    CONTROL "", 14003, "SysTreeView32", WS_BORDER | WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | TVS_DISABLEDRAGDROP | TVS_LINESATROOT, 7, 90, 249, 120
+    PUSHBUTTON "Restaurar valores por &Defeito", 14004, 177, 215, 80, 14, WS_TABSTOP
 END
 
 IDD_FOLDER_OPTIONS_FILETYPES DIALOGEX 0, 0, 264, 256
@@ -636,24 +634,22 @@ END
 STRINGTABLE
 BEGIN
     /* columns in the shellview */
-    IDS_SHV_COLUMN1 "Ficheiro"
-    IDS_SHV_COLUMN2 "Tamanho"
-    IDS_SHV_COLUMN3 "Tipo"
-    IDS_SHV_COLUMN4 "Modificado"
-    IDS_SHV_COLUMN5 "propriedades"
-    IDS_SHV_COLUMN6 "Tamanho"
-    IDS_SHV_COLUMN7 "Disponível"
-    IDS_SHV_COLUMN8 "Nome"
-    IDS_SHV_COLUMN9 "Comentários"
-    IDS_SHV_COLUMN10 "Dono"
-    IDS_SHV_COLUMN11 "Grupo"
-    IDS_SHV_COLUMN12 "Nome do ficheiro"
-    IDS_SHV_COLUMN13 "Categoria"
+    IDS_SHV_COLUMN_NAME "Nome"
+    IDS_SHV_COLUMN_SIZE "Tamanho"
+    IDS_SHV_COLUMN_TYPE "Tipo"
+    IDS_SHV_COLUMN_MODIFIED "Modificado"
+    IDS_SHV_COLUMN_ATTRIBUTES "propriedades"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Tamanho"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Disponível"
+    IDS_SHV_COLUMN_OWNER "Dono"
+    IDS_SHV_COLUMN_GROUP "Grupo"
+    IDS_SHV_COLUMN_FILENAME "Nome do ficheiro"
+    IDS_SHV_COLUMN_CATEGORY "Categoria"
     IDS_SHV_COLUMN_DELFROM "Localização original"
     IDS_SHV_COLUMN_DELDATE "Data da eliminação"
     IDS_SHV_COLUMN_FONTTYPE "Tipo de letra"
     IDS_SHV_COLUMN_WORKGROUP "Grupo de trabalho"
-    IDS_SHV_NETWORKLOCATION "localizações na rede"
+    IDS_SHV_COLUMN_NETLOCATION "localizações na rede"
     IDS_SHV_COLUMN_DOCUMENTS "Documentos"
     IDS_SHV_COLUMN_STATUS "Estado"
     IDS_SHV_COLUMN_COMMENTS "Commentários"
@@ -802,6 +798,7 @@ BEGIN
     IDS_SCR_FILE "Screen Saver"
     IDS_SYS_FILE "Ficheiro de Sistema"
     IDS_VXD_FILE "Driver de Dispositivo Virtual"
+    IDS_ANY_FILE "%s-file"
 
     IDS_OPEN_VERB "Abrir"
     IDS_EXPLORE_VERB "Explore"
@@ -836,4 +833,24 @@ BEGIN
     IDS_MENU_EMPTY "(Empty)"
     IDS_OBJECTS "%d Objects"
     IDS_OBJECTS_SELECTED "%d Objects Selected"
+
+    IDS_ADVANCED_FOLDER "Files and Folders"
+    IDS_ADVANCED_NET_CRAWLER "Automatically search for network folders and printers"
+    IDS_ADVANCED_FOLDER_SIZE_TIP "Display file size information in folder tips"
+    IDS_ADVANCED_FRIENDLY_TREE "Display simple folder view in Explorer's Folders list"
+    IDS_ADVANCED_WEB_VIEW_BARRICADE "Display the contents of system folders"
+    IDS_ADVANCED_SHOW_FULL_PATH_ADDRESS "Display the full path in address bar"
+    IDS_ADVANCED_SHOW_FULL_PATH "Display the full path in the title bar"
+    IDS_ADVANCED_DISABLE_THUMB_CACHE "Do not cache thumbnails"
+    IDS_ADVANCED_HIDDEN "Hidden files and folders"
+    IDS_ADVANCED_DONT_SHOW_HIDDEN "Do not show hidden files and folders"
+    IDS_ADVANCED_SHOW_HIDDEN "Show hidden files and folders"
+    IDS_ADVANCED_HIDE_FILE_EXT "Hide extensions for known file types"
+    IDS_ADVANCED_SUPER_HIDDEN "Hide protected operating system files (Recommended)"
+    IDS_ADVANCED_DESKTOP_PROCESS "Launch folder windows in a separate process"
+    IDS_ADVANCED_CLASSIC_VIEW_STATE "Remember each folder's view settings"
+    IDS_ADVANCED_PERSIST_BROWSERS "Restore previous folder windows at logon"
+    IDS_ADVANCED_CONTROL_PANEL_IN_MY_COMPUTER "Show Control Panel in My Computer"
+    IDS_ADVANCED_SHOW_COMP_COLOR "Show encrypted or compressed NTFS files in color"
+    IDS_ADVANCED_SHOW_INFO_TIP "Show pop-up description for folder and desktop items"
 END

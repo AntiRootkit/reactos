@@ -33,16 +33,13 @@
 #include <winerror.h>
 #include <stdio.h>
 #include <initguid.h>
+#include <shlguid.h>
+#include <shobjidl.h>
 
 #include "wine/test.h"
 
 #include "apphelp_apitest.h"
 
-
-typedef WORD TAG;
-typedef DWORD TAGID;
-typedef DWORD TAGREF;
-typedef UINT64 QWORD;
 
 #define TAG_TYPE_MASK 0xF000
 
@@ -101,6 +98,7 @@ typedef struct tagATTRINFO {
 } ATTRINFO, *PATTRINFO;
 
 static HMODULE hdll;
+static BOOL (WINAPI *pApphelpCheckShellObject)(REFCLSID, BOOL, ULONGLONG *);
 static LPCWSTR (WINAPI *pSdbTagToString)(TAG);
 static BOOL (WINAPI *pSdbGUIDToString)(CONST GUID *, PCWSTR, SIZE_T);
 static BOOL (WINAPI *pSdbIsNullGUID)(CONST GUID *);
@@ -114,7 +112,65 @@ DEFINE_GUID(GUID_DATABASE_SHIM,0x11111111,0x1111,0x1111,0x11,0x11,0x11,0x11,0x11
 DEFINE_GUID(GUID_DATABASE_DRIVERS,0xf9ab2228,0x3312,0x4a73,0xb6,0xf9,0x93,0x6d,0x70,0xe1,0x12,0xef);
 
 DEFINE_GUID(GUID_NULL,0,0,0,0,0,0,0,0,0,0,0);
+
+DEFINE_GUID(test_Microsoft_Browser_Architecture, 0xa5e46e3a, 0x8849, 0x11d1, 0x9d, 0x8c, 0x00, 0xc0, 0x4f, 0xc9, 0x9d, 0x61);
 DEFINE_GUID(test_UserAssist, 0xdd313e04, 0xfeff, 0x11d1, 0x8e, 0xcd, 0x00, 0x00, 0xf8, 0x7a, 0x47, 0x0c);
+DEFINE_GUID(CLSID_InternetSecurityManager, 0x7b8a2d94, 0x0ac9, 0x11d1, 0x89, 0x6c, 0x00, 0xc0, 0x4f, 0xB6, 0xbf, 0xc4);
+
+static const CLSID * objects[] = {
+    &GUID_NULL,
+    /* used by IE */
+    &test_Microsoft_Browser_Architecture,
+    &CLSID_MenuBand,
+    &CLSID_ShellLink,
+    &CLSID_ShellWindows,
+    &CLSID_InternetSecurityManager,
+    &test_UserAssist,
+    (const CLSID *)NULL
+};
+
+static void test_ApphelpCheckShellObject(void)
+{
+    ULONGLONG flags;
+    BOOL res;
+    int i;
+
+    if (!pApphelpCheckShellObject)
+    {
+        win_skip("ApphelpCheckShellObject not available\n");
+        return;
+    }
+
+    for (i = 0; objects[i]; i++)
+    {
+        flags = 0xdeadbeef;
+        SetLastError(0xdeadbeef);
+        res = pApphelpCheckShellObject(objects[i], FALSE, &flags);
+        ok(res && (flags == 0), "%s 0: got %d and 0x%x%08x with 0x%x (expected TRUE and 0)\n",
+            wine_dbgstr_guid(objects[i]), res, (ULONG)(flags >> 32), (ULONG)flags, GetLastError());
+
+        flags = 0xdeadbeef;
+        SetLastError(0xdeadbeef);
+        res = pApphelpCheckShellObject(objects[i], TRUE, &flags);
+        ok(res && (flags == 0), "%s 1: got %d and 0x%x%08x with 0x%x (expected TRUE and 0)\n",
+            wine_dbgstr_guid(objects[i]), res, (ULONG)(flags >> 32), (ULONG)flags, GetLastError());
+
+    }
+
+    /* NULL as pointer to flags is checked */
+    SetLastError(0xdeadbeef);
+    res = pApphelpCheckShellObject(&GUID_NULL, FALSE, NULL);
+    ok(res, "%s 0: got %d with 0x%x (expected != FALSE)\n", wine_dbgstr_guid(&GUID_NULL), res, GetLastError());
+
+    /* NULL as CLSID* crash on Windows */
+    if (0)
+    {
+        flags = 0xdeadbeef;
+        SetLastError(0xdeadbeef);
+        res = pApphelpCheckShellObject(NULL, FALSE, &flags);
+        trace("NULL as CLSID*: got %d and 0x%x%08x with 0x%x\n", res, (ULONG)(flags >> 32), (ULONG)flags, GetLastError());
+    }
+}
 
 static void test_SdbTagToString(void)
 {
@@ -547,7 +603,7 @@ static void test_crc_imp(size_t len, DWORD expected)
     DWORD num = 333;
     BOOL ret;
 
-    test_create_file_imp("testxx.exe", crc_test, len);
+    test_create_file_imp(L"testxx.exe", crc_test, len);
     ret = pSdbGetFileAttributes(path, &pattrinfo, &num);
     winetest_ok(ret != FALSE, "expected SdbGetFileAttributes to succeed.\n");
     winetest_ok(pattrinfo != (PATTRINFO)0xdead, "expected a valid pointer.\n");
@@ -573,7 +629,7 @@ static void test_crc2_imp(size_t len, int fill, DWORD expected)
     for (n = 0; n < len; ++n)
         crc_test[n] = (char)(fill ? fill : n);
 
-    test_create_file_imp("testxx.exe", crc_test, len);
+    test_create_file_imp(L"testxx.exe", crc_test, len);
     free(crc_test);
     ret = pSdbGetFileAttributes(path, &pattrinfo, &num);
     winetest_ok(ret != FALSE, "expected SdbGetFileAttributes to succeed.\n");
@@ -622,7 +678,7 @@ static void test_ApplicationAttributes(void)
         pSdbFreeFileAttributes(pattrinfo);
 
     /* Test a file with as much features as possible */
-    test_create_exe("testxx.exe", 0);
+    test_create_exe(L"testxx.exe", 0);
 
     ret = pSdbGetFileAttributes(path, &pattrinfo, &num);
     ok(ret != FALSE, "expected SdbGetFileAttributes to succeed.\n");
@@ -665,7 +721,7 @@ static void test_ApplicationAttributes(void)
 
 
     /* Disable resource and exports */
-    test_create_exe("testxx.exe", 1);
+    test_create_exe(L"testxx.exe", 1);
 
     ret = pSdbGetFileAttributes(path, &pattrinfo, &num);
     ok(ret != FALSE, "expected SdbGetFileAttributes to succeed.\n");
@@ -691,7 +747,7 @@ static void test_ApplicationAttributes(void)
         pSdbFreeFileAttributes(pattrinfo);
 
     /* A file with just 'MZ' */
-    test_create_file("testxx.exe", "MZ", 2);
+    test_create_file(L"testxx.exe", "MZ", 2);
 
     ret = pSdbGetFileAttributes(path, &pattrinfo, &num);
     ok(ret != FALSE, "expected SdbGetFileAttributes to succeed.\n");
@@ -712,7 +768,7 @@ static void test_ApplicationAttributes(void)
         pSdbFreeFileAttributes(pattrinfo);
 
     /* Empty file */
-    test_create_file("testxx.exe", NULL, 0);
+    test_create_file(L"testxx.exe", NULL, 0);
 
     ret = pSdbGetFileAttributes(path, &pattrinfo, &num);
     ok(ret != FALSE, "expected SdbGetFileAttributes to succeed.\n");
@@ -730,7 +786,7 @@ static void test_ApplicationAttributes(void)
         pSdbFreeFileAttributes(pattrinfo);
 
     /* minimal NE executable */
-    test_create_ne("testxx.exe", 0);
+    test_create_ne(L"testxx.exe", 0);
 
     ret = pSdbGetFileAttributes(path, &pattrinfo, &num);
     ok(ret != FALSE, "expected SdbGetFileAttributes to succeed.\n");
@@ -755,7 +811,7 @@ static void test_ApplicationAttributes(void)
         pSdbFreeFileAttributes(pattrinfo);
 
     /* NE executable with description / module name pointers zero, to show they are always used */
-    test_create_ne("testxx.exe", 1);
+    test_create_ne(L"testxx.exe", 1);
 
     ret = pSdbGetFileAttributes(path, &pattrinfo, &num);
     ok(ret != FALSE, "expected SdbGetFileAttributes to succeed.\n");
@@ -834,6 +890,8 @@ START_TEST(apphelp)
     //SetEnvironmentVariable("SHIM_DEBUG_LEVEL", "4");
     //SetEnvironmentVariable("DEBUGCHANNEL", "+apphelp");
     hdll = LoadLibraryA("apphelp.dll");
+
+    pApphelpCheckShellObject = (void *) GetProcAddress(hdll, "ApphelpCheckShellObject");
     pSdbTagToString = (void *) GetProcAddress(hdll, "SdbTagToString");
     pSdbGUIDToString = (void *) GetProcAddress(hdll, "SdbGUIDToString");
     pSdbIsNullGUID = (void *) GetProcAddress(hdll, "SdbIsNullGUID");
@@ -841,6 +899,7 @@ START_TEST(apphelp)
     pSdbGetFileAttributes = (void *) GetProcAddress(hdll, "SdbGetFileAttributes");
     pSdbFreeFileAttributes = (void *) GetProcAddress(hdll, "SdbFreeFileAttributes");
 
+    test_ApphelpCheckShellObject();
     test_GuidFunctions();
     test_ApplicationAttributes();
     test_SdbTagToString();

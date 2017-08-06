@@ -38,8 +38,6 @@ BEGIN
         MENUITEM "", -1, MFT_SEPARATOR
         MENUITEM "Поставяне", FCIDM_SHVIEW_INSERT
         MENUITEM "Поставяне като връзка", FCIDM_SHVIEW_INSERTLINK
-        MENUITEM "", -1, MFT_SEPARATOR
-        MENUITEM "Свойства", FCIDM_SHVIEW_PROPERTIES
     END
 END
 
@@ -434,8 +432,8 @@ BEGIN
     PUSHBUTTON "Прилагане върху ви&чки папки", 14001, 20, 50, 115, 14, WS_TABSTOP
     PUSHBUTTON "&Зачистване на всички папки", 14002, 140, 50, 115, 14, WS_TABSTOP
     LTEXT "Разширени настройки", -1, 7, 80, 100, 10
-    CONTROL "", 14003, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHAREIMAGELISTS | WS_BORDER | WS_TABSTOP, 7, 90, 249, 120
-    PUSHBUTTON "От под&разбираните", 14004, 180, 210, 80, 14, WS_TABSTOP
+    CONTROL "", 14003, "SysTreeView32", WS_BORDER | WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | TVS_DISABLEDRAGDROP | TVS_LINESATROOT, 7, 90, 249, 120
+    PUSHBUTTON "От под&разбираните", 14004, 177, 215, 80, 14, WS_TABSTOP
 END
 
 IDD_FOLDER_OPTIONS_FILETYPES DIALOGEX 0, 0, 264, 256
@@ -636,24 +634,22 @@ END
 STRINGTABLE
 BEGIN
     /* columns in the shellview */
-    IDS_SHV_COLUMN1 "Файл"
-    IDS_SHV_COLUMN2 "Размер"
-    IDS_SHV_COLUMN3 "Вид"
-    IDS_SHV_COLUMN4 "Променен"
-    IDS_SHV_COLUMN5 "Признак"
-    IDS_SHV_COLUMN6 "Размер"
-    IDS_SHV_COLUMN7 "Наличен размер"
-    IDS_SHV_COLUMN8 "Име"
-    IDS_SHV_COLUMN9 "Забележки"
-    IDS_SHV_COLUMN10 "Собственик"
-    IDS_SHV_COLUMN11 "Група"
-    IDS_SHV_COLUMN12 "Файлово име"
-    IDS_SHV_COLUMN13 "Раздел"
+    IDS_SHV_COLUMN_NAME "Име"
+    IDS_SHV_COLUMN_SIZE "Размер"
+    IDS_SHV_COLUMN_TYPE "Вид"
+    IDS_SHV_COLUMN_MODIFIED "Променен"
+    IDS_SHV_COLUMN_ATTRIBUTES "Признак"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Размер"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Наличен размер"
+    IDS_SHV_COLUMN_OWNER "Собственик"
+    IDS_SHV_COLUMN_GROUP "Група"
+    IDS_SHV_COLUMN_FILENAME "Файлово име"
+    IDS_SHV_COLUMN_CATEGORY "Раздел"
     IDS_SHV_COLUMN_DELFROM "Първоначално място"
     IDS_SHV_COLUMN_DELDATE "Дата на изтриване"
     IDS_SHV_COLUMN_FONTTYPE "Вид шрифт"
     IDS_SHV_COLUMN_WORKGROUP "Работна група"
-    IDS_SHV_NETWORKLOCATION "Място в мрежата"
+    IDS_SHV_COLUMN_NETLOCATION "Място в мрежата"
     IDS_SHV_COLUMN_DOCUMENTS "Книжа"
     IDS_SHV_COLUMN_STATUS "Състояние"
     IDS_SHV_COLUMN_COMMENTS "Забележки"
@@ -744,13 +740,13 @@ BEGIN
     IDS_COOKIES "Бисквитки"
     IDS_HISTORY "Местни настройки\\History"
     IDS_PROGRAM_FILES "Program Files"
-    IDS_MYPICTURES "Моите изображения"
+    IDS_MYPICTURES "Моите изображения" // "Документите ми\\Изображенията ми"
     IDS_PROGRAM_FILES_COMMON "Program Files\\Common Files"
     IDS_COMMON_DOCUMENTS "Документи"
     IDS_ADMINTOOLS "Пусков изборник\\Приложения\\Управнически средства"
     IDS_COMMON_MUSIC "Документи\\Музиката ми"
     IDS_COMMON_PICTURES "Документи\\Рисунките ми"
-    IDS_COMMON_VIDEO "Документи\\Лентите ми"
+    IDS_COMMON_VIDEO "Документи\\Лентите ми" // "Документите ми\\Видеозаписите ми"
     IDS_CDBURN_AREA "Местни настройки\\Приложни данни\\Microsoft\\CD Burning"
     IDS_NETWORKPLACE "Моята мрежа"
 
@@ -802,6 +798,7 @@ BEGIN
     IDS_SCR_FILE "Screen Saver"
     IDS_SYS_FILE "Системен файл"
     IDS_VXD_FILE "Водач на привидно устройство"
+    IDS_ANY_FILE "%s-file"
 
     IDS_OPEN_VERB "Отваряне"
     IDS_EXPLORE_VERB "Explore"
@@ -836,4 +833,24 @@ BEGIN
     IDS_MENU_EMPTY "(Empty)"
     IDS_OBJECTS "%d Objects"
     IDS_OBJECTS_SELECTED "%d Objects Selected"
+
+    IDS_ADVANCED_FOLDER "Files and Folders"
+    IDS_ADVANCED_NET_CRAWLER "Automatically search for network folders and printers"
+    IDS_ADVANCED_FOLDER_SIZE_TIP "Display file size information in folder tips"
+    IDS_ADVANCED_FRIENDLY_TREE "Display simple folder view in Explorer's Folders list"
+    IDS_ADVANCED_WEB_VIEW_BARRICADE "Display the contents of system folders"
+    IDS_ADVANCED_SHOW_FULL_PATH_ADDRESS "Display the full path in address bar"
+    IDS_ADVANCED_SHOW_FULL_PATH "Display the full path in the title bar"
+    IDS_ADVANCED_DISABLE_THUMB_CACHE "Do not cache thumbnails"
+    IDS_ADVANCED_HIDDEN "Hidden files and folders"
+    IDS_ADVANCED_DONT_SHOW_HIDDEN "Do not show hidden files and folders"
+    IDS_ADVANCED_SHOW_HIDDEN "Show hidden files and folders"
+    IDS_ADVANCED_HIDE_FILE_EXT "Hide extensions for known file types"
+    IDS_ADVANCED_SUPER_HIDDEN "Hide protected operating system files (Recommended)"
+    IDS_ADVANCED_DESKTOP_PROCESS "Launch folder windows in a separate process"
+    IDS_ADVANCED_CLASSIC_VIEW_STATE "Remember each folder's view settings"
+    IDS_ADVANCED_PERSIST_BROWSERS "Restore previous folder windows at logon"
+    IDS_ADVANCED_CONTROL_PANEL_IN_MY_COMPUTER "Show Control Panel in My Computer"
+    IDS_ADVANCED_SHOW_COMP_COLOR "Show encrypted or compressed NTFS files in color"
+    IDS_ADVANCED_SHOW_INFO_TIP "Show pop-up description for folder and desktop items"
 END

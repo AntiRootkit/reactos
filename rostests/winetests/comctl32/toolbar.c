@@ -1235,11 +1235,8 @@ static DWORD tbsize_alt_numtests = 0;
                        EqualRect(&rc, &tbsize_alt_results[tbsize_alt_numtests].rcButton))) { \
                 win_skip("Alternate rect found\n"); \
                 tbsize_alt_numtests++; \
-            } else if (!(mask&1)) { \
+            } else todo_wine_if(mask&1) \
                 check_rect("button = %d, tbsize_numtests = %d", rc, res->prcButtons[i], i, tbsize_numtests); \
-            } else {\
-                todo_wine { check_rect("button = %d, tbsize_numtests = %d", rc, res->prcButtons[i], i, tbsize_numtests); } \
-            } \
             mask >>= 1; \
         } \
         tbsize_numtests++; \
@@ -1713,12 +1710,13 @@ static void test_recalc(void)
 static void test_getbuttoninfo(void)
 {
     HWND hToolbar = NULL;
+    TBBUTTONINFOW tbiW;
+    TBBUTTONINFOA tbi;
     int i;
 
     rebuild_toolbar_with_buttons(&hToolbar);
     for (i = 0; i < 128; i++)
     {
-        TBBUTTONINFOA tbi;
         int ret;
 
         tbi.cbSize = i;
@@ -1730,6 +1728,14 @@ static void test_getbuttoninfo(void)
             compare(ret, -1, "%d");
         }
     }
+
+    /* TBIF_TEXT with NULL pszText */
+    memset(&tbiW, 0, sizeof(tbiW));
+    tbiW.cbSize = sizeof(tbiW);
+    tbiW.dwMask = TBIF_BYINDEX | TBIF_STYLE | TBIF_COMMAND | TBIF_TEXT;
+    i = SendMessageA(hToolbar, TB_GETBUTTONINFOW, 1, (LPARAM)&tbiW);
+    ok(i == 1, "Got index %d\n", i);
+
     DestroyWindow(hToolbar);
 }
 
@@ -2270,7 +2276,8 @@ static void test_save(void)
 {
     HWND wnd = NULL;
     TBSAVEPARAMSW params;
-    static const WCHAR subkey[] = {'S','o','f','t','w','a','r','e','\\','W','i','n','e','T','e','s','t',0};
+    static const WCHAR subkey[] = {'S','o','f','t','w','a','r','e','\\','W','i','n','e','\\',
+                                   'W','i','n','e','T','e','s','t',0};
     static const WCHAR value[] = {'t','o','o','l','b','a','r','t','e','s','t',0};
     LONG res;
     HKEY key;
@@ -2361,6 +2368,47 @@ static void test_save(void)
     RegCloseKey( key );
 }
 
+static void test_drawtext_flags(void)
+{
+    HWND hwnd = NULL;
+    UINT flags;
+
+    rebuild_toolbar(&hwnd);
+
+    flags = SendMessageA(hwnd, TB_SETDRAWTEXTFLAGS, 0, 0);
+todo_wine
+    ok(flags == 0, "Unexpected draw text flags %#x\n", flags);
+
+    /* zero mask, flags are retained */
+    flags = SendMessageA(hwnd, TB_SETDRAWTEXTFLAGS, 0, DT_BOTTOM);
+todo_wine
+    ok(flags == 0, "Unexpected draw text flags %#x\n", flags);
+    ok(!(flags & DT_BOTTOM), "Unexpected DT_BOTTOM style\n");
+
+    flags = SendMessageA(hwnd, TB_SETDRAWTEXTFLAGS, 0, 0);
+todo_wine
+    ok(flags == 0, "Unexpected draw text flags %#x\n", flags);
+    ok(!(flags & DT_BOTTOM), "Unexpected DT_BOTTOM style\n");
+
+    /* set/remove */
+    flags = SendMessageA(hwnd, TB_SETDRAWTEXTFLAGS, DT_BOTTOM, DT_BOTTOM);
+todo_wine
+    ok(flags == 0, "Unexpected draw text flags %#x\n", flags);
+    ok(!(flags & DT_BOTTOM), "Unexpected DT_BOTTOM style\n");
+
+    flags = SendMessageA(hwnd, TB_SETDRAWTEXTFLAGS, DT_BOTTOM, 0);
+todo_wine
+    ok(flags == DT_BOTTOM, "Unexpected draw text flags %#x\n", flags);
+    ok(flags & DT_BOTTOM, "Expected DT_BOTTOM style, %#x\n", flags);
+
+    flags = SendMessageA(hwnd, TB_SETDRAWTEXTFLAGS, DT_BOTTOM, 0);
+todo_wine
+    ok(flags == 0, "Unexpected draw text flags %#x\n", flags);
+    ok(!(flags & DT_BOTTOM), "Unexpected DT_BOTTOM style\n");
+
+    DestroyWindow(hwnd);
+}
+
 START_TEST(toolbar)
 {
     WNDCLASSA wc;
@@ -2405,6 +2453,7 @@ START_TEST(toolbar)
     test_TB_GET_SET_EXTENDEDSTYLE();
     test_noresize();
     test_save();
+    test_drawtext_flags();
 
     PostQuitMessage(0);
     while(GetMessageA(&msg,0,0,0)) {

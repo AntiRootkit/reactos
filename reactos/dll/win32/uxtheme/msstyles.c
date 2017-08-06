@@ -26,10 +26,6 @@
  * Defines and global variables
  */
 
-static BOOL MSSTYLES_GetNextInteger(LPCWSTR lpStringStart, LPCWSTR lpStringEnd, LPCWSTR *lpValEnd, int *value);
-static BOOL MSSTYLES_GetNextToken(LPCWSTR lpStringStart, LPCWSTR lpStringEnd, LPCWSTR *lpValEnd, LPWSTR lpBuff, DWORD buffSize);
-static HRESULT MSSTYLES_GetFont (LPCWSTR lpStringStart, LPCWSTR lpStringEnd, LPCWSTR *lpValEnd, LOGFONTW* logfont);
-
 extern int alphaBlendMode;
 
 #define MSSTYLES_VERSION 0x0003
@@ -77,9 +73,6 @@ HRESULT MSSTYLES_OpenThemeFile(LPCWSTR lpThemeFile, LPCWSTR pszColorName, LPCWST
     LPWSTR pszSizes;
     LPWSTR pszSelectedSize = NULL;
     LPWSTR tmp;
-
-    if (!gbThemeHooksActive)
-        return E_FAIL;
 
     TRACE("Opening %s\n", debugstr_w(lpThemeFile));
 
@@ -942,7 +935,7 @@ static BOOL MSSTYLES_GetNextInteger(LPCWSTR lpStringStart, LPCWSTR lpStringEnd, 
     int total = 0;
     BOOL gotNeg = FALSE;
 
-    while(cur < lpStringEnd && (*cur < '0' || *cur > '9' || *cur == '-')) cur++;
+    while(cur < lpStringEnd && ((*cur < '0' || *cur > '9') && *cur != '-')) cur++;
     if(cur >= lpStringEnd) {
         return FALSE;
     }
@@ -970,9 +963,9 @@ static BOOL MSSTYLES_GetNextToken(LPCWSTR lpStringStart, LPCWSTR lpStringEnd, LP
         return FALSE;
     }
     start = cur;
-    while(cur < lpStringEnd && *cur != ',') cur++;
+    while(cur < lpStringEnd && *cur != '\n'&& *cur != ',') cur++;
     end = cur;
-    while(isspace(*end)) end--;
+    while(isspace(*(end-1))) end--;
 
     lstrcpynW(lpBuff, start, min(buffSize, end-start+1));
 

@@ -3,8 +3,8 @@
 @ stdcall ApphelpCheckInstallShieldPackage(ptr wstr)
 @ stub ApphelpCheckMsiPackage
 @ stub ApphelpCheckRunApp
-@ stub ApphelpCheckRunAppEx
-@ stub ApphelpCheckShellObject
+@ stdcall ApphelpCheckRunAppEx(ptr ptr ptr wstr ptr long ptr ptr ptr ptr ptr ptr ptr ptr)
+@ stdcall ApphelpCheckShellObject(ptr long ptr)
 @ stub ApphelpCreateAppcompatData
 @ stub ApphelpFixMsiPackage
 @ stub ApphelpFixMsiPackageExe
@@ -51,7 +51,7 @@
 @ stdcall SdbFreeFileAttributes(ptr)
 @ stub SdbFreeFileInfo
 @ stub SdbFreeFlagInfo
-@ stub SdbGetAppCompatDataSize
+@ stdcall SdbGetAppCompatDataSize(ptr)
 @ stdcall SdbGetAppPatchDir(ptr wstr long)
 @ stdcall SdbGetBinaryTagData(ptr long)
 @ stdcall SdbGetDatabaseID(ptr ptr)
@@ -103,7 +103,8 @@
 @ stdcall SdbOpenDatabase(wstr long)
 @ stub SdbOpenDbFromGuid
 @ stub SdbOpenLocalDatabase
-@ stub SdbPackAppCompatData
+@ stdcall SdbPackAppCompatData(ptr ptr ptr ptr)
+@ stdcall SdbUnpackAppCompatData(ptr wstr ptr ptr)
 @ stub SdbQueryApphelpInformation
 @ stub SdbQueryBlockUpgrade
 @ stub SdbQueryContext
@@ -157,17 +158,19 @@
 @ stdcall SdbWriteStringTag(ptr long wstr)
 @ stub SdbWriteStringTagDirect
 @ stdcall SdbWriteWORDTag(ptr long long)
-@ stub SE_DllLoaded
-@ stub SE_DllUnloaded
+@ stdcall SE_DllLoaded(ptr)
+@ stdcall SE_DllUnloaded(ptr)
+@ stub SE_DynamicShim
+@ stub SE_DynamicUnshim
+@ stdcall SE_InstallAfterInit(ptr ptr)
+@ stdcall SE_InstallBeforeInit(ptr ptr)
+@ stdcall SE_IsShimDll(ptr)
+@ stdcall SE_ProcessDying()
 @ stub SE_GetHookAPIs
 @ stub SE_GetMaxShimCount
 @ stub SE_GetProcAddressLoad
 @ stub SE_GetShimCount
-@ stub SE_InstallAfterInit
-@ stub SE_InstallBeforeInit
-@ stub SE_IsShimDll
 @ stub SE_LdrEntryRemoved
-@ stub SE_ProcessDying
 @ stub SetPermLayers
 @ cdecl ShimDbgPrint(long str str)
 @ stub ShimDumpCache

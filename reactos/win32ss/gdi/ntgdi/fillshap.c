@@ -115,7 +115,7 @@ IntGdiPolygon(PDC    dc,
 //                                 Points[1].x, Points[1].y );
 
                 ret = IntEngLineTo(&psurf->SurfObj,
-                                   &dc->co.ClipObj,
+                                   (CLIPOBJ *)&dc->co,
                                    &dc->eboLine.BrushObject,
                                    Points[i].x,          /* From */
                                    Points[i].y,
@@ -129,7 +129,7 @@ IntGdiPolygon(PDC    dc,
             if (ret)
             {
                 ret = IntEngLineTo(&psurf->SurfObj,
-                                   &dc->co.ClipObj,
+                                   (CLIPOBJ *)&dc->co,
                                    &dc->eboLine.BrushObject,
                                    Points[Count-1].x, /* From */
                                    Points[Count-1].y,
@@ -219,12 +219,6 @@ NtGdiEllipse(
     {
        EngSetLastError(ERROR_INVALID_HANDLE);
        return FALSE;
-    }
-    if (dc->dctype == DC_TYPE_INFO)
-    {
-       DC_UnlockDc(dc);
-       /* Yes, Windows really returns TRUE in this case */
-       return TRUE;
     }
 
     if (PATH_IsPathOpen(dc->dclevel))
@@ -493,14 +487,6 @@ NtGdiPolyPolyDraw( IN HDC hDC,
         return FALSE;
     }
 
-    if (dc->dctype == DC_TYPE_INFO)
-    {
-        DC_UnlockDc(dc);
-        ExFreePoolWithTag(pTemp, TAG_SHAPE);
-        /* Yes, Windows really returns TRUE in this case */
-        return TRUE;
-    }
-
     DC_vPrepareDCsForBlit(dc, NULL, NULL, NULL);
 
     if (dc->pdcattr->ulDirty_ & (DIRTY_FILL | DC_BRUSH_DIRTY))
@@ -580,6 +566,11 @@ IntRectangle(PDC dc,
     DestRect.top    += dc->ptlDCOrig.y;
     DestRect.bottom += dc->ptlDCOrig.y;
 
+    if (dc->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
+    {
+       IntUpdateBoundsRect(dc, &DestRect);
+    }
+
     /* In GM_COMPATIBLE, don't include bottom and right edges */
     if (pdcattr->iGraphicsMode == GM_COMPATIBLE)
     {
@@ -606,7 +597,7 @@ IntRectangle(PDC dc,
     psurf = dc->dclevel.pSurface;
     if (!psurf)
     {
-        ret = FALSE;
+        ret = TRUE;
         goto cleanup;
     }
 
@@ -620,7 +611,7 @@ IntRectangle(PDC dc,
             ret = IntEngBitBlt(&psurf->SurfObj,
                                NULL,
                                NULL,
-                               &dc->co.ClipObj,
+                               (CLIPOBJ *)&dc->co,
                                NULL,
                                &DestRect,
                                NULL,
@@ -639,28 +630,28 @@ IntRectangle(PDC dc,
     {
         Mix = ROP2_TO_MIX(pdcattr->jROP2);
         ret = ret && IntEngLineTo(&psurf->SurfObj,
-                                  &dc->co.ClipObj,
+                                  (CLIPOBJ *)&dc->co,
                                   &dc->eboLine.BrushObject,
                                   DestRect.left, DestRect.top, DestRect.right, DestRect.top,
                                   &DestRect, // Bounding rectangle
                                   Mix);
 
         ret = ret && IntEngLineTo(&psurf->SurfObj,
-                                  &dc->co.ClipObj,
+                                  (CLIPOBJ *)&dc->co,
                                   &dc->eboLine.BrushObject,
                                   DestRect.right, DestRect.top, DestRect.right, DestRect.bottom,
                                   &DestRect, // Bounding rectangle
                                   Mix);
 
         ret = ret && IntEngLineTo(&psurf->SurfObj,
-                                  &dc->co.ClipObj,
+                                  (CLIPOBJ *)&dc->co,
                                   &dc->eboLine.BrushObject,
                                   DestRect.right, DestRect.bottom, DestRect.left, DestRect.bottom,
                                   &DestRect, // Bounding rectangle
                                   Mix);
 
         ret = ret && IntEngLineTo(&psurf->SurfObj,
-                                  &dc->co.ClipObj,
+                                  (CLIPOBJ *)&dc->co,
                                   &dc->eboLine.BrushObject,
                                   DestRect.left, DestRect.bottom, DestRect.left, DestRect.top,
                                   &DestRect, // Bounding rectangle
@@ -692,12 +683,6 @@ NtGdiRectangle(HDC  hDC,
     {
         EngSetLastError(ERROR_INVALID_HANDLE);
         return FALSE;
-    }
-    if (dc->dctype == DC_TYPE_INFO)
-    {
-        DC_UnlockDc(dc);
-        /* Yes, Windows really returns TRUE in this case */
-        return TRUE;
     }
 
     /* Do we rotate or shear? */
@@ -872,12 +857,6 @@ NtGdiRoundRect(
         DPRINT1("NtGdiRoundRect() - hDC is invalid\n");
         EngSetLastError(ERROR_INVALID_HANDLE);
     }
-    else if (dc->dctype == DC_TYPE_INFO)
-    {
-        DC_UnlockDc(dc);
-        /* Yes, Windows really returns TRUE in this case */
-        ret = TRUE;
-    }
     else
     {
         ret = IntRoundRect ( dc, LeftRect, TopRect, RightRect, BottomRect, Width, Height );
@@ -942,13 +921,6 @@ GreGradientFill(
         return FALSE;
     }
 
-    if(pdc->dctype == DC_TYPE_INFO)
-    {
-        DC_UnlockDc(pdc);
-        /* Yes, Windows really returns TRUE in this case */
-        return TRUE;
-    }
-
     if (!pdc->dclevel.pSurface)
     {
         /* Memory DC with no surface selected */
@@ -979,6 +951,11 @@ GreGradientFill(
     ptlDitherOrg.x += pdc->ptlDCOrig.x;
     ptlDitherOrg.y += pdc->ptlDCOrig.y;
 
+   if (pdc->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
+   {
+      IntUpdateBoundsRect(pdc, &rclExtent);
+   }
+
     DC_vPrepareDCsForBlit(pdc, &rclExtent, NULL, NULL);
 
     psurf = pdc->dclevel.pSurface;
@@ -986,7 +963,7 @@ GreGradientFill(
     EXLATEOBJ_vInitialize(&exlo, &gpalRGB, psurf->ppal, 0, 0, 0);
 
     bRet = IntEngGradientFill(&psurf->SurfObj,
-                             &pdc->co.ClipObj,
+                             (CLIPOBJ *)&pdc->co,
                              &exlo.xlo,
                              pVertex,
                              nVertex,
@@ -1105,16 +1082,10 @@ NtGdiExtFloodFill(
         EngSetLastError(ERROR_INVALID_HANDLE);
         return FALSE;
     }
-    if (dc->dctype == DC_TYPE_INFO)
-    {
-        DC_UnlockDc(dc);
-        /* Yes, Windows really returns TRUE in this case */
-        return TRUE;
-    }
 
     if (!dc->dclevel.pSurface)
     {
-        Ret = FALSE;
+        Ret = TRUE;
         goto cleanup;
     }
 
@@ -1144,6 +1115,11 @@ NtGdiExtFloodFill(
     else
     {
         RECTL_vSetRect(&DestRect, 0, 0, psurf->SurfObj.sizlBitmap.cx, psurf->SurfObj.sizlBitmap.cy);
+    }
+
+    if (dc->fs & (DC_ACCUM_APP|DC_ACCUM_WMGR))
+    {
+       IntUpdateBoundsRect(dc, &DestRect);
     }
 
     EXLATEOBJ_vInitialize(&exlo, &gpalRGB, psurf->ppal, 0, 0xffffff, 0);

@@ -1354,7 +1354,7 @@ MmNotPresentFaultSectionView(PMMSUPPORT AddressSpace,
      * Check if someone else is already handling this fault, if so wait
      * for them
      */
-    if (Entry && IS_SWAP_FROM_SSE(Entry) && SWAPENTRY_FROM_SSE(Entry) == MM_WAIT_ENTRY)
+    if (Entry && MM_IS_WAIT_PTE(Entry))
     {
         MmUnlockSectionSegment(Segment);
         MmUnlockAddressSpace(AddressSpace);
@@ -2898,7 +2898,7 @@ MmCreateDataFileSection(PROS_SECTION_OBJECT *SectionObject,
                         PLARGE_INTEGER UMaximumSize,
                         ULONG SectionPageProtection,
                         ULONG AllocationAttributes,
-                        HANDLE FileHandle)
+                        PFILE_OBJECT FileObject)
 /*
  * Create a section backed by a data file
  */
@@ -2906,12 +2906,7 @@ MmCreateDataFileSection(PROS_SECTION_OBJECT *SectionObject,
     PROS_SECTION_OBJECT Section;
     NTSTATUS Status;
     LARGE_INTEGER MaximumSize;
-    PFILE_OBJECT FileObject;
     PMM_SECTION_SEGMENT Segment;
-    ULONG FileAccess;
-    IO_STATUS_BLOCK Iosb;
-    LARGE_INTEGER Offset;
-    CHAR Buffer;
     FILE_STANDARD_INFORMATION FileInfo;
     ULONG Length;
 
@@ -2929,6 +2924,7 @@ MmCreateDataFileSection(PROS_SECTION_OBJECT *SectionObject,
                             (PVOID*)&Section);
     if (!NT_SUCCESS(Status))
     {
+        ObDereferenceObject(FileObject);
         return(Status);
     }
     /*
@@ -2941,22 +2937,6 @@ MmCreateDataFileSection(PROS_SECTION_OBJECT *SectionObject,
     Section->AllocationAttributes = AllocationAttributes;
 
     /*
-     * Reference the file handle
-     */
-    FileAccess = MiArm3GetCorrectFileAccessMask(SectionPageProtection);
-    Status = ObReferenceObjectByHandle(FileHandle,
-                                       FileAccess,
-                                       IoFileObjectType,
-                                       ExGetPreviousMode(),
-                                       (PVOID*)(PVOID)&FileObject,
-                                       NULL);
-    if (!NT_SUCCESS(Status))
-    {
-        ObDereferenceObject(Section);
-        return(Status);
-    }
-
-    /*
      * FIXME: This is propably not entirely correct. We can't look into
      * the standard FCB header because it might not be initialized yet
      * (as in case of the EXT2FS driver by Manoj Paul Joseph where the
@@ -2967,7 +2947,6 @@ MmCreateDataFileSection(PROS_SECTION_OBJECT *SectionObject,
                                     sizeof(FILE_STANDARD_INFORMATION),
                                     &FileInfo,
                                     &Length);
-    Iosb.Information = Length;
     if (!NT_SUCCESS(Status))
     {
         ObDereferenceObject(Section);
@@ -3012,35 +2991,9 @@ MmCreateDataFileSection(PROS_SECTION_OBJECT *SectionObject,
     if (FileObject->SectionObjectPointer == NULL ||
             FileObject->SectionObjectPointer->SharedCacheMap == NULL)
     {
-        /*
-         * Read a bit so caching is initiated for the file object.
-         * This is only needed because MiReadPage currently cannot
-         * handle non-cached streams.
-         */
-        Offset.QuadPart = 0;
-        Status = ZwReadFile(FileHandle,
-                            NULL,
-                            NULL,
-                            NULL,
-                            &Iosb,
-                            &Buffer,
-                            sizeof (Buffer),
-                            &Offset,
-                            0);
-        if (!NT_SUCCESS(Status) && (Status != STATUS_END_OF_FILE))
-        {
-            ObDereferenceObject(Section);
-            ObDereferenceObject(FileObject);
-            return(Status);
-        }
-        if (FileObject->SectionObjectPointer == NULL ||
-                FileObject->SectionObjectPointer->SharedCacheMap == NULL)
-        {
-            /* FIXME: handle this situation */
-            ObDereferenceObject(Section);
-            ObDereferenceObject(FileObject);
-            return STATUS_INVALID_PARAMETER;
-        }
+        ObDereferenceObject(Section);
+        ObDereferenceObject(FileObject);
+        return STATUS_INVALID_FILE_FOR_SECTION;
     }
 
     /*
@@ -3836,10 +3789,19 @@ MmCreateImageSection(PROS_SECTION_OBJECT *SectionObject,
             if(ImageSectionObject->Segments != NULL)
                 ExFreePool(ImageSectionObject->Segments);
 
+            /*
+             * If image file is empty, then return that the file is invalid for section
+             */
+            Status = StatusExeFmt;
+            if (StatusExeFmt == STATUS_END_OF_FILE)
+            {
+                Status = STATUS_INVALID_FILE_FOR_SECTION;
+            }
+
             ExFreePoolWithTag(ImageSectionObject, TAG_MM_SECTION_SEGMENT);
             ObDereferenceObject(Section);
             ObDereferenceObject(FileObject);
-            return(StatusExeFmt);
+            return(Status);
         }
 
         Section->ImageSection = ImageSectionObject;
@@ -4021,7 +3983,7 @@ MmFreeSectionPage(PVOID Context, MEMORY_AREA* MemoryArea, PVOID Address,
     Segment = MemoryArea->Data.SectionData.Segment;
 
     Entry = MmGetPageEntrySectionSegment(Segment, &Offset);
-    while (Entry && IS_SWAP_FROM_SSE(Entry) && SWAPENTRY_FROM_SSE(Entry) == MM_WAIT_ENTRY)
+    while (Entry && MM_IS_WAIT_PTE(Entry))
     {
         MmUnlockSectionSegment(Segment);
         MmUnlockAddressSpace(AddressSpace);
@@ -4163,7 +4125,7 @@ NTSTATUS
 NTAPI
 MiRosUnmapViewOfSection(IN PEPROCESS Process,
                         IN PVOID BaseAddress,
-                        IN ULONG Flags)
+                        IN BOOLEAN SkipDebuggerNotify)
 {
     NTSTATUS Status;
     PMEMORY_AREA MemoryArea;
@@ -4251,7 +4213,7 @@ MiRosUnmapViewOfSection(IN PEPROCESS Process,
     MmUnlockAddressSpace(AddressSpace);
 
     /* Notify debugger */
-    if (ImageBaseAddress) DbgkUnMapViewOfSection(ImageBaseAddress);
+    if (ImageBaseAddress && !SkipDebuggerNotify) DbgkUnMapViewOfSection(ImageBaseAddress);
 
     return(STATUS_SUCCESS);
 }
@@ -5098,9 +5060,39 @@ MmCreateSection (OUT PVOID  * Section,
         if (!NT_SUCCESS(Status) && Status != STATUS_END_OF_FILE)
         {
             DPRINT1("CC failure: %lx\n", Status);
+            if (FileObject)
+                ObDereferenceObject(FileObject);
             return Status;
         }
         // Caching is initialized...
+
+        // Hack of the hack: actually, it might not be initialized if FSD init on effective right and if file is null-size
+        // In such case, force cache by initiating a write IRP
+        if (Status == STATUS_END_OF_FILE && !(AllocationAttributes & SEC_IMAGE) && FileObject != NULL &&
+            (FileObject->SectionObjectPointer == NULL || FileObject->SectionObjectPointer->SharedCacheMap == NULL))
+        {
+            Buffer = 0xdb;
+            Status = ZwWriteFile(FileHandle,
+                                 NULL,
+                                 NULL,
+                                 NULL,
+                                 &Iosb,
+                                 &Buffer,
+                                 sizeof(Buffer),
+                                 &ByteOffset,
+                                 NULL);
+            if (NT_SUCCESS(Status))
+            {
+                LARGE_INTEGER Zero;
+                Zero.QuadPart = 0LL;
+
+                Status = IoSetInformation(FileObject,
+                                          FileEndOfFileInformation,
+                                          sizeof(LARGE_INTEGER),
+                                          &Zero);
+                ASSERT(NT_SUCCESS(Status));
+            }
+        }
     }
 #endif
 
@@ -5123,9 +5115,7 @@ MmCreateSection (OUT PVOID  * Section,
                                           MaximumSize,
                                           SectionPageProtection,
                                           AllocationAttributes,
-                                          FileHandle);
-        if (FileObject)
-            ObDereferenceObject(FileObject);
+                                          FileObject);
     }
 #else
     else if (FileHandle != NULL || FileObject != NULL)
@@ -5152,6 +5142,8 @@ MmCreateSection (OUT PVOID  * Section,
                                          MaximumSize,
                                          SectionPageProtection,
                                          AllocationAttributes);
+        if (FileObject)
+            ObDereferenceObject(FileObject);
     }
 
     return Status;

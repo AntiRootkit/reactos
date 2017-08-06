@@ -2,7 +2,7 @@
  * PROJECT:     ReactOS Local Spooler
  * LICENSE:     GNU LGPL v2.1 or any later version as published by the Free Software Foundation
  * PURPOSE:     Functions related to Print Processors
- * COPYRIGHT:   Copyright 2015 Colin Finck <colin@reactos.org>
+ * COPYRIGHT:   Copyright 2015-2017 Colin Finck <colin@reactos.org>
  */
 
 #include "precomp.h"
@@ -17,7 +17,7 @@ static LIST_ENTRY _PrintProcessorList;
  * Checks a supplied pEnvironment variable for validity and opens its registry key.
  *
  * @param pEnvironment
- * The pEnvironment variable to check. Can be NULL to use the current environment.
+ * The pEnvironment variable to check.
  *
  * @param hKey
  * On success, this variable will contain a HKEY to the opened registry key of the environment.
@@ -36,16 +36,20 @@ _OpenEnvironment(PCWSTR pEnvironment, PHKEY hKey)
     DWORD dwErrorCode;
     PWSTR pwszEnvironmentKey = NULL;
 
-    // Use the current environment if none was supplied.
+    // Sanity checks
     if (!pEnvironment)
-        pEnvironment = wszCurrentEnvironment;
+    {
+        dwErrorCode = ERROR_INVALID_ENVIRONMENT;
+        goto Cleanup;
+    }
 
     // Construct the registry key of the demanded environment.
     cchEnvironment = wcslen(pEnvironment);
     pwszEnvironmentKey = DllAllocSplMem((cchEnvironmentsKey + cchEnvironment + 1) * sizeof(WCHAR));
     if (!pwszEnvironmentKey)
     {
-        ERR("DllAllocSplMem failed with error %lu!\n", GetLastError());
+        dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
+        ERR("DllAllocSplMem failed!\n");
         goto Cleanup;
     }
 
@@ -78,6 +82,8 @@ FindDatatype(const PLOCAL_PRINT_PROCESSOR pPrintProcessor, PCWSTR pwszDatatype)
     DWORD i;
     PDATATYPES_INFO_1W pCurrentDatatype = pPrintProcessor->pDatatypesInfo1;
 
+    TRACE("FindDatatype(%p, %S)\n", pPrintProcessor, pwszDatatype);
+
     if (!pwszDatatype)
         return FALSE;
 
@@ -97,6 +103,8 @@ FindPrintProcessor(PCWSTR pwszName)
 {
     PLIST_ENTRY pEntry;
     PLOCAL_PRINT_PROCESSOR pPrintProcessor;
+
+    TRACE("FindPrintProcessor(%S)\n", pwszName);
 
     if (!pwszName)
         return NULL;
@@ -118,7 +126,7 @@ FindPrintProcessor(PCWSTR pwszName)
  * Initializes a singly linked list of locally available Print Processors.
  */
 BOOL
-InitializePrintProcessorList()
+InitializePrintProcessorList(void)
 {
     DWORD cbDatatypes;
     DWORD cbFileName;
@@ -136,11 +144,13 @@ InitializePrintProcessorList()
     WCHAR wszFileName[MAX_PATH];
     WCHAR wszPrintProcessorPath[MAX_PATH];
 
+    TRACE("InitializePrintProcessorList()\n");
+
     // Initialize an empty list for our Print Processors.
     InitializeListHead(&_PrintProcessorList);
     
     // Prepare the path to the Print Processor directory.
-    if (!LocalGetPrintProcessorDirectory(NULL, NULL, 1, (PBYTE)wszPrintProcessorPath, sizeof(wszPrintProcessorPath), &cchPrintProcessorPath))
+    if (!LocalGetPrintProcessorDirectory(NULL, (PWSTR)wszCurrentEnvironment, 1, (PBYTE)wszPrintProcessorPath, sizeof(wszPrintProcessorPath), &cchPrintProcessorPath))
     {
         dwErrorCode = GetLastError();
         goto Cleanup;
@@ -155,12 +165,9 @@ InitializePrintProcessorList()
     ++cchPrintProcessorPath;
 
     // Open the environment registry key.
-    dwErrorCode = _OpenEnvironment(NULL, &hKey);
+    dwErrorCode = _OpenEnvironment(wszCurrentEnvironment, &hKey);
     if (dwErrorCode != ERROR_SUCCESS)
-    {
-        ERR("_OpenEnvironment failed with error %lu!\n", dwErrorCode);
         goto Cleanup;
-    }
 
     // Open the "Print Processors" subkey.
     dwErrorCode = (DWORD)RegOpenKeyExW(hKey, L"Print Processors", 0, KEY_READ, &hSubKey);
@@ -205,7 +212,7 @@ InitializePrintProcessorList()
         if (!pPrintProcessor)
         {
             dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
-            ERR("DllAllocSplMem failed with error %lu!\n", GetLastError());
+            ERR("DllAllocSplMem failed!\n");
             goto Cleanup;
         }
 
@@ -214,7 +221,7 @@ InitializePrintProcessorList()
         if (!pPrintProcessor->pwszName)
         {
             dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
-            ERR("DllAllocSplMem failed with error %lu!\n", GetLastError());
+            ERR("DllAllocSplMem failed!\n");
             goto Cleanup;
         }
 
@@ -311,7 +318,7 @@ InitializePrintProcessorList()
         if (!pPrintProcessor->pDatatypesInfo1)
         {
             dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
-            ERR("DllAllocSplMem failed with error %lu!\n", GetLastError());
+            ERR("DllAllocSplMem failed!\n");
             goto Cleanup;
         }
 
@@ -397,6 +404,8 @@ LocalEnumPrintProcessorDatatypes(LPWSTR pName, LPWSTR pPrintProcessorName, DWORD
     DWORD dwErrorCode;
     PLOCAL_PRINT_PROCESSOR pPrintProcessor;
 
+    TRACE("LocalEnumPrintProcessorDatatypes(%S, %S, %lu, %p, %lu, %p, %p)\n", pName, pPrintProcessorName, Level, pDatatypes, cbBuf, pcbNeeded, pcReturned);
+
     // Sanity checks
     if (Level != 1)
     {
@@ -473,6 +482,8 @@ LocalEnumPrintProcessors(LPWSTR pName, LPWSTR pEnvironment, DWORD Level, LPBYTE 
     PRINTPROCESSOR_INFO_1W PrintProcessorInfo1;
     PWSTR pwszTemp = NULL;
 
+    TRACE("LocalEnumPrintProcessors(%S, %S, %lu, %p, %lu, %p, %p)\n", pName, pEnvironment, Level, pPrintProcessorInfo, cbBuf, pcbNeeded, pcReturned);
+
     // Sanity checks
     if (Level != 1)
     {
@@ -491,10 +502,7 @@ LocalEnumPrintProcessors(LPWSTR pName, LPWSTR pEnvironment, DWORD Level, LPBYTE 
     // We use the registry and not the PrintProcessorList here, because the caller may request information about a different environment.
     dwErrorCode = _OpenEnvironment(pEnvironment, &hKey);
     if (dwErrorCode != ERROR_SUCCESS)
-    {
-        ERR("_OpenEnvironment failed with error %lu!\n", dwErrorCode);
         goto Cleanup;
-    }
 
     // Open the "Print Processors" subkey.
     dwErrorCode = (DWORD)RegOpenKeyExW(hKey, L"Print Processors", 0, KEY_READ, &hSubKey);
@@ -517,7 +525,7 @@ LocalEnumPrintProcessors(LPWSTR pName, LPWSTR pEnvironment, DWORD Level, LPBYTE 
     if (!pwszTemp)
     {
         dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
-        ERR("DllAllocSplMem failed with error %lu!\n", GetLastError());
+        ERR("DllAllocSplMem failed!\n");
         goto Cleanup;
     }
 
@@ -602,7 +610,6 @@ Cleanup:
  *
  * @param pEnvironment
  * One of the predefined operating system and architecture "environment" strings (like "Windows NT x86").
- * Alternatively, NULL to output the Print Processor directory of the current environment.
  *
  * @param Level
  * The level of the (non-existing) structure supplied through pPrintProcessorInfo. This must be 1.
@@ -633,19 +640,7 @@ LocalGetPrintProcessorDirectory(PWSTR pName, PWSTR pEnvironment, DWORD Level, PB
     HKEY hKey = NULL;
     PWSTR pwszDirectory = (PWSTR)pPrintProcessorInfo;
 
-    // Sanity checks
-    if (Level != 1)
-    {
-        dwErrorCode = ERROR_INVALID_LEVEL;
-        goto Cleanup;
-    }
-
-    if (!pcbNeeded)
-    {
-        // This error is also caught by RPC and returned as RPC_X_NULL_REF_POINTER.
-        dwErrorCode = ERROR_INVALID_PARAMETER;
-        goto Cleanup;
-    }
+    TRACE("LocalGetPrintProcessorDirectory(%S, %S, %lu, %p, %lu, %p)\n", pName, pEnvironment, Level, pPrintProcessorInfo, cbBuf, pcbNeeded);
 
     // Verify pEnvironment and open its registry key.
     dwErrorCode = _OpenEnvironment(pEnvironment, &hKey);

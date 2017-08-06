@@ -124,6 +124,9 @@ LoadCurrentScheme(OUT COLOR_SCHEME *scheme)
     INT i, Result;
     HKEY hKey;
     BOOL ret;
+#if (WINVER >= 0x0600)
+    OSVERSIONINFO osvi;
+#endif
 
     /* Load colors */
     for (i = 0; i < NUM_COLORS; i++)
@@ -133,6 +136,20 @@ LoadCurrentScheme(OUT COLOR_SCHEME *scheme)
 
     /* Load non client metrics */
     scheme->ncMetrics.cbSize = sizeof(NONCLIENTMETRICSW);
+
+#if (WINVER >= 0x0600)
+    /* Size of NONCLIENTMETRICSA/W depends on current version of the OS.
+     * see:
+     *  https://msdn.microsoft.com/en-us/library/windows/desktop/ff729175%28v=vs.85%29.aspx
+     */
+    if (GetVersionEx(&osvi))
+    {
+        /* Windows XP and earlier */
+        if (osvi.dwMajorVersion <= 5)
+            scheme->ncMetrics.cbSize -= sizeof(scheme->ncMetrics.iPaddedBorderWidth);
+    }
+#endif
+
     ret = SystemParametersInfoW(SPI_GETNONCLIENTMETRICS,
                                 sizeof(NONCLIENTMETRICSW),
                                 &scheme->ncMetrics,
@@ -393,6 +410,8 @@ ApplyScheme(IN COLOR_SCHEME *scheme, IN PTHEME_SELECTION pSelectedTheme)
 
     /* Hide underlined letters for keyboard navigation until I press the Alt key */
     SYS_CONFIG(SPI_SETKEYBOARDCUES,              0, IntToPtr(scheme->Effects.bKeyboardCues));
+
+    SYS_CONFIG(SPI_SETFLATMENU,                  0, IntToPtr(scheme->bFlatMenus));
 
     // SYS_CONFIG(SPI_SETACTIVEWINDOWTRACKING,   0, IntToPtr(scheme->Effects.bActiveWindowTracking));
     // SYS_CONFIG(SPI_SETCOMBOBOXANIMATION,      0, IntToPtr(scheme->Effects.bComboBoxAnimation));
@@ -685,6 +704,23 @@ EnumThemeStyles(IN LPCWSTR pszThemeFileName, IN ENUMTHEMESTYLE pfnEnumTheme)
     return List;
 }
 
+PTHEME LoadTheme(IN LPCWSTR pszThemeFileName,IN LPCWSTR pszThemeName)
+{
+    PTHEME pTheme = CreateTheme(pszThemeFileName, pszThemeName);
+    if (pTheme == NULL) 
+        return NULL;
+
+    pTheme->SizesList = EnumThemeStyles( pszThemeFileName, (ENUMTHEMESTYLE)EnumThemeSizes);
+    pTheme->ColoursList = EnumThemeStyles( pszThemeFileName, (ENUMTHEMESTYLE)EnumThemeColors);
+    if(pTheme->SizesList == NULL || pTheme->ColoursList == NULL)
+    {
+        CleanupThemes(pTheme);
+        return NULL;
+    }
+
+    return pTheme;
+}
+
 BOOL CALLBACK
 EnumThemeProc(IN LPVOID lpReserved,
               IN LPCWSTR pszThemeFileName,
@@ -696,17 +732,8 @@ EnumThemeProc(IN LPVOID lpReserved,
     PTHEME *List, pTheme;
 
     List = (PTHEME*)lpData;
-
-    pTheme = CreateTheme(pszThemeFileName, pszThemeName);
+    pTheme = LoadTheme(pszThemeFileName, pszThemeName);
     if (pTheme == NULL) return FALSE;
-
-    pTheme->SizesList = EnumThemeStyles( pszThemeFileName, (ENUMTHEMESTYLE)EnumThemeSizes);
-    pTheme->ColoursList = EnumThemeStyles( pszThemeFileName, (ENUMTHEMESTYLE)EnumThemeColors);
-    if(pTheme->SizesList == NULL || pTheme->ColoursList == NULL)
-    {
-        CleanupThemes(pTheme);
-        return FALSE;
-    }
 
     pTheme->NextTheme = *List;
     *List = pTheme;
@@ -757,8 +784,61 @@ LoadThemes(VOID)
 }
 
 /*
+ * FindSelectedTheme: Finds the specified theme in the list of themes 
+ *                    or loads it if it was not loaded already.
+ */
+BOOL
+FindOrAppendTheme(IN PTHEME pThemeList, 
+                  IN LPCWSTR pwszThemeFileName,
+                  IN LPCWSTR pwszColorBuff,
+                  IN LPCWSTR pwszSizeBuff,
+                  OUT PTHEME_SELECTION pSelectedTheme)
+{
+    PTHEME pTheme;
+    PTHEME pFoundTheme = NULL;
+
+    ZeroMemory(pSelectedTheme, sizeof(THEME_SELECTION));
+
+    for (pTheme = pThemeList; pTheme; pTheme = pTheme->NextTheme)
+    {
+        if (pTheme->ThemeFileName &&
+           _wcsicmp(pTheme->ThemeFileName, pwszThemeFileName) == 0)
+        {
+            pFoundTheme = pTheme;
+            break;
+        }
+
+        if (pTheme->NextTheme == NULL)
+            break;
+    }
+
+    if (!pFoundTheme)
+    {
+        pFoundTheme = LoadTheme(pwszThemeFileName, pwszThemeFileName);
+        if (!pFoundTheme)
+            return FALSE;
+
+        pTheme->NextTheme = pFoundTheme;
+    }
+
+    pSelectedTheme->ThemeActive = TRUE;
+    pSelectedTheme->Theme = pFoundTheme;
+    if (pwszColorBuff)
+        pSelectedTheme->Color = FindStyle(pFoundTheme->ColoursList, pwszColorBuff);
+    else
+        pSelectedTheme->Color = pFoundTheme->ColoursList;
+
+    if (pwszSizeBuff)
+        pSelectedTheme->Size = FindStyle(pFoundTheme->SizesList, pwszSizeBuff);
+    else
+        pSelectedTheme->Size = pFoundTheme->SizesList;
+
+    return TRUE;
+}
+
+/*
  * GetActiveTheme: Gets the active theme and populates pSelectedTheme
- *                 with entries from the list of loaded themes
+ *                 with entries from the list of loaded themes.
  */
 BOOL
 GetActiveTheme(IN PTHEME pThemeList, OUT PTHEME_SELECTION pSelectedTheme)
@@ -766,10 +846,7 @@ GetActiveTheme(IN PTHEME pThemeList, OUT PTHEME_SELECTION pSelectedTheme)
     WCHAR szThemeFileName[MAX_PATH];
     WCHAR szColorBuff[MAX_PATH];
     WCHAR szSizeBuff[MAX_PATH];
-    PTHEME pTheme;
     HRESULT hret;
-
-    ZeroMemory(pSelectedTheme, sizeof(THEME_SELECTION));
 
     /* Retrieve the name of the current theme */
     hret = GetCurrentThemeName(szThemeFileName,
@@ -778,25 +855,10 @@ GetActiveTheme(IN PTHEME pThemeList, OUT PTHEME_SELECTION pSelectedTheme)
                                MAX_PATH,
                                szSizeBuff,
                                MAX_PATH);
-    if (FAILED(hret))  return FALSE;
+    if (FAILED(hret))  
+        return FALSE;
 
-    for (pTheme = pThemeList; pTheme; pTheme = pTheme->NextTheme)
-    {
-        if (pTheme->ThemeFileName &&
-           _wcsicmp(pTheme->ThemeFileName, szThemeFileName) == 0)
-        {
-            break;
-        }
-    }
-
-    if (pTheme == NULL) return FALSE;
-
-    pSelectedTheme->ThemeActive = TRUE;
-    pSelectedTheme->Theme = pTheme;
-    pSelectedTheme->Color = FindStyle(pTheme->ColoursList, szColorBuff);
-    pSelectedTheme->Size = FindStyle(pTheme->SizesList, szSizeBuff);
-
-    return TRUE;
+    return FindOrAppendTheme(pThemeList, szThemeFileName, szColorBuff, szSizeBuff, pSelectedTheme);
 }
 
 /*
@@ -862,7 +924,7 @@ ActivateTheme(IN PTHEME_SELECTION pSelectedTheme)
         if (!SUCCEEDED(hret)) return FALSE;
     }
 
-    hret = ApplyTheme(hThemeFile, "", 0);
+    hret = ApplyTheme(hThemeFile, 0, 0);
 
     if (pSelectedTheme->ThemeActive)
     {
@@ -917,6 +979,8 @@ LoadSchemeFromTheme(OUT PCOLOR_SCHEME scheme, IN PTHEME_SELECTION pSelectedTheme
     GetThemeSysFont(hTheme, TMT_MSGBOXFONT, &scheme->ncMetrics.lfMessageFont);
     GetThemeSysFont(hTheme, TMT_ICONTITLEFONT, &scheme->icMetrics.lfFont);
 
+    scheme->bFlatMenus = GetThemeSysBool(hTheme, TMT_FLATMENUS);
+
     CloseThemeData(hTheme);
 
     return TRUE;
@@ -945,4 +1009,52 @@ DrawThemePreview(IN HDC hdcMem, IN PCOLOR_SCHEME scheme, IN PTHEME_SELECTION pSe
                          scheme->crColor);
 
     return SUCCEEDED(hres);
+}
+
+BOOL ActivateThemeFile(LPCWSTR pwszFile)
+{
+    PTHEME pThemes;
+    THEME_SELECTION selection;
+    COLOR_SCHEME scheme;
+    BOOL ret = FALSE;
+
+    pThemes = LoadThemes();
+    if (!pThemes)
+        return FALSE;
+
+    LoadCurrentScheme(&scheme);
+
+    if (pwszFile)
+    {
+        ret = FindOrAppendTheme(pThemes, pwszFile, NULL, NULL, &selection);
+        if (!ret)
+            goto cleanup;
+
+        ret = LoadSchemeFromTheme(&scheme, &selection);
+        if (!ret)
+            goto cleanup;
+    }
+    else
+    {
+        ret = GetActiveClassicTheme(pThemes, &selection);
+        if (!ret)
+            goto cleanup;
+
+        ret = LoadSchemeFromReg(&scheme, &selection);
+        if (!ret)
+            goto cleanup;
+    }
+
+    ret = ActivateTheme(&selection);
+    if (!ret)
+        goto cleanup;
+
+    ApplyScheme(&scheme, &selection);
+
+    ret = TRUE;
+
+cleanup:
+    CleanupThemes(pThemes);
+
+    return ret;
 }

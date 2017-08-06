@@ -132,7 +132,11 @@ static LPWSTR FONT_mbtowc(HDC hdc, LPCSTR str, INT count, INT *plenW, UINT *pCP)
     strW = HeapAlloc(GetProcessHeap(), 0, lenW*sizeof(WCHAR));
     if (!strW)
         return NULL;
-    MultiByteToWideChar(cp, 0, str, count, strW, lenW);
+    if(!MultiByteToWideChar(cp, 0, str, count, strW, lenW))
+    {
+        HeapFree(GetProcessHeap(), 0, strW);
+        return NULL;
+    }
     DPRINT("mapped %s -> %S\n", str, strW);
     if(plenW) *plenW = lenW;
     if(pCP) *pCP = cp;
@@ -381,7 +385,7 @@ GetCharacterPlacementA(
     DWORD ret;
     UINT font_cp;
 
-    if ( !lpString || uCount <= 0 || (nMaxExtent < 0 && nMaxExtent != -1 ) )
+    if ( !lpString || uCount <= 0 || !lpResults || (nMaxExtent < 0 && nMaxExtent != -1 ) )
     {
         SetLastError(ERROR_INVALID_PARAMETER);
         return 0;
@@ -826,7 +830,7 @@ GetCharABCWidthsA(
 
     ret = NtGdiGetCharABCWidthsW( hdc,
                                   wstr[0],
-                                  (ULONG)count,
+                                  wlen - 1,
                                   (PWCHAR)wstr,
                                   GCABCW_NOFLOAT,
                                   (PVOID)lpabc);
@@ -1009,6 +1013,8 @@ GetGlyphOutlineA(
             mbchs[0] = (uChar & 0xff);
         }
         p = FONT_mbtowc(hdc, mbchs, len, NULL, NULL);
+        if(!p)
+            return GDI_ERROR;
         c = p[0];
     }
     else
@@ -1876,6 +1882,7 @@ RemoveFontResourceExW(LPCWSTR lpFileName,
     /* FIXME the flags */
     /* FIXME the pdv */
     /* FIXME NtGdiRemoveFontResource handle flags and pdv */
+    DPRINT("RemoveFontResourceExW\n");
     return 0;
 }
 

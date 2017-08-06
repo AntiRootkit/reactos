@@ -48,19 +48,30 @@ bind(IN SOCKET s,
         /* Get the Socket Context */
         if ((Socket = WsSockGetSocket(s)))
         {
-            /* Make the call */
-            Status = Socket->Provider->Service.lpWSPBind(s,
-                                                         name, 
-                                                         namelen,
-                                                         &ErrorCode);
-            /* Deference the Socket Context */
-            WsSockDereference(Socket);
+            if (name && (namelen >= sizeof(*name)))
+            {
+                /* Make the call */
+                Status = Socket->Provider->Service.lpWSPBind(s,
+                                                             name,
+                                                             namelen,
+                                                             &ErrorCode);
+                /* Deference the Socket Context */
+                WsSockDereference(Socket);
 
-            /* Return Provider Value */
-            if (Status == ERROR_SUCCESS) return Status;
+                /* Return Provider Value */
+                if (Status == ERROR_SUCCESS) return Status;
 
-            /* If everything seemed fine, then the WSP call failed itself */
-            if (ErrorCode == NO_ERROR) ErrorCode = WSASYSCALLFAILURE;
+                /* If everything seemed fine, then the WSP call failed itself */
+                if (ErrorCode == NO_ERROR) ErrorCode = WSASYSCALLFAILURE;
+            }
+            else
+            {
+                /* Deference the Socket Context */
+                WsSockDereference(Socket);
+
+                /* name or namelen not valid */
+                ErrorCode = WSAEFAULT;
+            }
         }
         else
         {
@@ -441,8 +452,8 @@ WSASocketA(IN INT af,
     LPWSAPROTOCOL_INFOW p = &ProtocolInfoW;
 
     /* Convert Protocol Info to Wide */
-    if (lpProtocolInfo) 
-    {    
+    if (lpProtocolInfo)
+    {
         /* Copy the Data */
         memcpy(&ProtocolInfoW,
                lpProtocolInfo,
@@ -455,8 +466,8 @@ WSASocketA(IN INT af,
                             -1,
                             ProtocolInfoW.szProtocol,
                             sizeof(ProtocolInfoW.szProtocol) / sizeof(WCHAR));
-    } 
-    else 
+    }
+    else
     {
         /* No Protocol Info Specified */
         p = NULL;
@@ -475,7 +486,7 @@ WSASocketA(IN INT af,
  * @implemented
  */
 SOCKET
-WSAAPI 
+WSAAPI
 WSASocketW(IN INT af,
            IN INT type,
            IN INT protocol,
@@ -506,8 +517,8 @@ WSASocketW(IN INT af,
     Catalog = WsProcGetTCatalog(Process);
 
     /* Find a Provider for the Catalog ID */
-    if (lpProtocolInfo) 
-    {   
+    if (lpProtocolInfo)
+    {
         /* Get the catalog ID */
         CatalogId = lpProtocolInfo->dwCatalogEntryId;
 
@@ -516,8 +527,8 @@ WSASocketW(IN INT af,
                                                    CatalogId,
                                                    &CatalogEntry);
     }
-    else  
-    {   
+    else
+    {
         /* No ID */
         CatalogId = 0;
 
@@ -558,26 +569,12 @@ DoLookup:
         WsTcEntryDereference(CatalogEntry);
 
         /* Did we fail with WSAEINPROGRESS and had no specific provider? */
-        if ((Status == INVALID_SOCKET) && 
-            (ErrorCode == WSAEINPROGRESS) && 
+        if ((Status == INVALID_SOCKET) &&
+            (ErrorCode == WSAEINPROGRESS) &&
             !(lpProtocolInfo))
         {
             /* In that case, restart the lookup from this ID */
             goto DoLookup;
-        }
-
-        /* Check if we got a valid socket */
-        if (Status == WSAEINVAL)
-        {
-            Status = INVALID_SOCKET;
-            ErrorCode = WSAEINVAL;
-        }
-
-        /* Check if we got a valid socket */
-        if (Status == WSAEINVAL)
-        {
-            Status = INVALID_SOCKET;
-            ErrorCode = WSAEINVAL;
         }
 
         /* Check if we got a valid socket */

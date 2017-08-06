@@ -2054,16 +2054,27 @@ Return Value:
         PDISK_DATA        physicalDiskData;
         BOOLEAN           removable = FALSE;
         BOOLEAN           listInitialized = FALSE;
+        ULONG             copyLength;
 
-        if ((irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_DISK_GET_DRIVE_GEOMETRY &&
-             irpStack->Parameters.DeviceIoControl.OutputBufferLength <
-            sizeof(DISK_GEOMETRY)) ||
-             (irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_DISK_GET_DRIVE_GEOMETRY_EX &&
-             irpStack->Parameters.DeviceIoControl.OutputBufferLength <
-            sizeof(DISK_GEOMETRY_EX))) {
+        if (irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_DISK_GET_DRIVE_GEOMETRY) {
+            if (irpStack->Parameters.DeviceIoControl.OutputBufferLength < sizeof(DISK_GEOMETRY)) {
+                status = STATUS_BUFFER_TOO_SMALL;
+                break;
+            }
 
-            status = STATUS_INFO_LENGTH_MISMATCH;
-            break;
+            copyLength = sizeof(DISK_GEOMETRY);
+        } else {
+            ASSERT(irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_DISK_GET_DRIVE_GEOMETRY_EX);
+            if (irpStack->Parameters.DeviceIoControl.OutputBufferLength < FIELD_OFFSET(DISK_GEOMETRY_EX, Data)) {
+                status = STATUS_BUFFER_TOO_SMALL;
+                break;
+            }
+
+            if (irpStack->Parameters.DeviceIoControl.OutputBufferLength >= sizeof(DISK_GEOMETRY_EX)) {
+                copyLength = sizeof(DISK_GEOMETRY_EX);
+            } else {
+                copyLength = FIELD_OFFSET(DISK_GEOMETRY_EX, Data);
+            }
         }
 
         status = STATUS_SUCCESS;
@@ -2121,15 +2132,10 @@ Return Value:
 
             RtlMoveMemory(Irp->AssociatedIrp.SystemBuffer,
                           deviceExtension->DiskGeometry,
-                          (irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_DISK_GET_DRIVE_GEOMETRY) ?
-                          sizeof(DISK_GEOMETRY) :
-                          sizeof(DISK_GEOMETRY_EX));
+                          copyLength);
 
             status = STATUS_SUCCESS;
-            Irp->IoStatus.Information =
-               (irpStack->Parameters.DeviceIoControl.IoControlCode == IOCTL_DISK_GET_DRIVE_GEOMETRY) ?
-               sizeof(DISK_GEOMETRY) :
-               sizeof(DISK_GEOMETRY_EX);
+            Irp->IoStatus.Information = copyLength;
         }
 
         break;
@@ -2280,7 +2286,7 @@ Return Value:
             outputBuffer->PartitionType = diskData->PartitionType;
             outputBuffer->StartingOffset = deviceExtension->StartingOffset;
             outputBuffer->PartitionLength.QuadPart = (diskData->PartitionNumber) ?
-                deviceExtension->PartitionLength.QuadPart : 2305843009213693951LL; // HACK
+                deviceExtension->PartitionLength.QuadPart : 0x1FFFFFFFFFFFFFFFLL; // HACK
             outputBuffer->HiddenSectors = diskData->HiddenSectors;
             outputBuffer->PartitionNumber = diskData->PartitionNumber;
             outputBuffer->BootIndicator = diskData->BootIndicator;
@@ -3915,6 +3921,17 @@ Return Value:
                 ZwClose(targetKey);
 
                 if (!NT_SUCCESS(status)) {
+                    ExFreePool(keyData);
+                    continue;
+                }
+
+                if (keyData->DataLength < 9*sizeof(WCHAR)) {
+                    //
+                    // the data is too short to use (we subtract 9 chars in normal path)
+                    //
+                    DebugPrint((1, "EnumerateBusKey: Saved data was invalid, "
+                                "not enough data in registry!\n"));
+                    ExFreePool(keyData);
                     continue;
                 }
 
@@ -3937,6 +3954,7 @@ Return Value:
                                                  TRUE);
 
                 if (!NT_SUCCESS(status)) {
+                    ExFreePool(keyData);
                     continue;
                 }
 
@@ -4118,6 +4136,7 @@ Return Value:
         DebugPrint((1,
                    "SCSIDISK: ExtractBiosGeometry: Can't query configuration data (%x)\n",
                    status));
+        ZwClose(hardwareKey);
         ExFreePool(keyData);
         return;
     }

@@ -50,6 +50,212 @@ static int createfiltergraph(void)
         &CLSID_FilterGraph, NULL, CLSCTX_INPROC_SERVER, &IID_IGraphBuilder, (LPVOID*)&pgraph);
 }
 
+static void test_basic_video(void)
+{
+    IBasicVideo* pbv;
+    LONG video_width, video_height;
+    LONG left, top, width, height;
+    HRESULT hr;
+
+    hr = IGraphBuilder_QueryInterface(pgraph, &IID_IBasicVideo, (LPVOID*)&pbv);
+    ok(hr==S_OK, "Cannot get IBasicVideo interface returned: %x\n", hr);
+
+    /* test get video size */
+    hr = IBasicVideo_GetVideoSize(pbv, NULL, NULL);
+    ok(hr==E_POINTER, "IBasicVideo_GetVideoSize returned: %x\n", hr);
+    hr = IBasicVideo_GetVideoSize(pbv, &video_width, NULL);
+    ok(hr==E_POINTER, "IBasicVideo_GetVideoSize returned: %x\n", hr);
+    hr = IBasicVideo_GetVideoSize(pbv, NULL, &video_height);
+    ok(hr==E_POINTER, "IBasicVideo_GetVideoSize returned: %x\n", hr);
+    hr = IBasicVideo_GetVideoSize(pbv, &video_width, &video_height);
+    ok(hr==S_OK, "Cannot get video size returned: %x\n", hr);
+
+    /* test source position */
+    hr = IBasicVideo_GetSourcePosition(pbv, NULL, NULL, NULL, NULL);
+    ok(hr == E_POINTER, "IBasicVideo_GetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_GetSourcePosition(pbv, &left, &top, NULL, NULL);
+    ok(hr == E_POINTER, "IBasicVideo_GetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_GetSourcePosition(pbv, NULL, NULL, &width, &height);
+    ok(hr == E_POINTER, "IBasicVideo_GetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_GetSourcePosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get source position returned: %x\n", hr);
+    ok(left == 0, "expected 0, got %d\n", left);
+    ok(top == 0, "expected 0, got %d\n", top);
+    ok(width == video_width, "expected %d, got %d\n", video_width, width);
+    ok(height == video_height, "expected %d, got %d\n", video_height, height);
+
+    hr = IBasicVideo_SetSourcePosition(pbv, 0, 0, 0, 0);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_SetSourcePosition(pbv, 0, 0, video_width*2, video_height*2);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_put_SourceTop(pbv, -1);
+    ok(hr==E_INVALIDARG, "IBasicVideo_put_SourceTop returned: %x\n", hr);
+    hr = IBasicVideo_put_SourceTop(pbv, 0);
+    ok(hr==S_OK, "Cannot put source top returned: %x\n", hr);
+    hr = IBasicVideo_put_SourceTop(pbv, 1);
+    ok(hr==E_INVALIDARG, "IBasicVideo_put_SourceTop returned: %x\n", hr);
+
+    hr = IBasicVideo_SetSourcePosition(pbv, video_width, 0, video_width, video_height);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_SetSourcePosition(pbv, 0, video_height, video_width, video_height);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_SetSourcePosition(pbv, -1, 0, video_width, video_height);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_SetSourcePosition(pbv, 0, -1, video_width, video_height);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_SetSourcePosition(pbv, video_width/2, video_height/2, video_width, video_height);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_SetSourcePosition(pbv, video_width/2, video_height/2, video_width, video_height);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+
+    hr = IBasicVideo_SetSourcePosition(pbv, 0, 0, video_width, video_height+1);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+    hr = IBasicVideo_SetSourcePosition(pbv, 0, 0, video_width+1, video_height);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetSourcePosition returned: %x\n", hr);
+
+    hr = IBasicVideo_SetSourcePosition(pbv, video_width/2, video_height/2, video_width/3+1, video_height/3+1);
+    ok(hr==S_OK, "Cannot set source position returned: %x\n", hr);
+
+    hr = IBasicVideo_get_SourceLeft(pbv, &left);
+    ok(hr==S_OK, "Cannot get source left returned: %x\n", hr);
+    ok(left==video_width/2, "expected %d, got %d\n", video_width/2, left);
+    hr = IBasicVideo_get_SourceTop(pbv, &top);
+    ok(hr==S_OK, "Cannot get source top returned: %x\n", hr);
+    ok(top==video_height/2, "expected %d, got %d\n", video_height/2, top);
+    hr = IBasicVideo_get_SourceWidth(pbv, &width);
+    ok(hr==S_OK, "Cannot get source width returned: %x\n", hr);
+    ok(width==video_width/3+1, "expected %d, got %d\n", video_width/3+1, width);
+    hr = IBasicVideo_get_SourceHeight(pbv, &height);
+    ok(hr==S_OK, "Cannot get source height returned: %x\n", hr);
+    ok(height==video_height/3+1, "expected %d, got %d\n", video_height/3+1, height);
+
+    hr = IBasicVideo_put_SourceLeft(pbv, video_width/3);
+    ok(hr==S_OK, "Cannot put source left returned: %x\n", hr);
+    hr = IBasicVideo_GetSourcePosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get source position returned: %x\n", hr);
+    ok(left == video_width/3, "expected %d, got %d\n", video_width/3, left);
+    ok(width == video_width/3+1, "expected %d, got %d\n", video_width/3+1, width);
+
+    hr = IBasicVideo_put_SourceTop(pbv, video_height/3);
+    ok(hr==S_OK, "Cannot put source top returned: %x\n", hr);
+    hr = IBasicVideo_GetSourcePosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get source position returned: %x\n", hr);
+    ok(top == video_height/3, "expected %d, got %d\n", video_height/3, top);
+    ok(height == video_height/3+1, "expected %d, got %d\n", video_height/3+1, height);
+
+    hr = IBasicVideo_put_SourceWidth(pbv, video_width/4+1);
+    ok(hr==S_OK, "Cannot put source width returned: %x\n", hr);
+    hr = IBasicVideo_GetSourcePosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get source position returned: %x\n", hr);
+    ok(left == video_width/3, "expected %d, got %d\n", video_width/3, left);
+    ok(width == video_width/4+1, "expected %d, got %d\n", video_width/4+1, width);
+
+    hr = IBasicVideo_put_SourceHeight(pbv, video_height/4+1);
+    ok(hr==S_OK, "Cannot put source height returned: %x\n", hr);
+    hr = IBasicVideo_GetSourcePosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get source position returned: %x\n", hr);
+    ok(top == video_height/3, "expected %d, got %d\n", video_height/3, top);
+    ok(height == video_height/4+1, "expected %d, got %d\n", video_height/4+1, height);
+
+    /* test destination rectangle */
+    hr = IBasicVideo_GetDestinationPosition(pbv, NULL, NULL, NULL, NULL);
+    ok(hr == E_POINTER, "IBasicVideo_GetDestinationPosition returned: %x\n", hr);
+    hr = IBasicVideo_GetDestinationPosition(pbv, &left, &top, NULL, NULL);
+    ok(hr == E_POINTER, "IBasicVideo_GetDestinationPosition returned: %x\n", hr);
+    hr = IBasicVideo_GetDestinationPosition(pbv, NULL, NULL, &width, &height);
+    ok(hr == E_POINTER, "IBasicVideo_GetDestinationPosition returned: %x\n", hr);
+    hr = IBasicVideo_GetDestinationPosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get destination position returned: %x\n", hr);
+    ok(left == 0, "expected 0, got %d\n", left);
+    ok(top == 0, "expected 0, got %d\n", top);
+    todo_wine ok(width == video_width, "expected %d, got %d\n", video_width, width);
+    todo_wine ok(height == video_height, "expected %d, got %d\n", video_height, height);
+
+    hr = IBasicVideo_SetDestinationPosition(pbv, 0, 0, 0, 0);
+    ok(hr==E_INVALIDARG, "IBasicVideo_SetDestinationPosition returned: %x\n", hr);
+    hr = IBasicVideo_SetDestinationPosition(pbv, 0, 0, video_width*2, video_height*2);
+    ok(hr==S_OK, "Cannot put destination position returned: %x\n", hr);
+
+    hr = IBasicVideo_put_DestinationLeft(pbv, -1);
+    ok(hr==S_OK, "Cannot put destination left returned: %x\n", hr);
+    hr = IBasicVideo_put_DestinationLeft(pbv, 0);
+    ok(hr==S_OK, "Cannot put destination left returned: %x\n", hr);
+    hr = IBasicVideo_put_DestinationLeft(pbv, 1);
+    ok(hr==S_OK, "Cannot put destination left returned: %x\n", hr);
+
+    hr = IBasicVideo_SetDestinationPosition(pbv, video_width, 0, video_width, video_height);
+    ok(hr==S_OK, "Cannot set destinaiton position returned: %x\n", hr);
+    hr = IBasicVideo_SetDestinationPosition(pbv, 0, video_height, video_width, video_height);
+    ok(hr==S_OK, "Cannot set destinaiton position returned: %x\n", hr);
+    hr = IBasicVideo_SetDestinationPosition(pbv, -1, 0, video_width, video_height);
+    ok(hr==S_OK, "Cannot set destination position returned: %x\n", hr);
+    hr = IBasicVideo_SetDestinationPosition(pbv, 0, -1, video_width, video_height);
+    ok(hr==S_OK, "Cannot set destination position returned: %x\n", hr);
+    hr = IBasicVideo_SetDestinationPosition(pbv, video_width/2, video_height/2, video_width, video_height);
+    ok(hr==S_OK, "Cannot set destination position returned: %x\n", hr);
+    hr = IBasicVideo_SetDestinationPosition(pbv, video_width/2, video_height/2, video_width, video_height);
+    ok(hr==S_OK, "Cannot set destination position returned: %x\n", hr);
+
+    hr = IBasicVideo_SetDestinationPosition(pbv, 0, 0, video_width, video_height+1);
+    ok(hr==S_OK, "Cannot set destination position returned: %x\n", hr);
+    hr = IBasicVideo_SetDestinationPosition(pbv, 0, 0, video_width+1, video_height);
+    ok(hr==S_OK, "Cannot set destination position returned: %x\n", hr);
+
+    hr = IBasicVideo_SetDestinationPosition(pbv, video_width/2, video_height/2, video_width/3+1, video_height/3+1);
+    ok(hr==S_OK, "Cannot set destination position returned: %x\n", hr);
+
+    hr = IBasicVideo_get_DestinationLeft(pbv, &left);
+    ok(hr==S_OK, "Cannot get destination left returned: %x\n", hr);
+    ok(left==video_width/2, "expected %d, got %d\n", video_width/2, left);
+    hr = IBasicVideo_get_DestinationTop(pbv, &top);
+    ok(hr==S_OK, "Cannot get destination top returned: %x\n", hr);
+    ok(top==video_height/2, "expected %d, got %d\n", video_height/2, top);
+    hr = IBasicVideo_get_DestinationWidth(pbv, &width);
+    ok(hr==S_OK, "Cannot get destination width returned: %x\n", hr);
+    ok(width==video_width/3+1, "expected %d, got %d\n", video_width/3+1, width);
+    hr = IBasicVideo_get_DestinationHeight(pbv, &height);
+    ok(hr==S_OK, "Cannot get destination height returned: %x\n", hr);
+    ok(height==video_height/3+1, "expected %d, got %d\n", video_height/3+1, height);
+
+    hr = IBasicVideo_put_DestinationLeft(pbv, video_width/3);
+    ok(hr==S_OK, "Cannot put destination left returned: %x\n", hr);
+    hr = IBasicVideo_GetDestinationPosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get source position returned: %x\n", hr);
+    ok(left == video_width/3, "expected %d, got %d\n", video_width/3, left);
+    ok(width == video_width/3+1, "expected %d, got %d\n", video_width/3+1, width);
+
+    hr = IBasicVideo_put_DestinationTop(pbv, video_height/3);
+    ok(hr==S_OK, "Cannot put destination top returned: %x\n", hr);
+    hr = IBasicVideo_GetDestinationPosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get source position returned: %x\n", hr);
+    ok(top == video_height/3, "expected %d, got %d\n", video_height/3, top);
+    ok(height == video_height/3+1, "expected %d, got %d\n", video_height/3+1, height);
+
+    hr = IBasicVideo_put_DestinationWidth(pbv, video_width/4+1);
+    ok(hr==S_OK, "Cannot put destination width returned: %x\n", hr);
+    hr = IBasicVideo_GetDestinationPosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get source position returned: %x\n", hr);
+    ok(left == video_width/3, "expected %d, got %d\n", video_width/3, left);
+    ok(width == video_width/4+1, "expected %d, got %d\n", video_width/4+1, width);
+
+    hr = IBasicVideo_put_DestinationHeight(pbv, video_height/4+1);
+    ok(hr==S_OK, "Cannot put destination height returned: %x\n", hr);
+    hr = IBasicVideo_GetDestinationPosition(pbv, &left, &top, &width, &height);
+    ok(hr == S_OK, "Cannot get source position returned: %x\n", hr);
+    ok(top == video_height/3, "expected %d, got %d\n", video_height/3, top);
+    ok(height == video_height/4+1, "expected %d, got %d\n", video_height/4+1, height);
+
+    /* reset source rectangle */
+    hr = IBasicVideo_SetDefaultSourcePosition(pbv);
+    ok(hr==S_OK, "IBasicVideo_SetDefaultSourcePosition returned: %x\n", hr);
+
+    /* reset destination position */
+    hr = IBasicVideo_SetDestinationPosition(pbv, 0, 0, video_width, video_height);
+    ok(hr==S_OK, "Cannot set destination position returned: %x\n", hr);
+
+    IBasicVideo_Release(pbv);
+}
+
 static void rungraph(void)
 {
     HRESULT hr;
@@ -69,6 +275,8 @@ static void rungraph(void)
     IMediaFilter_SetSyncSource(pmf, NULL);
 
     IMediaFilter_Release(pmf);
+
+    test_basic_video();
 
     hr = IMediaControl_Run(pmc);
     ok(hr==S_FALSE, "Cannot run the graph returned: %x\n", hr);
@@ -146,18 +354,100 @@ static void test_render_run(const WCHAR *file)
     HANDLE h;
     HRESULT hr;
 
+    h = CreateFileW(file, 0, 0, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE) {
+        skip("Could not read test file %s, skipping test\n", wine_dbgstr_w(file));
+        return;
+    }
+    CloseHandle(h);
+
     if (!createfiltergraph())
         return;
 
-    h = CreateFileW(file, 0, 0, NULL, OPEN_EXISTING, 0, NULL);
-    if (h != INVALID_HANDLE_VALUE) {
-        CloseHandle(h);
-        hr = IGraphBuilder_RenderFile(pgraph, file, NULL);
-        ok(hr==S_OK, "RenderFile returned: %x\n", hr);
-        rungraph();
-    }
+    hr = IGraphBuilder_RenderFile(pgraph, file, NULL);
+    ok(hr == S_OK, "RenderFile returned: %x\n", hr);
+    rungraph();
 
     releasefiltergraph();
+
+    /* check reference leaks */
+    h = CreateFileW(file, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+    ok(h != INVALID_HANDLE_VALUE, "CreateFile failed: err=%d\n", GetLastError());
+    CloseHandle(h);
+}
+
+static DWORD WINAPI call_RenderFile_multithread(LPVOID lParam)
+{
+    IFilterGraph2 *filter_graph = lParam;
+    HRESULT hr;
+    WCHAR mp3file[] = {'t','e','s','t','.','m','p','3',0};
+    HANDLE handle;
+
+    handle = CreateFileW(mp3file, 0, 0, NULL, CREATE_ALWAYS, 0, NULL);
+    if (handle == INVALID_HANDLE_VALUE)
+    {
+        skip("Could not read test file %s, skipping test\n", wine_dbgstr_w(mp3file));
+        return 1;
+    }
+    CloseHandle(handle);
+
+    hr = IFilterGraph2_RenderFile(filter_graph, mp3file, NULL);
+    todo_wine ok(hr == VFW_E_CANNOT_RENDER || /* xp or older */
+                 hr == VFW_E_NO_TRANSPORT, /* win7 or newer */
+                 "Expected 0x%08x or 0x%08x, returned 0x%08x\n", VFW_E_CANNOT_RENDER, VFW_E_NO_TRANSPORT, hr);
+
+    DeleteFileW(mp3file);
+    return 0;
+}
+
+static void test_render_with_multithread(void)
+{
+    HRESULT hr;
+    HMODULE hmod;
+    static HRESULT (WINAPI *pDllGetClassObject)(REFCLSID rclsid, REFIID riid, void **out);
+    IClassFactory *classfactory = NULL;
+    static IGraphBuilder *graph_builder;
+    static IFilterGraph2 *filter_graph;
+    HANDLE thread;
+
+    CoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+
+    hmod = LoadLibraryA("quartz.dll");
+    if (!hmod)
+    {
+        skip("Fail to load quartz.dll.\n");
+        return;
+    }
+
+    pDllGetClassObject = (void*)GetProcAddress(hmod, "DllGetClassObject");
+    if (!pDllGetClassObject)
+    {
+         skip("Fail to get DllGetClassObject.\n");
+         return;
+    }
+
+    hr = pDllGetClassObject(&CLSID_FilterGraph, &IID_IClassFactory, (void **)&classfactory);
+    ok(hr == S_OK, "DllGetClassObject failed 0x%08x\n", hr);
+    if (FAILED(hr))
+    {
+         skip("Can't create IClassFactory 0x%08x.\n", hr);
+         return;
+    }
+
+    hr = IClassFactory_CreateInstance(classfactory, NULL, &IID_IUnknown, (LPVOID*)&graph_builder);
+    ok(hr == S_OK, "IClassFactory_CreateInstance failed 0x%08x\n", hr);
+
+    hr = IGraphBuilder_QueryInterface(graph_builder, &IID_IFilterGraph2, (void**)&filter_graph);
+    ok(hr == S_OK, "IGraphBuilder_QueryInterface failed 0x%08x\n", hr);
+
+    thread = CreateThread(NULL, 0, call_RenderFile_multithread, filter_graph, 0, NULL);
+
+    WaitForSingleObject(thread, 1000);
+    IFilterGraph2_Release(filter_graph);
+    IGraphBuilder_Release(graph_builder);
+    IClassFactory_Release(classfactory);
+    CoUninitialize();
+    return;
 }
 
 static void test_graph_builder(void)
@@ -2019,4 +2309,5 @@ START_TEST(filtergraph)
     test_render_filter_priority();
     test_aggregate_filter_graph();
     CoUninitialize();
+    test_render_with_multithread();
 }

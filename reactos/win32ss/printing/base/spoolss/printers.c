@@ -2,7 +2,7 @@
  * PROJECT:     ReactOS Spooler Router
  * LICENSE:     GNU LGPL v2.1 or any later version as published by the Free Software Foundation
  * PURPOSE:     Functions related to Printers and printing
- * COPYRIGHT:   Copyright 2015 Colin Finck <colin@reactos.org>
+ * COPYRIGHT:   Copyright 2015-2017 Colin Finck <colin@reactos.org>
  */
 
 #include "precomp.h"
@@ -65,36 +65,37 @@ EndPagePrinter(HANDLE hPrinter)
 BOOL WINAPI
 EnumPrintersW(DWORD Flags, PWSTR Name, DWORD Level, PBYTE pPrinterEnum, DWORD cbBuf, PDWORD pcbNeeded, PDWORD pcReturned)
 {
-    BOOL bReturnValue;
     DWORD cbCallBuffer;
     DWORD cbNeeded;
+    DWORD dwErrorCode = MAXDWORD;
     DWORD dwReturned;
     PBYTE pCallBuffer;
     PSPOOLSS_PRINT_PROVIDER pPrintProvider;
     PLIST_ENTRY pEntry;
 
-    // Sanity checks.
-    if ((cbBuf && !pPrinterEnum) || !pcbNeeded || !pcReturned)
-    {
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return FALSE;
-    }
-
     // Begin counting.
     *pcbNeeded = 0;
     *pcReturned = 0;
+
+    if (cbBuf && !pPrinterEnum)
+    {
+        dwErrorCode = ERROR_INVALID_USER_BUFFER;
+        goto Cleanup;
+    }
 
     // At the beginning, we have the full buffer available.
     cbCallBuffer = cbBuf;
     pCallBuffer = pPrinterEnum;
 
-    // Loop through all Print Provider.
+    // Loop through all Print Providers.
     for (pEntry = PrintProviderList.Flink; pEntry != &PrintProviderList; pEntry = pEntry->Flink)
     {
         pPrintProvider = CONTAINING_RECORD(pEntry, SPOOLSS_PRINT_PROVIDER, Entry);
 
         // Call the EnumPrinters function of this Print Provider.
-        bReturnValue = pPrintProvider->PrintProvider.fpEnumPrinters(Flags, Name, Level, pCallBuffer, cbCallBuffer, &cbNeeded, &dwReturned);
+        cbNeeded = 0;
+        dwReturned = 0;
+        pPrintProvider->PrintProvider.fpEnumPrinters(Flags, Name, Level, pCallBuffer, cbCallBuffer, &cbNeeded, &dwReturned);
 
         // Add the returned counts to the total values.
         *pcbNeeded += cbNeeded;
@@ -109,9 +110,15 @@ EnumPrintersW(DWORD Flags, PWSTR Name, DWORD Level, PBYTE pPrinterEnum, DWORD cb
         // Advance the buffer if the caller provided it.
         if (pCallBuffer)
             pCallBuffer += cbNeeded;
+
+        // dwErrorCode shall not be overwritten if a previous EnumPrinters call already succeeded.
+        if (dwErrorCode != ERROR_SUCCESS)
+            dwErrorCode = GetLastError();
     }
 
-    return bReturnValue;
+Cleanup:
+    SetLastError(dwErrorCode);
+    return (dwErrorCode == ERROR_SUCCESS);
 }
 
 BOOL WINAPI
@@ -148,17 +155,11 @@ BOOL WINAPI
 OpenPrinterW(PWSTR pPrinterName, PHANDLE phPrinter, PPRINTER_DEFAULTSW pDefault)
 {
     BOOL bReturnValue;
+    DWORD dwErrorCode = ERROR_INVALID_PRINTER_NAME;
     HANDLE hPrinter;
     PLIST_ENTRY pEntry;
     PSPOOLSS_PRINTER_HANDLE pHandle;
     PSPOOLSS_PRINT_PROVIDER pPrintProvider;
-
-    // Sanity checks.
-    if (!pPrinterName || !phPrinter)
-    {
-        SetLastError(ERROR_INVALID_PARAMETER);
-        return FALSE;
-    }
 
     // Loop through all Print Providers to find one able to open this Printer.
     for (pEntry = PrintProviderList.Flink; pEntry != &PrintProviderList; pEntry = pEntry->Flink)
@@ -173,27 +174,33 @@ OpenPrinterW(PWSTR pPrinterName, PHANDLE phPrinter, PPRINTER_DEFAULTSW pDefault)
             pHandle = DllAllocSplMem(sizeof(SPOOLSS_PRINTER_HANDLE));
             if (!pHandle)
             {
-                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
-                ERR("DllAllocSplMem failed with error %lu!\n", GetLastError());
-                return FALSE;
+                dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
+                ERR("DllAllocSplMem failed!\n");
+                goto Cleanup;
             }
 
             pHandle->pPrintProvider = pPrintProvider;
             pHandle->hPrinter = hPrinter;
             *phPrinter = (HANDLE)pHandle;
 
-            SetLastError(ERROR_SUCCESS);
-            return TRUE;
+            dwErrorCode = ERROR_SUCCESS;
+            goto Cleanup;
         }
         else if (bReturnValue == ROUTER_STOP_ROUTING)
         {
             ERR("A Print Provider returned ROUTER_STOP_ROUTING for Printer \"%S\"!\n", pPrinterName);
-            return FALSE;
+            dwErrorCode = GetLastError();
+            goto Cleanup;
         }
     }
 
-    // We found no Print Provider able to open this Printer.
-    return FALSE;
+Cleanup:
+    // ERROR_INVALID_NAME by the Print Provider is translated to ERROR_INVALID_PRINTER_NAME here, but not in other APIs as far as I know.
+    if (dwErrorCode == ERROR_INVALID_NAME)
+        dwErrorCode = ERROR_INVALID_PRINTER_NAME;
+
+    SetLastError(dwErrorCode);
+    return (dwErrorCode == ERROR_SUCCESS);
 }
 
 BOOL WINAPI

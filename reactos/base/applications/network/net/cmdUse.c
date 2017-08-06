@@ -9,8 +9,6 @@
 
 #include "net.h"
 
-#define COUNT_OF(a) (sizeof(a) / sizeof(a[0]))
-
 static
 DWORD
 EnumerateConnections(LPCWSTR Local)
@@ -65,75 +63,115 @@ EnumerateConnections(LPCWSTR Local)
     return 0;
 }
 
+static
+VOID
+PrintError(DWORD Status)
+{
+    LPWSTR Buffer;
+
+    ConResPrintf(StdErr, IDS_ERROR_SYSTEM_ERROR, Status);
+
+    if (FormatMessage(FORMAT_MESSAGE_ALLOCATE_BUFFER | FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS, NULL, Status, 0, (LPWSTR)&Buffer, 0, NULL))
+    {
+        ConPrintf(StdErr, L"\n%s", Buffer);
+        LocalFree(Buffer);
+    }
+}
+
+static
+BOOL
+ValidateDeviceName(PWSTR DevName)
+{
+    DWORD Len;
+
+    Len = wcslen(DevName);
+    if (Len != 2)
+    {
+        return FALSE;
+    }
+
+    if (!iswalpha(DevName[0]) || DevName[1] != L':')
+    {
+        return FALSE;
+    }
+
+    return TRUE;
+}
+
 INT
 cmdUse(
     INT argc,
     WCHAR **argv)
 {
-    DWORD Status, Len;
+    DWORD Status, Len, Delete;
 
     if (argc == 2)
     {
         Status = EnumerateConnections(NULL);
-        ConPrintf(StdOut, L"Status: %lu\n", Status);
+        if (Status == NO_ERROR)
+            ConResPrintf(StdOut, IDS_ERROR_NO_ERROR);
+        else
+            PrintError(Status);
+
         return 0;
     }
     else if (argc == 3)
     {
-        Len = wcslen(argv[2]);
-        if (Len != 2)
-        {
-            ConResPrintf(StdErr, IDS_ERROR_INVALID_OPTION_VALUE, L"DeviceName");
-            return 1;
-        }
-
-        if (!iswalpha(argv[2][0]) || argv[2][1] != L':')
+        if (!ValidateDeviceName(argv[2]))
         {
             ConResPrintf(StdErr, IDS_ERROR_INVALID_OPTION_VALUE, L"DeviceName");
             return 1;
         }
 
         Status = EnumerateConnections(argv[2]);
-        ConPrintf(StdOut, L"Status: %lu\n", Status);
+        if (Status == NO_ERROR)
+            ConResPrintf(StdOut, IDS_ERROR_NO_ERROR);
+        else
+            PrintError(Status);
+
         return 0;
     }
 
-    Len = wcslen(argv[2]);
-    if (Len != 1 && Len != 2)
+    Delete = 0;
+    if (wcsicmp(argv[2], L"/DELETE") == 0)
     {
-        ConResPrintf(StdErr, IDS_ERROR_INVALID_OPTION_VALUE, L"DeviceName");
-        ConPrintf(StdOut, L"Len: %lu\n", Len);
-        return 1;
+        Delete = 3;
     }
-
-    if (Len == 2 && argv[2][1] != L':')
+    else
     {
-        ConResPrintf(StdErr, IDS_ERROR_INVALID_OPTION_VALUE, L"DeviceName");
-        return 1;
-    }
-
-    if (argv[2][0] != L'*' && !iswalpha(argv[2][0]))
-    {
-        ConResPrintf(StdErr, IDS_ERROR_INVALID_OPTION_VALUE, L"DeviceName");
-        return 1;
+        if ((argv[2][0] != '*' && argv[2][1] != 0) &&
+            !ValidateDeviceName(argv[2]))
+        {
+            ConResPrintf(StdErr, IDS_ERROR_INVALID_OPTION_VALUE, L"DeviceName");
+            return 1;
+        }
     }
 
     if (wcsicmp(argv[3], L"/DELETE") == 0)
     {
-        if (argv[2][0] == L'*')
+        Delete = 2;
+    }
+
+    if (Delete != 0)
+    {
+        if (!ValidateDeviceName(argv[Delete]) || argv[Delete][0] == L'*')
         {
             ConResPrintf(StdErr, IDS_ERROR_INVALID_OPTION_VALUE, L"DeviceName");
             return 1;
         }
 
-        return WNetCancelConnection2(argv[2], CONNECT_UPDATE_PROFILE, FALSE);
+        Status = WNetCancelConnection2(argv[Delete], CONNECT_UPDATE_PROFILE, FALSE);
+        if (Status != NO_ERROR)
+            PrintError(Status);
+
+        return Status;
     }
     else
     {
         BOOL Persist = FALSE;
         NETRESOURCE lpNet;
         WCHAR Access[256];
-        DWORD OutFlags = 0, Size = COUNT_OF(Access);
+        DWORD OutFlags = 0, Size = ARRAYSIZE(Access);
 
         Len = wcslen(argv[3]);
         if (Len < 4)
@@ -192,7 +230,9 @@ cmdUse(
 
         Status = WNetUseConnection(NULL, &lpNet, NULL, NULL, CONNECT_REDIRECT | (Persist ? CONNECT_UPDATE_PROFILE : 0), Access, &Size, &OutFlags);
         if (argv[2][0] == L'*' && Status == NO_ERROR && OutFlags == CONNECT_LOCALDRIVE)
-            ConPrintf(StdOut, L"%s is now connected to %s\n", argv[3], Access);
+            ConResPrintf(StdOut, IDS_USE_NOW_CONNECTED, argv[3], Access);
+        else if (Status != NO_ERROR)
+            PrintError(Status);
 
         return Status;
     }

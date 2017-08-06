@@ -37,6 +37,9 @@
 #define COBJMACROS
 #include <shobjidl.h>
 
+#include <ole2.h>
+#include <reactos/undocuser.h>
+
 /* ##### */
 
 static BOOL resizesupported = TRUE;
@@ -1234,6 +1237,113 @@ static void test_null_filename(void)
     ok(ofnW.nFileExtension == 0, "ofnW.nFileExtension is 0x%x, should be 0\n", ofnW.nFileExtension);
 }
 
+static void test_directory_filename(void)
+{
+    OPENFILENAMEA ofnA = {0};
+    OPENFILENAMEW ofnW = {0};
+    WCHAR filterW[] = {'t','e','x','t','\0','*','.','t','x','t','\0',
+                       'A','l','l','\0','*','\0','\0'};
+    char szInitialDir[MAX_PATH] = {0};
+    WCHAR szInitialDirW[MAX_PATH] = {0};
+    DWORD ret;
+
+    GetWindowsDirectoryA(szInitialDir, MAX_PATH);
+    GetWindowsDirectoryW(szInitialDirW, MAX_PATH);
+
+    szInitialDir[strlen(szInitialDir)] = '\\';
+    szInitialDirW[lstrlenW(szInitialDirW)] = '\\';
+
+    ofnA.lStructSize = OPENFILENAME_SIZE_VERSION_400A;
+    ofnA.lpstrFile = szInitialDir;
+    ofnA.nMaxFile = MAX_PATH;
+    ofnA.lpfnHook = test_null_wndproc;
+    ofnA.Flags = OFN_ENABLEHOOK | OFN_EXPLORER;
+    ofnA.hInstance = GetModuleHandleA(NULL);
+    ofnA.lpstrFilter = "text\0*.txt\0All\0*\0\0";
+    ofnA.lpstrDefExt = NULL;
+    ret = GetOpenFileNameA(&ofnA);
+    todo_wine ok(!ret, "GetOpenFileNameA returned %#x\n", ret);
+
+    /* unicode tests */
+    ofnW.lStructSize = OPENFILENAME_SIZE_VERSION_400W;
+    ofnW.lpstrFile = szInitialDirW;
+    ofnW.nMaxFile = MAX_PATH;
+    ofnW.lpfnHook = test_null_wndproc;
+    ofnW.Flags = OFN_ENABLEHOOK | OFN_EXPLORER;
+    ofnW.hInstance = GetModuleHandleW(NULL);
+    ofnW.lpstrFilter = filterW;
+    ofnW.lpstrDefExt = NULL;
+    ret = GetOpenFileNameW(&ofnW);
+    todo_wine ok(!ret, "GetOpenFileNameW returned %#x\n", ret);
+}
+
+static UINT_PTR WINAPI test_ole_init_wndproc(HWND dlg, UINT msg, WPARAM wParam, LPARAM lParam)
+{
+    HRESULT hr;
+
+    hr = OleInitialize(NULL);
+    ok(hr == S_FALSE, "OleInitialize() returned %#x\n", hr);
+    OleUninitialize();
+
+    if (msg == WM_NOTIFY)
+        PostMessageA(GetParent(dlg), WM_COMMAND, IDCANCEL, 0);
+    return FALSE;
+}
+
+static LRESULT CALLBACK hook_proc(int code, WPARAM wp, LPARAM lp)
+{
+    static BOOL first_dlg = TRUE;
+    HRESULT hr;
+
+    if (code == HCBT_CREATEWND)
+    {
+        CBT_CREATEWNDW *c = (CBT_CREATEWNDW *)lp;
+
+        if (c->lpcs->lpszClass == (LPWSTR)WC_DIALOG)
+        {
+            /* OleInitialize() creates a window for the main apartment. Since
+             * Vista OleInitialize() is called before the file dialog is
+             * created. SimCity 2000 expects that the first window created
+             * after GetOpenFileA() is a file dialog window. Mark Vista+
+             * behavior as broken. */
+            hr = OleInitialize(NULL);
+            ok((first_dlg ? hr == S_OK : hr == S_FALSE)
+                    || broken(first_dlg && hr == S_FALSE),
+                    "OleInitialize() returned %#x (first dialog %#x)\n", hr, first_dlg);
+            OleUninitialize();
+            first_dlg = FALSE;
+        }
+    }
+
+    return CallNextHookEx(NULL, code, wp, lp);
+}
+
+static void test_ole_initialization(void)
+{
+    char file[MAX_PATH] = {0};
+    OPENFILENAMEA ofn = {0};
+    HRESULT hr;
+    HHOOK hook;
+    BOOL ret;
+
+    hook = SetWindowsHookExW(WH_CBT, hook_proc, NULL, GetCurrentThreadId());
+
+    ofn.lStructSize = OPENFILENAME_SIZE_VERSION_400A;
+    ofn.lpstrFile = file;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.lpfnHook = test_ole_init_wndproc;
+    ofn.Flags = OFN_ENABLEHOOK | OFN_EXPLORER;
+    ofn.hInstance = GetModuleHandleA(NULL);
+    ret = GetOpenFileNameA(&ofn);
+    ok(!ret, "GetOpenFileNameA returned %#x\n", ret);
+
+    hr = OleInitialize(NULL);
+    ok(hr == S_OK, "OleInitialize() returned %#x\n", hr);
+    OleUninitialize();
+
+    UnhookWindowsHookEx(hook);
+}
+
 START_TEST(filedlg)
 {
     test_DialogCancel();
@@ -1247,4 +1357,6 @@ START_TEST(filedlg)
     if( resizesupported) test_resizable2();
     test_extension();
     test_null_filename();
+    test_directory_filename();
+    test_ole_initialization();
 }

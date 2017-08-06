@@ -79,16 +79,25 @@ WSPSocket(int AddressFamily,
     {
         /* Duplpicating socket from different process */
         if ((HANDLE)lpProtocolInfo->dwServiceFlags3 == INVALID_HANDLE_VALUE)
-            return WSAEINVAL;
+        {
+            Status = WSAEINVAL;
+            goto error;
+        }
         if ((HANDLE)lpProtocolInfo->dwServiceFlags4 == INVALID_HANDLE_VALUE)
-            return WSAEINVAL;
+        {
+            Status = WSAEINVAL;
+            goto error;
+        }
         SharedData = MapViewOfFile((HANDLE)lpProtocolInfo->dwServiceFlags3,
                                    FILE_MAP_ALL_ACCESS,
                                    0,
                                    0,
                                    sizeof(SOCK_SHARED_INFO));
         if (!SharedData)
-            return WSAEINVAL;
+        {
+            Status = WSAEINVAL;
+            goto error;
+        }
         InterlockedIncrement(&SharedData->RefCount);
         AddressFamily = SharedData->AddressFamily;
         SocketType = SharedData->SocketType;
@@ -96,7 +105,10 @@ WSPSocket(int AddressFamily,
     }
 
     if (AddressFamily == AF_UNSPEC && SocketType == 0 && Protocol == 0)
-        return WSAEINVAL;
+    {
+        Status = WSAEINVAL;
+        goto error;
+    }
 
     /* Set the defaults */
     if (AddressFamily == AF_UNSPEC)
@@ -167,7 +179,7 @@ WSPSocket(int AddressFamily,
     Socket = HeapAlloc(GlobalHeap, 0, sizeof(*Socket));
     if (!Socket)
     {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
+        Status = WSAENOBUFS;
         goto error;
     }
     RtlZeroMemory(Socket, sizeof(*Socket));
@@ -184,7 +196,7 @@ WSPSocket(int AddressFamily,
         Socket->SharedData = HeapAlloc(GlobalHeap, 0, sizeof(*Socket->SharedData));
         if (!Socket->SharedData)
         {
-            Status = STATUS_INSUFFICIENT_RESOURCES;
+            Status = WSAENOBUFS;
             goto error;
         }
         RtlZeroMemory(Socket->SharedData, sizeof(*Socket->SharedData));
@@ -236,7 +248,7 @@ WSPSocket(int AddressFamily,
     EABuffer = HeapAlloc(GlobalHeap, 0, SizeOfEA);
     if (!EABuffer)
     {
-        Status = STATUS_INSUFFICIENT_RESOURCES;
+        Status = WSAENOBUFS;
         goto error;
     }
 
@@ -263,6 +275,7 @@ WSPSocket(int AddressFamily,
         if ((SocketType != SOCK_DGRAM) && (SocketType != SOCK_RAW))
         {
             /* Only RAW or UDP can be Connectionless */
+            Status = WSAEINVAL;
             goto error;
         }
         AfdPacket->EndpointFlags |= AFD_ENDPOINT_CONNECTIONLESS;
@@ -275,6 +288,7 @@ WSPSocket(int AddressFamily,
             if ((Socket->SharedData->ServiceFlags1 & XP1_PSEUDO_STREAM) == 0)
             {
                 /* The Provider doesn't actually support Message Oriented Streams */
+                Status = WSAEINVAL;
                 goto error;
             }
         }
@@ -291,6 +305,7 @@ WSPSocket(int AddressFamily,
         if ((Socket->SharedData->ServiceFlags1 & XP1_SUPPORT_MULTIPOINT) == 0)
         {
             /* The Provider doesn't actually support Multipoint */
+            Status = WSAEINVAL;
             goto error;
         }
         AfdPacket->EndpointFlags |= AFD_ENDPOINT_MULTIPOINT;
@@ -301,6 +316,7 @@ WSPSocket(int AddressFamily,
                 || ((dwFlags & WSA_FLAG_MULTIPOINT_C_LEAF) != 0))
             {
                 /* The Provider doesn't support Control Planes, or you already gave a leaf */
+                Status = WSAEINVAL;
                 goto error;
             }
             AfdPacket->EndpointFlags |= AFD_ENDPOINT_C_ROOT;
@@ -312,6 +328,7 @@ WSPSocket(int AddressFamily,
                 || ((dwFlags & WSA_FLAG_MULTIPOINT_D_LEAF) != 0))
             {
                 /* The Provider doesn't support Data Planes, or you already gave a leaf */
+                Status = WSAEINVAL;
                 goto error;
             }
             AfdPacket->EndpointFlags |= AFD_ENDPOINT_D_ROOT;
@@ -346,6 +363,7 @@ WSPSocket(int AddressFamily,
     if (!NT_SUCCESS(Status))
     {
         ERR("Failed to open socket. Status 0x%08x\n", Status);
+        Status = TranslateNtStatusError(Status);
         goto error;
     }
 
@@ -659,14 +677,15 @@ WSPCloseSocket(IN SOCKET Handle,
         if (lpErrno) *lpErrno = WSAENOTSOCK;
         return SOCKET_ERROR;
     }
-    /* Set the state to close */
-    OldState = Socket->SharedData->State;
-    Socket->SharedData->State = SocketClosed;
 
     /* Decrement reference count on SharedData */
     References = InterlockedDecrement(&Socket->SharedData->RefCount);
     if (References)
         goto ok;
+
+    /* Set the state to close */
+    OldState = Socket->SharedData->State;
+    Socket->SharedData->State = SocketClosed;
 
     /* If SO_LINGER is ON and the Socket is connected, we need to disconnect */
     /* FIXME: Should we do this on Datagram Sockets too? */
@@ -842,6 +861,27 @@ WSPBind(SOCKET Handle,
        if (lpErrno) *lpErrno = WSAENOTSOCK;
        return SOCKET_ERROR;
     }
+    if (Socket->SharedData->State != SocketOpen)
+    {
+       if (lpErrno) *lpErrno = WSAEINVAL;
+       return SOCKET_ERROR;
+    }
+    if (!SocketAddress || SocketAddressLength < Socket->SharedData->SizeOfLocalAddress)
+    {
+        if (lpErrno) *lpErrno = WSAEINVAL;
+        return SOCKET_ERROR;
+    }
+
+    /* Get Address Information */
+    Socket->HelperData->WSHGetSockaddrType ((PSOCKADDR)SocketAddress,
+                                            SocketAddressLength,
+                                            &SocketInfo);
+
+    if (SocketInfo.AddressInfo == SockaddrAddressInfoBroadcast && !Socket->SharedData->Broadcast)
+    {
+       if (lpErrno) *lpErrno = WSAEADDRNOTAVAIL;
+       return SOCKET_ERROR;
+    }
 
     Status = NtCreateEvent(&SockEvent,
                            EVENT_ALL_ACCESS,
@@ -868,11 +908,6 @@ WSPBind(SOCKET Handle,
     RtlCopyMemory (BindData->Address.Address[0].Address,
                    SocketAddress->sa_data,
                    SocketAddressLength - sizeof(SocketAddress->sa_family));
-
-    /* Get Address Information */
-    Socket->HelperData->WSHGetSockaddrType ((PSOCKADDR)SocketAddress,
-                                            SocketAddressLength,
-                                            &SocketInfo);
 
     /* Set the Share Type */
     if (Socket->SharedData->ExclusiveAddressUse)
@@ -1045,13 +1080,34 @@ WSPSelect(IN int nfds,
     PSOCKET_INFORMATION Socket;
     SOCKET              Handle;
     ULONG               Events;
+    fd_set              selectfds;
 
     /* Find out how many sockets we have, and how large the buffer needs
      * to be */
+    FD_ZERO(&selectfds);
+    if (readfds != NULL)
+    {
+        for (i = 0; i < readfds->fd_count; i++)
+        {
+            FD_SET(readfds->fd_array[i], &selectfds);
+        }
+    }
+    if (writefds != NULL)
+    {
+        for (i = 0; i < writefds->fd_count; i++)
+        {
+            FD_SET(writefds->fd_array[i], &selectfds);
+        }
+    }
+    if (exceptfds != NULL)
+    {
+        for (i = 0; i < exceptfds->fd_count; i++)
+        {
+            FD_SET(exceptfds->fd_array[i], &selectfds);
+        }
+    }
 
-    HandleCount = ( readfds ? readfds->fd_count : 0 ) +
-                  ( writefds ? writefds->fd_count : 0 ) +
-                  ( exceptfds ? exceptfds->fd_count : 0 );
+    HandleCount = selectfds.fd_count;
 
     if ( HandleCount == 0 )
     {
@@ -1082,7 +1138,7 @@ WSPSelect(IN int nfds,
         if (Timeout.QuadPart > 0)
         {
             if (lpErrno) *lpErrno = WSAEINVAL;
-                return SOCKET_ERROR;
+            return SOCKET_ERROR;
         }
         TRACE("Timeout: Orig %d.%06d kernel %d\n",
                      timeout->tv_sec, timeout->tv_usec,
@@ -1123,9 +1179,26 @@ WSPSelect(IN int nfds,
     PollInfo->Exclusive = FALSE;
     PollInfo->Timeout = Timeout;
 
+    for (i = 0; i < selectfds.fd_count; i++)
+    {
+        PollInfo->Handles[i].Handle = selectfds.fd_array[i];
+    }
     if (readfds != NULL) {
-        for (i = 0; i < readfds->fd_count; i++, j++)
+        for (i = 0; i < readfds->fd_count; i++)
         {
+            for (j = 0; j < HandleCount; j++)
+            {
+                if (PollInfo->Handles[j].Handle == readfds->fd_array[i])
+                    break;
+            }
+            if (j >= HandleCount)
+            {
+                ERR("Error while counting readfds %ld > %ld\n", j, HandleCount);
+                if (lpErrno) *lpErrno = WSAEFAULT;
+                HeapFree(GlobalHeap, 0, PollBuffer);
+                NtClose(SockEvent);
+                return SOCKET_ERROR;
+            }
             Socket = GetSocketStructure(readfds->fd_array[i]);
             if (!Socket)
             {
@@ -1135,20 +1208,32 @@ WSPSelect(IN int nfds,
                 NtClose(SockEvent);
                 return SOCKET_ERROR;
             }
-            PollInfo->Handles[j].Handle = readfds->fd_array[i];
-            PollInfo->Handles[j].Events = AFD_EVENT_RECEIVE |
-                                          AFD_EVENT_DISCONNECT |
-                                          AFD_EVENT_ABORT |
-                                          AFD_EVENT_CLOSE |
-                                          AFD_EVENT_ACCEPT;
-            if (Socket->SharedData->OobInline != 0)
-                PollInfo->Handles[j].Events |= AFD_EVENT_OOB_RECEIVE;
+            PollInfo->Handles[j].Events |= AFD_EVENT_RECEIVE |
+                                           AFD_EVENT_DISCONNECT |
+                                           AFD_EVENT_ABORT |
+                                           AFD_EVENT_CLOSE |
+                                           AFD_EVENT_ACCEPT;
+            //if (Socket->SharedData->OobInline != 0)
+            //    PollInfo->Handles[j].Events |= AFD_EVENT_OOB_RECEIVE;
         }
     }
     if (writefds != NULL)
     {
-        for (i = 0; i < writefds->fd_count; i++, j++)
+        for (i = 0; i < writefds->fd_count; i++)
         {
+            for (j = 0; j < HandleCount; j++)
+            {
+                if (PollInfo->Handles[j].Handle == writefds->fd_array[i])
+                    break;
+            }
+            if (j >= HandleCount)
+            {
+                ERR("Error while counting writefds %ld > %ld\n", j, HandleCount);
+                if (lpErrno) *lpErrno = WSAEFAULT;
+                HeapFree(GlobalHeap, 0, PollBuffer);
+                NtClose(SockEvent);
+                return SOCKET_ERROR;
+            }
             Socket = GetSocketStructure(writefds->fd_array[i]);
             if (!Socket)
             {
@@ -1159,15 +1244,28 @@ WSPSelect(IN int nfds,
                 return SOCKET_ERROR;
             }
             PollInfo->Handles[j].Handle = writefds->fd_array[i];
-            PollInfo->Handles[j].Events = AFD_EVENT_SEND;
+            PollInfo->Handles[j].Events |= AFD_EVENT_SEND;
             if (Socket->SharedData->NonBlocking != 0)
                 PollInfo->Handles[j].Events |= AFD_EVENT_CONNECT;
         }
     }
     if (exceptfds != NULL)
     {
-        for (i = 0; i < exceptfds->fd_count; i++, j++)
+        for (i = 0; i < exceptfds->fd_count; i++)
         {
+            for (j = 0; j < HandleCount; j++)
+            {
+                if (PollInfo->Handles[j].Handle == exceptfds->fd_array[i])
+                    break;
+            }
+            if (j > HandleCount)
+            {
+                ERR("Error while counting exceptfds %ld > %ld\n", j, HandleCount);
+                if (lpErrno) *lpErrno = WSAEFAULT;
+                HeapFree(GlobalHeap, 0, PollBuffer);
+                NtClose(SockEvent);
+                return SOCKET_ERROR;
+            }
             Socket = GetSocketStructure(exceptfds->fd_array[i]);
             if (!Socket)
             {
@@ -1178,20 +1276,14 @@ WSPSelect(IN int nfds,
                 return SOCKET_ERROR;
             }
             PollInfo->Handles[j].Handle = exceptfds->fd_array[i];
-            PollInfo->Handles[j].Events = 0;
             if (Socket->SharedData->OobInline == 0)
                 PollInfo->Handles[j].Events |= AFD_EVENT_OOB_RECEIVE;
             if (Socket->SharedData->NonBlocking != 0)
                 PollInfo->Handles[j].Events |= AFD_EVENT_CONNECT_FAIL;
-            if (PollInfo->Handles[j].Events == 0)
-            {
-                TRACE("No events can be checked for exceptfds %d. It is nonblocking and OOB line is disabled. Skipping it.", exceptfds->fd_array[i]);
-                j--;
-            }
         }
     }
 
-    PollInfo->HandleCount = j;
+    PollInfo->HandleCount = HandleCount;
     PollBufferSize = FIELD_OFFSET(AFD_POLL_INFO, Handles) + PollInfo->HandleCount * sizeof(AFD_HANDLE);
 
     /* Send IOCTL */
@@ -1370,6 +1462,11 @@ WSPAccept(SOCKET Handle,
     if (!Socket)
     {
        if (lpErrno) *lpErrno = WSAENOTSOCK;
+       return SOCKET_ERROR;
+    }
+    if (!Socket->SharedData->Listening)
+    {
+       if (lpErrno) *lpErrno = WSAEINVAL;
        return SOCKET_ERROR;
     }
     if ((SocketAddress && !SocketAddressLength) ||

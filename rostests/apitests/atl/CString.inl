@@ -356,3 +356,71 @@ TEST_NAMEX(trim)
     ok(str2 == _X(""), "Expected str2 to be '', was: %s\n", dbgstrx(str2));
     ok(str2.GetLength() == 0, "Expected GetLength() to be 0, was: %i\n", str2.GetLength());
 }
+
+TEST_NAMEX(env)
+{
+    CStringX test;
+    BOOL ret;
+    ok(test.IsEmpty() == true, "Expected test to be empty\n");
+    ok(test.GetLength() == 0, "Expected GetLength() to be 0, was: %i\n", test.GetLength());
+    ok(test.GetAllocLength() == 0, "Expected GetAllocLength() to be 0, was: %i\n", test.GetAllocLength());
+
+    XCHAR buf[512];
+    GetWindowsDirectoryX(buf, _countof(buf));
+
+    ret = test.GetEnvironmentVariable(_X("SystemDrive"));
+    ok(!!ret, "Expected %%SystemDrive%% to exist\n");
+    ok(test.IsEmpty() == false, "Expected test to have a valid result\n");
+    ok(test.GetLength() == 2, "Expected GetLength() to be 2, was: %i\n", test.GetLength());
+    if (test.GetLength() == 2)
+    {
+        ok(test[0] == buf[0], "Expected test[0] to equal buf[0], was: %c, %c\n", test[0], buf[0]);
+        ok(test[1] == buf[1], "Expected test[1] to equal buf[1], was: %c, %c\n", test[1], buf[1]);
+    }
+
+    ret = test.GetEnvironmentVariable(_X("SystemRoot"));
+    ok(!!ret, "Expected %%SystemRoot%% to exist\n");
+    ok(test.IsEmpty() == false, "Expected test to have a valid result\n");
+    ok(test == buf, "Expected test to be %s, was %s\n", dbgstrx(buf), dbgstrx(test));
+
+    ret = test.GetEnvironmentVariable(_X("some non existing env var"));
+    ok(!ret, "Expected %%some non existing env var%% to not exist\n");
+    ok(test.IsEmpty() == true, "Expected test to be empty\n");
+    ok(test.GetLength() == 0, "Expected GetLength() to be 0, was: %i\n", test.GetLength());
+}
+
+TEST_NAMEX(load_str)
+{
+    CStringX str;
+
+    ok(str.LoadString(0) == FALSE, "LoadString should fail.\n");
+
+    ok(str.LoadString(IDS_TEST1) == TRUE, "LoadString failed.\n");
+    ok(str == _X("Test string one."), "The value was '%s'\n", dbgstrx(str));
+
+    ok(str.LoadString(IDS_TEST2) == TRUE, "LoadString failed.\n");
+    ok(str == _X("I am a happy BSTR"), "The value was '%s'\n", dbgstrx(str));
+
+    ok(str.LoadString(0) == FALSE, "LoadString should fail.\n");
+    ok(str == _X("I am a happy BSTR"), "The value was '%s'\n", dbgstrx(str));
+
+    XCHAR *xNULL = NULL;
+    CStringX str0(xNULL);
+    ok(str0.IsEmpty(), "str0 should be empty.\n");
+
+    YCHAR *yNULL = NULL;
+    CStringX str1(yNULL);
+    ok(str1.IsEmpty(), "str1 should be empty.\n");
+
+    CStringX str2(MAKEINTRESOURCEX(IDS_TEST1));
+    ok(str2 == _X("Test string one."), "The value was '%s'\n", dbgstrx(str2));
+
+    CStringX str3(MAKEINTRESOURCEX(IDS_TEST2));
+    ok(str3 == _X("I am a happy BSTR"), "The value was '%s'\n", dbgstrx(str3));
+
+    CStringX str4(MAKEINTRESOURCEY(IDS_TEST1));
+    ok(str4 == _X("Test string one."), "The value was '%s'\n", dbgstrx(str4));
+
+    CStringX str5(MAKEINTRESOURCEY(IDS_TEST2));
+    ok(str5 == _X("I am a happy BSTR"), "The value was '%s'\n", dbgstrx(str5));
+}

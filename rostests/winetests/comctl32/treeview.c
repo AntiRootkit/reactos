@@ -42,6 +42,7 @@ static BOOL g_disp_A_to_W;
 static BOOL g_disp_set_stateimage;
 static BOOL g_beginedit_alter_text;
 static HFONT g_customdraw_font;
+static BOOL g_v6;
 
 #define NUM_MSG_SEQUENCES   3
 #define TREEVIEW_SEQ_INDEX  0
@@ -52,6 +53,21 @@ static HFONT g_customdraw_font;
 
 static struct msg_sequence *sequences[NUM_MSG_SEQUENCES];
 static struct msg_sequence *item_sequence[1];
+
+static void flush_events(void)
+{
+    MSG msg;
+    int diff = 200;
+    int min_timeout = 100;
+    DWORD time = GetTickCount() + diff;
+
+    while (diff > 0)
+    {
+        if (MsgWaitForMultipleObjects(0, NULL, FALSE, min_timeout, QS_ALLINPUT) == WAIT_TIMEOUT) break;
+        while (PeekMessageA(&msg, 0, 0, 0, PM_REMOVE)) DispatchMessageA(&msg);
+        diff = time - GetTickCount();
+    }
+}
 
 static const struct message FillRootSeq[] = {
     { TVM_INSERTITEMA, sent },
@@ -200,6 +216,13 @@ static const struct message test_get_set_unicodeformat_seq[] = {
     { 0 }
 };
 
+static const struct message test_right_click_seq[] = {
+    { WM_RBUTTONDOWN, sent|wparam, MK_RBUTTON },
+    { WM_CAPTURECHANGED, sent|defwinproc },
+    { TVM_GETNEXTITEM, sent|wparam|lparam|defwinproc, TVGN_CARET, 0 },
+    { 0 }
+};
+
 static const struct message parent_expand_seq[] = {
     { WM_NOTIFY, sent|id, 0, 0, TVN_ITEMEXPANDINGA },
     { WM_NOTIFY, sent|id, 0, 0, TVN_ITEMEXPANDEDA },
@@ -328,6 +351,8 @@ static const struct message parent_cd_seq[] = {
     { WM_NOTIFY, sent|id|custdraw, 0, 0, NM_CUSTOMDRAW, CDDS_PREPAINT },
     { WM_NOTIFY, sent|id|custdraw, 0, 0, NM_CUSTOMDRAW, CDDS_ITEMPREPAINT },
     { WM_NOTIFY, sent|id|custdraw, 0, 0, NM_CUSTOMDRAW, CDDS_ITEMPOSTPAINT },
+    { WM_NOTIFY, sent|id|custdraw, 0, 0, NM_CUSTOMDRAW, CDDS_ITEMPREPAINT },
+    { WM_NOTIFY, sent|id|custdraw, 0, 0, NM_CUSTOMDRAW, CDDS_ITEMPOSTPAINT },
     { WM_NOTIFY, sent|id|custdraw, 0, 0, NM_CUSTOMDRAW, CDDS_POSTPAINT },
     { 0 }
 };
@@ -336,6 +361,12 @@ static const struct message parent_vk_return_seq[] = {
     { WM_NOTIFY, sent|id, 0, 0, TVN_KEYDOWN },
     { WM_NOTIFY, sent|id, 0, 0, NM_RETURN },
     { WM_CHANGEUISTATE, sent|optional },
+    { 0 }
+};
+
+static const struct message parent_right_click_seq[] = {
+    { WM_NOTIFY, sent|id, 0, 0, NM_RCLICK },
+    { WM_CONTEXTMENU, sent },
     { 0 }
 };
 
@@ -380,15 +411,14 @@ static LRESULT WINAPI TreeviewWndProc(HWND hwnd, UINT message, WPARAM wParam, LP
 {
     static LONG defwndproc_counter = 0;
     LRESULT ret;
-    struct message msg;
     WNDPROC lpOldProc = (WNDPROC)GetWindowLongPtrA(hwnd, GWLP_USERDATA);
+    struct message msg = { 0 };
 
     msg.message = message;
     msg.flags = sent|wparam|lparam;
     if (defwndproc_counter) msg.flags |= defwinproc;
     msg.wParam = wParam;
     msg.lParam = lParam;
-    msg.id = 0;
     add_message(sequences, TREEVIEW_SEQ_INDEX, &msg);
 
     defwndproc_counter++;
@@ -1096,7 +1126,7 @@ static void test_get_set_unicodeformat(void)
 static LRESULT CALLBACK parent_wnd_proc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     static LONG defwndproc_counter = 0;
-    struct message msg;
+    struct message msg = { 0 };
     LRESULT ret;
     RECT rect;
     HTREEITEM visibleItem;
@@ -1108,8 +1138,6 @@ static LRESULT CALLBACK parent_wnd_proc(HWND hWnd, UINT message, WPARAM wParam, 
     msg.lParam = lParam;
     if (message == WM_NOTIFY && lParam)
         msg.id = ((NMHDR*)lParam)->code;
-    else
-        msg.id = 0;
 
     /* log system messages, except for painting */
     if (message < WM_USER &&
@@ -1259,6 +1287,7 @@ static LRESULT CALLBACK parent_wnd_proc(HWND hWnd, UINT message, WPARAM wParam, 
             {
                 NMTVCUSTOMDRAW *nmcd = (NMTVCUSTOMDRAW*)lParam;
                 COLORREF c0ffee = RGB(0xc0,0xff,0xee), cafe = RGB(0xca,0xfe,0x00);
+                COLORREF text = GetTextColor(nmcd->nmcd.hdc), bkgnd = GetBkColor(nmcd->nmcd.hdc);
 
                 msg.flags |= custdraw;
                 msg.stage = nmcd->nmcd.dwDrawStage;
@@ -1269,15 +1298,23 @@ static LRESULT CALLBACK parent_wnd_proc(HWND hWnd, UINT message, WPARAM wParam, 
                 case CDDS_PREPAINT:
                     return CDRF_NOTIFYITEMDRAW|CDRF_NOTIFYITEMERASE|CDRF_NOTIFYPOSTPAINT;
                 case CDDS_ITEMPREPAINT:
-                    nmcd->clrTextBk = c0ffee;
+                    ok(text == nmcd->clrText || (g_v6 && nmcd->clrText == 0xffffffff),
+                       "got %08x vs %08x\n", text, nmcd->clrText);
+                    ok(bkgnd == nmcd->clrTextBk || (g_v6 && nmcd->clrTextBk == 0xffffffff),
+                       "got %08x vs %08x\n", bkgnd, nmcd->clrTextBk);
                     nmcd->clrText = cafe;
+                    nmcd->clrTextBk = c0ffee;
+                    SetTextColor(nmcd->nmcd.hdc, c0ffee);
+                    SetBkColor(nmcd->nmcd.hdc, cafe);
                     if (g_customdraw_font)
                         SelectObject(nmcd->nmcd.hdc, g_customdraw_font);
                     return CDRF_NOTIFYPOSTPAINT|CDRF_NEWFONT;
                 case CDDS_ITEMPOSTPAINT:
                     /* at the point of post paint notification colors are already restored */
-                    ok(GetTextColor(nmcd->nmcd.hdc) != cafe, "got 0%x\n", GetTextColor(nmcd->nmcd.hdc));
-                    ok(GetBkColor(nmcd->nmcd.hdc) != c0ffee, "got 0%x\n", GetBkColor(nmcd->nmcd.hdc));
+                    ok(nmcd->clrText == cafe, "got 0%x\n", nmcd->clrText);
+                    ok(nmcd->clrTextBk == c0ffee, "got 0%x\n", nmcd->clrTextBk);
+                    ok(text != cafe, "got 0%x\n", text);
+                    ok(bkgnd != c0ffee, "got 0%x\n", bkgnd);
                     if (g_customdraw_font)
                         ok(GetCurrentObject(nmcd->nmcd.hdc, OBJ_FONT) != g_customdraw_font, "got %p\n",
                            GetCurrentObject(nmcd->nmcd.hdc, OBJ_FONT));
@@ -1285,6 +1322,13 @@ static LRESULT CALLBACK parent_wnd_proc(HWND hWnd, UINT message, WPARAM wParam, 
                 default:
                     ;
                 }
+                break;
+            }
+            case NM_RCLICK:
+            {
+                HTREEITEM selected = (HTREEITEM)SendMessageA(((NMHDR *)lParam)->hwndFrom,
+                                                             TVM_GETNEXTITEM, TVGN_CARET, 0);
+                ok(selected == hChild, "child item should still be selected\n");
                 break;
             }
             }
@@ -2317,20 +2361,12 @@ static void test_WM_GETDLGCODE(void)
 
 static void test_customdraw(void)
 {
-    static const char *rootA = "root";
-    TVINSERTSTRUCTA ins;
-    HTREEITEM hRoot;
     LOGFONTA lf;
     HWND hwnd;
 
     hwnd = create_treeview_control(0);
-
-    ins.hParent = TVI_ROOT;
-    ins.hInsertAfter = TVI_ROOT;
-    U(ins).item.mask = TVIF_TEXT;
-    U(ins).item.pszText = (char*)rootA;
-    hRoot = TreeView_InsertItemA(hwnd, &ins);
-    ok(hRoot != NULL, "got %p\n", hRoot);
+    fill_tree(hwnd);
+    SendMessageA(hwnd, TVM_EXPAND, TVE_EXPAND, (WPARAM)hRoot);
 
     /* create additional font, custom draw handler will select it */
     SystemParametersInfoA(SPI_GETICONTITLELOGFONT, sizeof(lf), &lf, 0);
@@ -2367,6 +2403,262 @@ static void test_WM_KEYDOWN(void)
     ok_sequence(sequences, PARENT_SEQ_INDEX, parent_vk_return_seq, "WM_KEYDOWN/VK_RETURN parent notification", TRUE);
 
     DestroyWindow(hwnd);
+}
+
+static void test_TVS_FULLROWSELECT(void)
+{
+    DWORD style;
+    HWND hwnd;
+
+    /* try to create both with TVS_HASLINES and TVS_FULLROWSELECT */
+    hwnd = create_treeview_control(TVS_FULLROWSELECT);
+
+    style = GetWindowLongA(hwnd, GWL_STYLE);
+    ok((style & (TVS_FULLROWSELECT | TVS_HASLINES)) == (TVS_FULLROWSELECT | TVS_HASLINES), "got style 0x%08x\n", style);
+
+    DestroyWindow(hwnd);
+
+    /* create just with TVS_HASLINES, try to enable TVS_FULLROWSELECT later */
+    hwnd = create_treeview_control(0);
+
+    style = GetWindowLongA(hwnd, GWL_STYLE);
+    SetWindowLongA(hwnd, GWL_STYLE, style | TVS_FULLROWSELECT);
+    style = GetWindowLongA(hwnd, GWL_STYLE);
+    ok(style & TVS_FULLROWSELECT, "got style 0x%08x\n", style);
+
+    DestroyWindow(hwnd);
+}
+
+static void get_item_names_string(HWND hwnd, HTREEITEM item, char *str)
+{
+    TVITEMA tvitem = { 0 };
+    HTREEITEM child;
+    char name[16];
+
+    if (!item)
+    {
+        item = (HTREEITEM)SendMessageA(hwnd, TVM_GETNEXTITEM, TVGN_ROOT, 0);
+        str[0] = 0;
+    }
+
+    child = (HTREEITEM)SendMessageA(hwnd, TVM_GETNEXTITEM, TVGN_CHILD, (LPARAM)item);
+
+    tvitem.mask = TVIF_TEXT;
+    tvitem.hItem = item;
+    tvitem.pszText = name;
+    tvitem.cchTextMax = sizeof(name);
+    SendMessageA(hwnd, TVM_GETITEMA, 0, (LPARAM)&tvitem);
+    strcat(str, tvitem.pszText);
+
+    while (child != NULL)
+    {
+        get_item_names_string(hwnd, child, str);
+        child = (HTREEITEM)SendMessageA(hwnd, TVM_GETNEXTITEM, TVGN_NEXT, (LPARAM)child);
+    }
+}
+
+static void fill_treeview_sort_test(HWND hwnd)
+{
+    static const char *itemnames[] =
+    {
+        "root", "Wasp", "Caribou", "Vacuum",
+        "Ocelot", "Newspaper", "Litter bin"
+    };
+
+    HTREEITEM root, children[2];
+    TVINSERTSTRUCTA ins;
+    unsigned i = 0;
+
+    SendMessageA(hwnd, TVM_DELETEITEM, 0, 0);
+
+    /* root, two children, with two children each */
+    ins.hParent = TVI_ROOT;
+    ins.hInsertAfter = TVI_ROOT;
+    U(ins).item.mask = TVIF_TEXT;
+    U(ins).item.pszText = (char *)itemnames[i++];
+    root = (HTREEITEM)SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+
+    ins.hParent = root;
+    ins.hInsertAfter = TVI_LAST;
+    U(ins).item.mask = TVIF_TEXT;
+    U(ins).item.pszText = (char *)itemnames[i++];
+    children[0] = (HTREEITEM)SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+
+    U(ins).item.pszText = (char *)itemnames[i++];
+    children[1] = (HTREEITEM)SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+
+    ins.hParent = children[0];
+    U(ins).item.pszText = (char *)itemnames[i++];
+    SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+
+    U(ins).item.pszText = (char *)itemnames[i++];
+    SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+
+    ins.hParent = children[1];
+    U(ins).item.pszText = (char *)itemnames[i++];
+    SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+
+    U(ins).item.pszText = (char *)itemnames[i++];
+    SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+}
+
+static void test_TVM_SORTCHILDREN(void)
+{
+    static const char *initial_order = "rootWaspVacuumOcelotCaribouNewspaperLitter bin";
+    static const char *sorted_order = "rootCaribouNewspaperLitter binWaspVacuumOcelot";
+    TVINSERTSTRUCTA ins;
+    char buff[256];
+    HTREEITEM root;
+    HWND hwnd;
+    BOOL ret;
+
+    hwnd = create_treeview_control(0);
+
+    /* call on empty tree */
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, 0, 0);
+    ok(!ret, "Unexpected ret value %d\n", ret);
+
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, 0, (LPARAM)TVI_ROOT);
+    ok(!ret, "Unexpected ret value %d\n", ret);
+
+    /* add only root, sort from it */
+    ins.hParent = TVI_ROOT;
+    ins.hInsertAfter = TVI_ROOT;
+    U(ins).item.mask = TVIF_TEXT;
+    U(ins).item.pszText = (char *)"root";
+    root = (HTREEITEM)SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+    ok(root != NULL, "Expected root node\n");
+
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, 0, (LPARAM)root);
+    ok(!ret, "Unexpected ret value %d\n", ret);
+
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, TRUE, (LPARAM)root);
+    ok(!ret, "Unexpected ret value %d\n", ret);
+
+    /* root, two children, with two children each */
+    fill_treeview_sort_test(hwnd);
+    get_item_names_string(hwnd, NULL, buff);
+    ok(!strcmp(buff, initial_order), "Wrong initial order %s, expected %s\n", buff, initial_order);
+
+    /* with NULL item nothing is sorted */
+    fill_treeview_sort_test(hwnd);
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, 0, 0);
+todo_wine
+    ok(ret, "Unexpected ret value %d\n", ret);
+    get_item_names_string(hwnd, NULL, buff);
+    ok(!strcmp(buff, initial_order), "Wrong sorted order %s, expected %s\n", buff, initial_order);
+
+    /* TVI_ROOT as item */
+    fill_treeview_sort_test(hwnd);
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, 0, (LPARAM)TVI_ROOT);
+todo_wine
+    ok(ret, "Unexpected ret value %d\n", ret);
+    get_item_names_string(hwnd, NULL, buff);
+    ok(!strcmp(buff, initial_order), "Wrong sorted order %s, expected %s\n", buff, initial_order);
+
+    /* zero WPARAM, item is specified */
+    fill_treeview_sort_test(hwnd);
+    root = (HTREEITEM)SendMessageA(hwnd, TVM_GETNEXTITEM, TVGN_ROOT, 0);
+    ok(root != NULL, "Failed to get root item\n");
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, 0, (LPARAM)root);
+    ok(ret, "Unexpected ret value %d\n", ret);
+    get_item_names_string(hwnd, NULL, buff);
+    ok(!strcmp(buff, sorted_order), "Wrong sorted order %s, expected %s\n", buff, sorted_order);
+
+    /* non-zero WPARAM, NULL item */
+    fill_treeview_sort_test(hwnd);
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, TRUE, 0);
+todo_wine
+    ok(ret, "Unexpected ret value %d\n", ret);
+    get_item_names_string(hwnd, NULL, buff);
+    ok(!strcmp(buff, initial_order), "Wrong sorted order %s, expected %s\n", buff, sorted_order);
+
+    /* TVI_ROOT as item */
+    fill_treeview_sort_test(hwnd);
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, TRUE, (LPARAM)TVI_ROOT);
+todo_wine
+    ok(ret, "Unexpected ret value %d\n", ret);
+    get_item_names_string(hwnd, NULL, buff);
+    ok(!strcmp(buff, initial_order), "Wrong sorted order %s, expected %s\n", buff, sorted_order);
+
+    /* non-zero WPARAM, item is specified */
+    fill_treeview_sort_test(hwnd);
+    root = (HTREEITEM)SendMessageA(hwnd, TVM_GETNEXTITEM, TVGN_ROOT, 0);
+    ok(root != NULL, "Failed to get root item\n");
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, TRUE, (LPARAM)root);
+    ok(ret, "Unexpected ret value %d\n", ret);
+    get_item_names_string(hwnd, NULL, buff);
+    ok(!strcmp(buff, sorted_order), "Wrong sorted order %s, expected %s\n", buff, sorted_order);
+
+    /* case insensitive comparison */
+    SendMessageA(hwnd, TVM_DELETEITEM, 0, 0);
+
+    ins.hParent = TVI_ROOT;
+    ins.hInsertAfter = TVI_ROOT;
+    U(ins).item.mask = TVIF_TEXT;
+    U(ins).item.pszText = (char *)"root";
+    root = (HTREEITEM)SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+    ok(root != NULL, "Expected root node\n");
+
+    ins.hParent = root;
+    ins.hInsertAfter = TVI_LAST;
+    U(ins).item.pszText = (char *)"I1";
+    SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+
+    ins.hParent = root;
+    ins.hInsertAfter = TVI_LAST;
+    U(ins).item.pszText = (char *)"i1";
+    SendMessageA(hwnd, TVM_INSERTITEMA, 0, (LPARAM)&ins);
+
+    ret = SendMessageA(hwnd, TVM_SORTCHILDREN, TRUE, (LPARAM)root);
+    ok(ret, "Unexpected ret value %d\n", ret);
+    get_item_names_string(hwnd, NULL, buff);
+    ok(!strcmp(buff, "rootI1i1"), "Wrong sorted order %s\n", buff);
+
+    DestroyWindow(hwnd);
+}
+
+static void test_right_click(void)
+{
+    HWND hTree;
+    HTREEITEM selected;
+    RECT rc;
+    LRESULT result;
+    POINT pt;
+
+    hTree = create_treeview_control(0);
+    fill_tree(hTree);
+
+    SendMessageA(hTree, TVM_ENSUREVISIBLE, 0, (LPARAM)hChild);
+    SendMessageA(hTree, TVM_SELECTITEM, TVGN_CARET, (LPARAM)hChild);
+    selected = (HTREEITEM)SendMessageA(hTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
+    ok(selected == hChild, "child item not selected\n");
+
+    *(HTREEITEM *)&rc = hRoot;
+    result = SendMessageA(hTree, TVM_GETITEMRECT, TRUE, (LPARAM)&rc);
+    ok(result, "TVM_GETITEMRECT failed\n");
+
+    flush_events();
+
+    pt.x = (rc.left + rc.right) / 2;
+    pt.y = (rc.top + rc.bottom) / 2;
+    ClientToScreen(hMainWnd, &pt);
+
+    flush_events();
+    flush_sequences(sequences, NUM_MSG_SEQUENCES);
+
+    PostMessageA(hTree, WM_RBUTTONDOWN, MK_RBUTTON, MAKELPARAM(pt.x, pt.y));
+    PostMessageA(hTree, WM_RBUTTONUP, 0, MAKELPARAM(pt.x, pt.y));
+
+    flush_events();
+
+    ok_sequence(sequences, TREEVIEW_SEQ_INDEX, test_right_click_seq, "right click sequence", FALSE);
+    ok_sequence(sequences, PARENT_SEQ_INDEX, parent_right_click_seq, "parent right click sequence", FALSE);
+
+    selected = (HTREEITEM)SendMessageA(hTree, TVM_GETNEXTITEM, TVGN_CARET, 0);
+    ok(selected == hChild, "child item should still be selected\n");
+
+    DestroyWindow(hTree);
 }
 
 START_TEST(treeview)
@@ -2444,6 +2736,9 @@ START_TEST(treeview)
     test_WM_GETDLGCODE();
     test_customdraw();
     test_WM_KEYDOWN();
+    test_TVS_FULLROWSELECT();
+    test_TVM_SORTCHILDREN();
+    test_right_click();
 
     if (!load_v6_module(&ctx_cookie, &hCtx))
     {
@@ -2452,6 +2747,7 @@ START_TEST(treeview)
     }
 
     /* comctl32 version 6 tests start here */
+    g_v6 = TRUE;
     test_expandedimage();
     test_htreeitem_layout();
     test_WM_GETDLGCODE();

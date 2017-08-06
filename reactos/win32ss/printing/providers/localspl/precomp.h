@@ -2,7 +2,7 @@
  * PROJECT:     ReactOS Local Spooler
  * LICENSE:     GNU LGPL v2.1 or any later version as published by the Free Software Foundation
  * PURPOSE:     Precompiled Header for all source files
- * COPYRIGHT:   Copyright 2015 Colin Finck <colin@reactos.org>
+ * COPYRIGHT:   Copyright 2015-2017 Colin Finck <colin@reactos.org>
  */
 
 #ifndef _PRECOMP_H
@@ -15,12 +15,15 @@
 
 #include <lmcons.h>
 #include <rpc.h>
+#include <strsafe.h>
 #include <windef.h>
 #include <winbase.h>
 #include <wingdi.h>
 #include <winreg.h>
 #include <winspool.h>
 #include <winsplp.h>
+#include <dsrole.h>
+#include <secext.h>
 #include <ndk/rtlfuncs.h>
 
 #define SKIPLIST_LEVELS 16
@@ -35,7 +38,6 @@ WINE_DEFAULT_DEBUG_CHANNEL(localspl);
 #define IS_VALID_PRIORITY(P)    (P >= MIN_PRIORITY && P <= MAX_PRIORITY)
 
 // Constants
-#define MAX_PRINTER_NAME        220
 #define SHD_WIN2003_SIGNATURE   0x4968
 
 // Function pointers
@@ -114,6 +116,7 @@ struct _LOCAL_PRINTER
 
     DWORD dwAttributes;
     DWORD dwStatus;
+    PWSTR pwszLocation;
     PWSTR pwszPrinterDriver;
     PWSTR pwszDescription;
     PWSTR pwszDefaultDatatype;
@@ -194,6 +197,7 @@ struct _LOCAL_HANDLE
     enum {
         HandleType_Port,                        /** pSpecificHandle is a PLOCAL_PORT_HANDLE. */
         HandleType_Printer,                     /** pSpecificHandle is a PLOCAL_PRINTER_HANDLE. */
+        HandleType_PrintServer,                 /** pSpecificHandle is NULL (no additional information needed for a handle to the Print Server) */
         HandleType_Xcv                          /** pSpecificHandle is a PLOCAL_XCV_HANDLE. */
     }
     HandleType;
@@ -255,26 +259,39 @@ BOOL WriteJobShadowFile(PWSTR pwszFilePath, const PLOCAL_JOB pJob);
 // main.c
 extern const WCHAR wszCurrentEnvironment[];
 extern const DWORD cbCurrentEnvironment;
+extern const DWORD dwSpoolerMajorVersion;
+extern const DWORD dwSpoolerMinorVersion;
 extern const WCHAR wszDefaultDocumentName[];
-extern const WCHAR* wszPrintProviderInfo[3];
+extern HKEY hPrintKey;
+extern HKEY hPrintersKey;
+extern PWSTR wszPrintProviderInfo[3];
+extern WCHAR wszJobDirectory[MAX_PATH];
+extern DWORD cchJobDirectory;
 extern WCHAR wszSpoolDirectory[MAX_PATH];
 extern DWORD cchSpoolDirectory;
 
 // monitors.c
 extern LIST_ENTRY PrintMonitorList;
 PLOCAL_PRINT_MONITOR FindPrintMonitor(PCWSTR pwszName);
-BOOL InitializePrintMonitorList();
+BOOL InitializePrintMonitorList(void);
 BOOL WINAPI LocalEnumMonitors(PWSTR pName, DWORD Level, PBYTE pMonitors, DWORD cbBuf, PDWORD pcbNeeded, PDWORD pcReturned);
 
 // ports.c
 PLOCAL_PORT FindPort(PCWSTR pwszName);
-BOOL InitializePortList();
+BOOL InitializePortList(void);
 BOOL WINAPI LocalEnumPorts(PWSTR pName, DWORD Level, PBYTE pPorts, DWORD cbBuf, PDWORD pcbNeeded, PDWORD pcReturned);
+
+// printerdata.c
+DWORD WINAPI LocalGetPrinterData(HANDLE hPrinter, PWSTR pValueName, PDWORD pType, PBYTE pData, DWORD nSize, PDWORD pcbNeeded);
+DWORD WINAPI LocalGetPrinterDataEx(HANDLE hPrinter, PCWSTR pKeyName, PCWSTR pValueName, PDWORD pType, PBYTE pData, DWORD nSize, PDWORD pcbNeeded);
+DWORD WINAPI LocalSetPrinterData(HANDLE hPrinter, PWSTR pValueName, DWORD Type, PBYTE pData, DWORD cbData);
+DWORD WINAPI LocalSetPrinterDataEx(HANDLE hPrinter, LPCWSTR pKeyName, LPCWSTR pValueName, DWORD Type, LPBYTE pData, DWORD cbData);
 
 // printers.c
 extern SKIPLIST PrinterList;
-BOOL InitializePrinterList();
+BOOL InitializePrinterList(void);
 BOOL WINAPI LocalEnumPrinters(DWORD Flags, LPWSTR Name, DWORD Level, LPBYTE pPrinterEnum, DWORD cbBuf, LPDWORD pcbNeeded, LPDWORD pcReturned);
+BOOL WINAPI LocalGetPrinter(HANDLE hPrinter, DWORD Level, LPBYTE pPrinter, DWORD cbBuf, LPDWORD pcbNeeded);
 BOOL WINAPI LocalOpenPrinter(PWSTR lpPrinterName, HANDLE* phPrinter, PPRINTER_DEFAULTSW pDefault);
 BOOL WINAPI LocalReadPrinter(HANDLE hPrinter, PVOID pBuf, DWORD cbBuf, PDWORD pNoBytesRead);
 DWORD WINAPI LocalStartDocPrinter(HANDLE hPrinter, DWORD Level, LPBYTE pDocInfo);
@@ -290,7 +307,7 @@ DWORD WINAPI PrintingThreadProc(PLOCAL_JOB pJob);
 // printprocessors.c
 BOOL FindDatatype(const PLOCAL_PRINT_PROCESSOR pPrintProcessor, PCWSTR pwszDatatype);
 PLOCAL_PRINT_PROCESSOR FindPrintProcessor(PCWSTR pwszName);
-BOOL InitializePrintProcessorList();
+BOOL InitializePrintProcessorList(void);
 BOOL WINAPI LocalEnumPrintProcessorDatatypes(LPWSTR pName, LPWSTR pPrintProcessorName, DWORD Level, LPBYTE pDatatypes, DWORD cbBuf, LPDWORD pcbNeeded, LPDWORD pcReturned);
 BOOL WINAPI LocalEnumPrintProcessors(LPWSTR pName, LPWSTR pEnvironment, DWORD Level, LPBYTE pPrintProcessorInfo, DWORD cbBuf, LPDWORD pcbNeeded, LPDWORD pcReturned);
 BOOL WINAPI LocalGetPrintProcessorDirectory(LPWSTR pName, LPWSTR pEnvironment, DWORD Level, LPBYTE pPrintProcessorInfo, DWORD cbBuf, LPDWORD pcbNeeded);

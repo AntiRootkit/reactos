@@ -2,19 +2,21 @@
  *  X.509 certificate parsing and verification
  *
  *  Copyright (C) 2006-2015, ARM Limited, All Rights Reserved
- *  SPDX-License-Identifier: Apache-2.0
+ *  SPDX-License-Identifier: GPL-2.0
  *
- *  Licensed under the Apache License, Version 2.0 (the "License"); you may
- *  not use this file except in compliance with the License.
- *  You may obtain a copy of the License at
+ *  This program is free software; you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation; either version 2 of the License, or
+ *  (at your option) any later version.
  *
- *  http://www.apache.org/licenses/LICENSE-2.0
+ *  This program is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
  *
- *  Unless required by applicable law or agreed to in writing, software
- *  distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
- *  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- *  See the License for the specific language governing permissions and
- *  limitations under the License.
+ *  You should have received a copy of the GNU General Public License along
+ *  with this program; if not, write to the Free Software Foundation, Inc.,
+ *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  *
  *  This file is part of mbed TLS (https://tls.mbed.org)
  */
@@ -969,10 +971,8 @@ int mbedtls_x509_crt_parse_der( mbedtls_x509_crt *chain, const unsigned char *bu
  */
 int mbedtls_x509_crt_parse( mbedtls_x509_crt *chain, const unsigned char *buf, size_t buflen )
 {
-#ifndef __REACTOS__
-    int success = 0, first_error = 0, total_failed = 0;
-#endif
 #if defined(MBEDTLS_PEM_PARSE_C)
+    int success = 0, first_error = 0, total_failed = 0;
     int buf_format = MBEDTLS_X509_FORMAT_DER;
 #endif
 
@@ -1124,7 +1124,7 @@ int mbedtls_x509_crt_parse_path( mbedtls_x509_crt *chain, const char *path )
     p = filename + len;
     filename[len++] = '*';
 
-    w_ret = MultiByteToWideChar( CP_ACP, 0, filename, len, szDir,
+    w_ret = MultiByteToWideChar( CP_ACP, 0, filename, (int)len, szDir,
                                  MAX_PATH - 3 );
     if( w_ret == 0 )
         return( MBEDTLS_ERR_X509_BAD_INPUT_DATA );
@@ -1162,9 +1162,10 @@ int mbedtls_x509_crt_parse_path( mbedtls_x509_crt *chain, const char *path )
     FindClose( hFind );
 #else /* _WIN32 */
     int t_ret;
+    int snp_ret;
     struct stat sb;
     struct dirent *entry;
-    char entry_name[255];
+    char entry_name[MBEDTLS_X509_MAX_FILE_PATH_LEN];
     DIR *dir = opendir( path );
 
     if( dir == NULL )
@@ -1180,11 +1181,16 @@ int mbedtls_x509_crt_parse_path( mbedtls_x509_crt *chain, const char *path )
 
     while( ( entry = readdir( dir ) ) != NULL )
     {
-        mbedtls_snprintf( entry_name, sizeof entry_name, "%s/%s", path, entry->d_name );
+        snp_ret = mbedtls_snprintf( entry_name, sizeof entry_name,
+                                    "%s/%s", path, entry->d_name );
 
-        if( stat( entry_name, &sb ) == -1 )
+        if( snp_ret < 0 || (size_t)snp_ret >= sizeof entry_name )
         {
-            closedir( dir );
+            ret = MBEDTLS_ERR_X509_BUFFER_TOO_SMALL;
+            goto cleanup;
+        }
+        else if( stat( entry_name, &sb ) == -1 )
+        {
             ret = MBEDTLS_ERR_X509_FILE_IO_ERROR;
             goto cleanup;
         }
@@ -1200,9 +1206,10 @@ int mbedtls_x509_crt_parse_path( mbedtls_x509_crt *chain, const char *path )
         else
             ret += t_ret;
     }
-    closedir( dir );
 
 cleanup:
+    closedir( dir );
+
 #if defined(MBEDTLS_THREADING_PTHREAD)
     if( mbedtls_mutex_unlock( &mbedtls_threading_readdir_mutex ) != 0 )
         ret = MBEDTLS_ERR_THREADING_MUTEX_ERROR;
@@ -1899,6 +1906,7 @@ static int x509_crt_verify_top(
     int check_path_cnt;
     unsigned char hash[MBEDTLS_MD_MAX_SIZE];
     const mbedtls_md_info_t *md_info;
+    mbedtls_x509_crt *future_past_ca = NULL;
 
     if( mbedtls_x509_time_is_past( &child->valid_to ) )
         *flags |= MBEDTLS_X509_BADCERT_EXPIRED;
@@ -1953,16 +1961,6 @@ static int x509_crt_verify_top(
             continue;
         }
 
-        if( mbedtls_x509_time_is_past( &trust_ca->valid_to ) )
-        {
-            continue;
-        }
-
-        if( mbedtls_x509_time_is_future( &trust_ca->valid_from ) )
-        {
-            continue;
-        }
-
         if( mbedtls_pk_verify_ext( child->sig_pk, child->sig_opts, &trust_ca->pk,
                            child->sig_md, hash, mbedtls_md_get_size( md_info ),
                            child->sig.p, child->sig.len ) != 0 )
@@ -1970,6 +1968,20 @@ static int x509_crt_verify_top(
             continue;
         }
 
+        if( mbedtls_x509_time_is_past( &trust_ca->valid_to ) ||
+            mbedtls_x509_time_is_future( &trust_ca->valid_from ) )
+        {
+            if ( future_past_ca == NULL )
+                future_past_ca = trust_ca;
+
+            continue;
+        }
+
+        break;
+    }
+
+    if( trust_ca != NULL || ( trust_ca = future_past_ca ) != NULL )
+    {
         /*
          * Top of chain is signed by a trusted CA
          */
@@ -1977,8 +1989,6 @@ static int x509_crt_verify_top(
 
         if( x509_profile_check_key( profile, child->sig_pk, &trust_ca->pk ) != 0 )
             *flags |= MBEDTLS_X509_BADCERT_BAD_KEY;
-
-        break;
     }
 
     /*
@@ -1997,6 +2007,12 @@ static int x509_crt_verify_top(
 #else
         ((void) ca_crl);
 #endif
+
+        if( mbedtls_x509_time_is_past( &trust_ca->valid_to ) )
+            ca_flags |= MBEDTLS_X509_BADCERT_EXPIRED;
+
+        if( mbedtls_x509_time_is_future( &trust_ca->valid_from ) )
+            ca_flags |= MBEDTLS_X509_BADCERT_FUTURE;
 
         if( NULL != f_vrfy )
         {

@@ -100,6 +100,37 @@ static IDrive *get_fixed_drive(void)
     return drive;
 }
 
+#define test_provideclassinfo(a, b) _test_provideclassinfo((IDispatch*)a, b, __LINE__)
+static void _test_provideclassinfo(IDispatch *disp, const GUID *guid, int line)
+{
+    IProvideClassInfo *classinfo;
+    TYPEATTR *attr;
+    ITypeInfo *ti;
+    IUnknown *unk;
+    HRESULT hr;
+
+    hr = IDispatch_QueryInterface(disp, &IID_IProvideClassInfo, (void **)&classinfo);
+    ok_(__FILE__,line) (hr == S_OK, "Failed to get IProvideClassInfo, %#x.\n", hr);
+
+    hr = IProvideClassInfo_GetClassInfo(classinfo, &ti);
+    ok_(__FILE__,line) (hr == S_OK, "GetClassInfo() failed, %#x.\n", hr);
+
+    hr = ITypeInfo_GetTypeAttr(ti, &attr);
+    ok_(__FILE__,line) (hr == S_OK, "GetTypeAttr() failed, %#x.\n", hr);
+
+    ok_(__FILE__,line) (IsEqualGUID(&attr->guid, guid), "Unexpected typeinfo %s, expected %s\n", wine_dbgstr_guid(&attr->guid),
+        wine_dbgstr_guid(guid));
+
+    hr = IProvideClassInfo_QueryInterface(classinfo, &IID_IUnknown, (void **)&unk);
+    ok(hr == S_OK, "Failed to QI for IUnknown.\n");
+    ok(unk == (IUnknown *)disp, "Got unk %p, original %p.\n", unk, disp);
+    IUnknown_Release(unk);
+
+    IProvideClassInfo_Release(classinfo);
+    ITypeInfo_ReleaseTypeAttr(ti, attr);
+    ITypeInfo_Release(ti);
+}
+
 static void test_interfaces(void)
 {
     static const WCHAR nonexistent_dirW[] = {
@@ -121,6 +152,8 @@ static void test_interfaces(void)
     GetSystemDirectoryW(windows_path, MAX_PATH);
     lstrcpyW(file_path, windows_path);
     lstrcatW(file_path, file_kernel32W);
+
+    test_provideclassinfo(disp, &CLSID_FileSystemObject);
 
     hr = IDispatch_QueryInterface(disp, &IID_IObjectWithSite, (void**)&site);
     ok(hr == E_NOINTERFACE, "got 0x%08x, expected 0x%08x\n", hr, E_NOINTERFACE);
@@ -591,6 +624,7 @@ static void test_GetFile(void)
     HRESULT hr;
     HANDLE hf;
     BOOL ret;
+    DATE date;
 
     get_temp_path(NULL, pathW);
 
@@ -616,12 +650,20 @@ static void test_GetFile(void)
     hr = IFileSystem3_GetFile(fs3, path, &file);
     ok(hr == S_OK, "GetFile returned %x, expected S_OK\n", hr);
 
+    hr = IFile_get_DateLastModified(file, NULL);
+    ok(hr == E_POINTER, "got 0x%08x\n", hr);
+
+    date = 0.0;
+    hr = IFile_get_DateLastModified(file, &date);
+    ok(hr == S_OK, "got 0x%08x\n", hr);
+    ok(date > 0.0, "got %f\n", date);
+
     hr = IFile_get_Path(file, NULL);
     ok(hr == E_POINTER, "got 0x%08x\n", hr);
 
     hr = IFile_get_Path(file, &str);
     ok(hr == S_OK, "got 0x%08x\n", hr);
-    ok(!lstrcmpW(str, pathW), "got %s\n", wine_dbgstr_w(str));
+    ok(!lstrcmpiW(str, pathW), "got %s\n", wine_dbgstr_w(str));
     SysFreeString(str);
 
 #define FILE_ATTR_MASK (FILE_ATTRIBUTE_READONLY | FILE_ATTRIBUTE_HIDDEN | \
@@ -927,6 +969,7 @@ static void test_GetFolder(void)
     hr = IFileSystem3_GetFolder(fs3, str, &folder);
     ok(hr == S_OK, "got 0x%08x\n", hr);
     SysFreeString(str);
+    test_provideclassinfo(folder, &CLSID_Folder);
     IFolder_Release(folder);
 }
 
@@ -978,6 +1021,7 @@ static void test_FolderCollection(void)
 
     hr = IFolder_get_SubFolders(folder, &folders);
     ok(hr == S_OK, "got 0x%08x\n", hr);
+    test_provideclassinfo(folders, &CLSID_Folders);
     IFolder_Release(folder);
 
     count = 0;
@@ -1153,6 +1197,7 @@ static void test_FileCollection(void)
 
     hr = IFolder_get_Files(folder, &files);
     ok(hr == S_OK, "got 0x%08x\n", hr);
+    test_provideclassinfo(files, &CLSID_Files);
     IFolder_Release(folder);
 
     count = 0;
@@ -1220,6 +1265,7 @@ static void test_FileCollection(void)
 
         hr = IDispatch_QueryInterface(V_DISPATCH(&var), &IID_IFile, (void **)&file);
         ok(hr == S_OK, "got 0x%08x\n", hr);
+        test_provideclassinfo(file, &CLSID_File);
 
         str = NULL;
         hr = IFile_get_Name(file, &str);
@@ -1292,6 +1338,8 @@ static void test_DriveCollection(void)
     hr = IFileSystem3_get_Drives(fs3, &drives);
     ok(hr == S_OK, "got 0x%08x\n", hr);
 
+    test_provideclassinfo(drives, &CLSID_Drives);
+
     hr = IDriveCollection_get__NewEnum(drives, (IUnknown**)&enumvar);
     ok(hr == S_OK, "got 0x%08x\n", hr);
 
@@ -1358,6 +1406,17 @@ static void test_DriveCollection(void)
             ok(hr == S_OK, "got 0x%08x\n", hr);
             ok(ready == VARIANT_TRUE, "got %x\n", ready);
 
+            if (ready != VARIANT_TRUE) {
+                hr = IDrive_get_DriveLetter(drive, &str);
+                ok(hr == S_OK, "got 0x%08x\n", hr);
+
+                skip("Drive %s is not ready, skipping some tests\n", wine_dbgstr_w(str));
+
+                VariantClear(&var);
+                SysFreeString(str);
+                continue;
+            }
+
             V_VT(&size) = VT_EMPTY;
             hr = IDrive_get_TotalSize(drive, &size);
             ok(hr == S_OK, "got 0x%08x\n", hr);
@@ -1418,6 +1477,8 @@ static void test_CreateTextFile(void)
 
     hr = IFileSystem3_CreateTextFile(fs3, nameW, VARIANT_FALSE, VARIANT_FALSE, &stream);
     ok(hr == S_OK, "got 0x%08x\n", hr);
+
+    test_provideclassinfo(stream, &CLSID_TextStream);
 
     hr = ITextStream_Read(stream, 1, &str);
     ok(hr == CTL_E_BADFILEMODE, "got 0x%08x\n", hr);
@@ -2033,6 +2094,7 @@ static void test_GetDrive(void)
                             wine_dbgstr_w(ptr->drivespec));
                     SysFreeString(driveletter);
                 }
+                test_provideclassinfo(drive, &CLSID_Drive);
                 IDrive_Release(drive);
             } else
                 ok(drive == NULL, "got %p for drive spec %s\n", drive, wine_dbgstr_w(ptr->drivespec));

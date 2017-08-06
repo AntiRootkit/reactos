@@ -157,8 +157,8 @@ HRESULT CDesktopBrowser::_Resize()
                 GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN));
     }
 
-    ::MoveWindow(m_hWnd, rcNewSize.left, rcNewSize.top, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, FALSE);
-    ::MoveWindow(m_hWndShellView, 0, 0, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, FALSE);
+    ::MoveWindow(m_hWnd, rcNewSize.left, rcNewSize.top, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, TRUE);
+    ::MoveWindow(m_hWndShellView, 0, 0, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, TRUE);
 
     if (cMonitors != 1)
     {
@@ -176,8 +176,8 @@ HRESULT CDesktopBrowser::_Resize()
 
 #else
      SystemParametersInfoW(SPI_GETWORKAREA, 0, &rcNewSize, 0);
-    ::MoveWindow(m_hWnd, rcNewSize.left, rcNewSize.top, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, FALSE);
-    ::MoveWindow(m_hWndShellView, 0, 0, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, FALSE);
+    ::MoveWindow(m_hWnd, rcNewSize.left, rcNewSize.top, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, TRUE);
+    ::MoveWindow(m_hWndShellView, 0, 0, rcNewSize.right - rcNewSize.left, rcNewSize.bottom - rcNewSize.top, TRUE);
 
 #endif
     return S_OK;
@@ -285,7 +285,7 @@ HRESULT STDMETHODCALLTYPE CDesktopBrowser::BrowseObject(LPCITEMIDLIST pidl, UINT
      */
 
     DWORD dwFlags = ((wFlags & SBSP_EXPLOREMODE) != 0) ? SH_EXPLORER_CMDLINE_FLAG_E : 0; 
-    return SHOpenNewFrame((LPITEMIDLIST)pidl, NULL, 0, dwFlags);
+    return SHOpenNewFrame(ILClone(pidl), NULL, 0, dwFlags);
 }
 
 HRESULT STDMETHODCALLTYPE CDesktopBrowser::GetViewStateStream(DWORD grfMode, IStream **ppStrm)
@@ -361,6 +361,8 @@ LRESULT CDesktopBrowser::OnCommand(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL
             SHFindFiles(NULL, NULL);
             break;
         case FCIDM_DESKBROWSER_REFRESH:
+            if (m_ShellView)
+                m_ShellView->Refresh();
             break;
     }
 
@@ -380,6 +382,8 @@ LRESULT CDesktopBrowser::OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL &b
         /* Hey, we're the desktop!!! */
         ::ShowWindow(m_hWnd, SW_RESTORE);
     }
+
+    ::InvalidateRect(m_hWndShellView, NULL, TRUE);
 
     return 0;
 }

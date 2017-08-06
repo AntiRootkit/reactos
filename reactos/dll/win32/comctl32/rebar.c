@@ -1974,8 +1974,8 @@ static LRESULT REBAR_EraseBkGnd (const REBAR_INFO *infoPtr, HDC hdc)
         HBRUSH hbrush = CreateSolidBrush(new);
         FillRgn(hdc, hrgn, hbrush);
         DeleteObject(hbrush);
-        DeleteObject(hrgn);
     }
+    DeleteObject(hrgn);
 #endif
     return TRUE;
 }
@@ -3386,7 +3386,7 @@ REBAR_NCHitTest (const REBAR_INFO *infoPtr, LPARAM lParam)
 	      ret, i);
 	ret = (LRESULT) i;
     }
-    TRACE("returning %ld, client point (%d,%d)\n", ret, clpt.x, clpt.y);
+    TRACE("returning %ld, client point %s\n", ret, wine_dbgstr_point(&clpt));
     return ret;
 }
 

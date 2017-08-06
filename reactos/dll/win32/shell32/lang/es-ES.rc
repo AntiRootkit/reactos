@@ -40,8 +40,6 @@ BEGIN
         MENUITEM "", -1, MFT_SEPARATOR
         MENUITEM "Pegar", FCIDM_SHVIEW_INSERT
         MENUITEM "Pegar acceso directo", FCIDM_SHVIEW_INSERTLINK
-        MENUITEM "", -1, MFT_SEPARATOR
-        MENUITEM "Propiedades", FCIDM_SHVIEW_PROPERTIES
     END
 END
 
@@ -436,7 +434,7 @@ BEGIN
     PUSHBUTTON "A&plicar a todas las carpetas", 14001, 60, 50, 100, 14, WS_TABSTOP
     PUSHBUTTON "R&estaurar todas las carpetas", 14002, 165, 50, 100, 14, WS_TABSTOP
     LTEXT "Configuración avanzada:", -1, 7, 80, 100, 10
-    CONTROL "", 14003, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHAREIMAGELISTS | WS_BORDER | WS_TABSTOP, 7, 90, 279, 120
+    CONTROL "", 14003, "SysTreeView32", WS_BORDER | WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | TVS_DISABLEDRAGDROP | TVS_LINESATROOT, 7, 90, 249, 120
     PUSHBUTTON "&Restaurar valores predeterminados", 14004, 156, 220, 130, 14, WS_TABSTOP
 END
 
@@ -638,24 +636,22 @@ END
 STRINGTABLE
 BEGIN
     /* columns in the shellview */
-    IDS_SHV_COLUMN1 "Archivo"
-    IDS_SHV_COLUMN2 "Tamaño"
-    IDS_SHV_COLUMN3 "Tipo"
-    IDS_SHV_COLUMN4 "Modificado"
-    IDS_SHV_COLUMN5 "Atributos"
-    IDS_SHV_COLUMN6 "Tamaño"
-    IDS_SHV_COLUMN7 "Tamaño disponible"
-    IDS_SHV_COLUMN8 "Nombre"
-    IDS_SHV_COLUMN9 "Comentarios"
-    IDS_SHV_COLUMN10 "Propietario"
-    IDS_SHV_COLUMN11 "Grupo"
-    IDS_SHV_COLUMN12 "Nombre del archivo"
-    IDS_SHV_COLUMN13 "Categoría"
+    IDS_SHV_COLUMN_NAME "Nombre"
+    IDS_SHV_COLUMN_SIZE "Tamaño"
+    IDS_SHV_COLUMN_TYPE "Tipo"
+    IDS_SHV_COLUMN_MODIFIED "Modificado"
+    IDS_SHV_COLUMN_ATTRIBUTES "Atributos"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Tamaño"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Tamaño disponible"
+    IDS_SHV_COLUMN_OWNER "Propietario"
+    IDS_SHV_COLUMN_GROUP "Grupo"
+    IDS_SHV_COLUMN_FILENAME "Nombre del archivo"
+    IDS_SHV_COLUMN_CATEGORY "Categoría"
     IDS_SHV_COLUMN_DELFROM "Ubicación original"
     IDS_SHV_COLUMN_DELDATE "Fecha de eliminación"
     IDS_SHV_COLUMN_FONTTYPE "Tipo de fuente"
     IDS_SHV_COLUMN_WORKGROUP "Grupo de trabajo"
-    IDS_SHV_NETWORKLOCATION "Ubicación en red"
+    IDS_SHV_COLUMN_NETLOCATION "Ubicación en red"
     IDS_SHV_COLUMN_DOCUMENTS "Documentos"
     IDS_SHV_COLUMN_STATUS "Estado"
     IDS_SHV_COLUMN_COMMENTS "Comentarios"
@@ -804,6 +800,7 @@ BEGIN
     IDS_SCR_FILE "Screen Saver"
     IDS_SYS_FILE "Archivo del sistema"
     IDS_VXD_FILE "Controlador de dispositivo virtual"
+    IDS_ANY_FILE "%s-file"
 
     IDS_OPEN_VERB "Abrir"
     IDS_EXPLORE_VERB "Explorar"
@@ -838,4 +835,24 @@ BEGIN
     IDS_MENU_EMPTY "(Vacío)"
     IDS_OBJECTS "%d elementos"
     IDS_OBJECTS_SELECTED "%d elementos seleccionados"
+
+    IDS_ADVANCED_FOLDER "Files and Folders"
+    IDS_ADVANCED_NET_CRAWLER "Automatically search for network folders and printers"
+    IDS_ADVANCED_FOLDER_SIZE_TIP "Display file size information in folder tips"
+    IDS_ADVANCED_FRIENDLY_TREE "Display simple folder view in Explorer's Folders list"
+    IDS_ADVANCED_WEB_VIEW_BARRICADE "Display the contents of system folders"
+    IDS_ADVANCED_SHOW_FULL_PATH_ADDRESS "Display the full path in address bar"
+    IDS_ADVANCED_SHOW_FULL_PATH "Display the full path in the title bar"
+    IDS_ADVANCED_DISABLE_THUMB_CACHE "Do not cache thumbnails"
+    IDS_ADVANCED_HIDDEN "Hidden files and folders"
+    IDS_ADVANCED_DONT_SHOW_HIDDEN "Do not show hidden files and folders"
+    IDS_ADVANCED_SHOW_HIDDEN "Show hidden files and folders"
+    IDS_ADVANCED_HIDE_FILE_EXT "Hide extensions for known file types"
+    IDS_ADVANCED_SUPER_HIDDEN "Hide protected operating system files (Recommended)"
+    IDS_ADVANCED_DESKTOP_PROCESS "Launch folder windows in a separate process"
+    IDS_ADVANCED_CLASSIC_VIEW_STATE "Remember each folder's view settings"
+    IDS_ADVANCED_PERSIST_BROWSERS "Restore previous folder windows at logon"
+    IDS_ADVANCED_CONTROL_PANEL_IN_MY_COMPUTER "Show Control Panel in My Computer"
+    IDS_ADVANCED_SHOW_COMP_COLOR "Show encrypted or compressed NTFS files in color"
+    IDS_ADVANCED_SHOW_INFO_TIP "Show pop-up description for folder and desktop items"
 END

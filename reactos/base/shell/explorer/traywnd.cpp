@@ -53,8 +53,6 @@ HRESULT TrayWindowCtxMenuCreator(ITrayWindow * TrayWnd, IN HWND hWndOwner, ICont
 #define IDHK_DESKTOP 0x1fe
 #define IDHK_PAGER 0x1ff
 
-static LONG TrayWndCount = 0;
-
 static const WCHAR szTrayWndClass[] = L"Shell_TrayWnd";
 
 /*
@@ -64,7 +62,7 @@ static const WCHAR szTrayWndClass[] = L"Shell_TrayWnd";
 const GUID IID_IShellDesktopTray = { 0x213e2df9, 0x9a14, 0x4328, { 0x99, 0xb1, 0x69, 0x61, 0xf9, 0x14, 0x3c, 0xe9 } };
 
 class CStartButton
-    : public CWindow
+    : public CWindowImpl<CStartButton>
 {
     HIMAGELIST m_ImageList;
     SIZE       m_Size;
@@ -88,267 +86,57 @@ public:
             DeleteObject(m_Font);
     }
 
-    HFONT GetFont()
-    {
-        return m_Font;
-    }
-
     SIZE GetSize()
     {
         return m_Size;
     }
 
-    VOID UpdateSize(IN HBITMAP hbmStart = NULL)
+    VOID UpdateSize()
     {
         SIZE Size = { 0, 0 };
 
         if (m_ImageList == NULL ||
             !SendMessageW(BCM_GETIDEALSIZE, 0, (LPARAM) &Size))
         {
-            Size.cx = 2 * GetSystemMetrics(SM_CXEDGE);
-            Size.cy = 2 * GetSystemMetrics(SM_CYEDGE);
-
-            if (hbmStart == NULL)
-            {
-                hbmStart = (HBITMAP) SendMessageW(BM_GETIMAGE, IMAGE_BITMAP, 0);
-            }
-
-            if (hbmStart != NULL)
-            {
-                BITMAP bmp;
-
-                if (GetObject(hbmStart, sizeof(bmp), &bmp) != 0)
-                {
-                    Size.cx += bmp.bmWidth;
-                    Size.cy += max(bmp.bmHeight, GetSystemMetrics(SM_CYCAPTION));
-                }
-                else
-                {
-                    /* Huh?! Shouldn't happen... */
-                    goto DefSize;
-                }
-            }
-            else
-            {
-DefSize:
-                Size.cx += GetSystemMetrics(SM_CXMINIMIZED);
-                Size.cy += GetSystemMetrics(SM_CYCAPTION);
-            }
+            Size.cx = 2 * GetSystemMetrics(SM_CXEDGE) + GetSystemMetrics(SM_CYCAPTION) * 3;
         }
+
+        Size.cy = max(Size.cy, GetSystemMetrics(SM_CYCAPTION));
 
         /* Save the size of the start button */
         m_Size = Size;
     }
 
-    BOOL CreateImageList()
+    VOID UpdateFont()
     {
-        HICON hIconStart;
-        SIZE IconSize;
+        /* Get the system fonts, we use the caption font, always bold, though. */
+        NONCLIENTMETRICS ncm = {sizeof(ncm)};
+        if (!SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, FALSE))
+            return;
 
-        if (m_ImageList != NULL)
-            return TRUE;
+        if (m_Font)
+            DeleteObject(m_Font);
 
-        IconSize.cx = GetSystemMetrics(SM_CXSMICON);
-        IconSize.cy = GetSystemMetrics(SM_CYSMICON);
+        ncm.lfCaptionFont.lfWeight = FW_BOLD;
+        m_Font = CreateFontIndirect(&ncm.lfCaptionFont);
 
-        /* Load the start button icon and create a image list for it */
-        hIconStart = (HICON) LoadImageW(hExplorerInstance,
-                                       MAKEINTRESOURCEW(IDI_START),
-                                       IMAGE_ICON,
-                                       IconSize.cx,
-                                       IconSize.cy,
-                                       LR_SHARED | LR_DEFAULTCOLOR);
-
-        if (hIconStart == NULL)
-            return FALSE;
-
-        m_ImageList = ImageList_Create(IconSize.cx,
-                                        IconSize.cy,
-                                        ILC_COLOR32 | ILC_MASK,
-                                        1, 1);
-        if (m_ImageList == NULL)
-            return FALSE;
-
-        int s = ImageList_ReplaceIcon(m_ImageList, -1, hIconStart);
-        if (s < 0)
-        {
-            /* Failed to add the icon! */
-            ImageList_Destroy(m_ImageList);
-            m_ImageList = NULL;
-
-            return FALSE;
-        }
-
-        return TRUE;
-    }
-
-    HBITMAP CreateBitmap()
-    {
-        WCHAR szStartCaption[32];
-        HFONT hFontOld;
-        HDC hDC = NULL;
-        HDC hDCScreen = NULL;
-        SIZE Size, SmallIcon;
-        HBITMAP hbmpOld, hbmp = NULL;
-        HBITMAP hBitmap = NULL;
-        HICON hIconStart;
-        BOOL Ret;
-        UINT Flags;
-        RECT rcButton;
-
-        /* NOTE: this is the backwards compatibility code that is used if the
-        Common Controls Version 6.0 are not available! */
-
-        if (!LoadStringW(hExplorerInstance,
-                         IDS_START,
-                         szStartCaption,
-                         _countof(szStartCaption)))
-        {
-            return NULL;
-        }
-
-        /* Load the start button icon */
-        SmallIcon.cx = GetSystemMetrics(SM_CXSMICON);
-        SmallIcon.cy = GetSystemMetrics(SM_CYSMICON);
-        hIconStart = (HICON) LoadImageW(hExplorerInstance,
-                                       MAKEINTRESOURCEW(IDI_START),
-                                       IMAGE_ICON,
-                                       SmallIcon.cx,
-                                       SmallIcon.cy,
-                                       LR_SHARED | LR_DEFAULTCOLOR);
-
-        hDCScreen = ::GetDC(NULL);
-        if (hDCScreen == NULL)
-            goto Cleanup;
-
-        hDC = CreateCompatibleDC(hDCScreen);
-        if (hDC == NULL)
-            goto Cleanup;
-
-        hFontOld = (HFONT) SelectObject(hDC, m_Font);
-
-        Ret = GetTextExtentPoint32(hDC,
-                                   szStartCaption,
-                                   wcslen(szStartCaption),
-                                   &Size);
-
-        SelectObject(hDC, hFontOld);
-        if (!Ret)
-            goto Cleanup;
-
-        /* Make sure the height is at least the size of a caption icon. */
-        if (hIconStart != NULL)
-            Size.cx += SmallIcon.cx + 4;
-        Size.cy = max(Size.cy, SmallIcon.cy);
-
-        /* Create the bitmap */
-        hbmp = CreateCompatibleBitmap(hDCScreen,
-                                      Size.cx,
-                                      Size.cy);
-        if (hbmp == NULL)
-            goto Cleanup;
-
-        /* Calculate the button rect */
-        rcButton.left = 0;
-        rcButton.top = 0;
-        rcButton.right = Size.cx;
-        rcButton.bottom = Size.cy;
-
-        /* Draw the button */
-        hbmpOld = (HBITMAP) SelectObject(hDC, hbmp);
-
-        Flags = DC_TEXT | DC_INBUTTON;
-        if (hIconStart != NULL)
-            Flags |= DC_ICON;
-
-        Ret = DrawCaptionTemp(NULL,
-                        hDC,
-                        &rcButton,
-                        m_Font,
-                        hIconStart,
-                        szStartCaption,
-                        Flags);
-
-        SelectObject(hDC, hbmpOld);
-
-        if (!Ret)
-            goto Cleanup;
-
-        /* We successfully created the bitmap! */
-        hBitmap = hbmp;
-        hbmp = NULL;
-
-Cleanup:
-        if (hDCScreen != NULL)
-        {
-            ::ReleaseDC(NULL, hDCScreen);
-        }
-
-        if (hbmp != NULL)
-            DeleteObject(hbmp);
-
-        if (hDC != NULL)
-            DeleteDC(hDC);
-
-        return hBitmap;
+        SetFont(m_Font, FALSE);
     }
 
     VOID Initialize()
     {
-        NONCLIENTMETRICS ncm;
-
+        SubclassWindow(m_hWnd);
         SetWindowTheme(m_hWnd, L"Start", NULL);
 
-        if (m_Font == NULL)
-        {
-            /* Get the system fonts, we use the caption font, always bold, though. */
-            ncm.cbSize = sizeof(ncm);
-            if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, FALSE))
-            {
-                ncm.lfCaptionFont.lfWeight = FW_BOLD;
-                m_Font = CreateFontIndirect(&ncm.lfCaptionFont);
-            }
-        }
+        m_ImageList = ImageList_LoadImageW(hExplorerInstance,
+                                           MAKEINTRESOURCEW(IDB_START),
+                                           0, 0, 0,
+                                           IMAGE_BITMAP,
+                                           LR_LOADTRANSPARENT | LR_CREATEDIBSECTION);
 
-        SetFont(m_Font, FALSE);
-
-        if (CreateImageList())
-        {
-            BUTTON_IMAGELIST bil;
-
-            /* Try to set the start button image. this requires the Common
-            Controls 6.0 to be present (XP and later) */
-            bil.himl = m_ImageList;
-            bil.margin.left = bil.margin.right = 1;
-            bil.margin.top = bil.margin.bottom = 1;
-            bil.uAlign = BUTTON_IMAGELIST_ALIGN_LEFT;
-
-            if (SendMessageW(BCM_SETIMAGELIST, 0, (LPARAM) &bil))
-            {
-                /* We're using the image list, remove the BS_BITMAP style and
-                don't center it horizontally */
-                SetWindowStyle(m_hWnd, BS_BITMAP | BS_RIGHT, 0);
-
-                UpdateSize();
-                return;
-            }
-
-            /* Fall back to the deprecated method on older systems that don't
-            support Common Controls 6.0 */
-            ImageList_Destroy(m_ImageList);
-            m_ImageList = NULL;
-        }
-
-        HBITMAP hbmStart = CreateBitmap();
-        if (hbmStart != NULL)
-        {
-            UpdateSize(hbmStart);
-
-            HBITMAP hbmOld = (HBITMAP) SendMessageW(BM_SETIMAGE, IMAGE_BITMAP, (LPARAM) hbmStart);
-
-            if (hbmOld != NULL)
-                DeleteObject(hbmOld);
-        }
+        BUTTON_IMAGELIST bil = {m_ImageList, {1,1,1,1}, BUTTON_IMAGELIST_ALIGN_LEFT};
+        SendMessageW(BCM_SETIMAGELIST, 0, (LPARAM) &bil);
+        UpdateSize();
     }
 
     HWND Create(HWND hwndParent)
@@ -359,10 +147,10 @@ Cleanup:
                          szStartCaption,
                          _countof(szStartCaption)))
         {
-            szStartCaption[0] = L'\0';
+            wcscpy(szStartCaption, L"Start");
         }
 
-        DWORD dwStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | BS_PUSHBUTTON | BS_CENTER | BS_VCENTER | BS_BITMAP;
+        DWORD dwStyle = WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | BS_PUSHBUTTON | BS_LEFT | BS_VCENTER;
 
         m_hWnd = CreateWindowEx(
             0,
@@ -380,6 +168,20 @@ Cleanup:
 
         return m_hWnd;
     }
+
+    LRESULT OnLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (uMsg == WM_KEYUP && wParam != VK_SPACE)
+            return 0;
+
+        GetParent().PostMessage(TWM_OPENSTARTMENU);
+        return 0;
+    }
+
+    BEGIN_MSG_MAP(CStartButton)
+        MESSAGE_HANDLER(WM_LBUTTONDOWN, OnLButtonDown)
+    END_MSG_MAP()
+
 };
 
 class CTrayWindow :
@@ -387,16 +189,19 @@ class CTrayWindow :
     public CComObjectRootEx<CComMultiThreadModelNoCS>,
     public CWindowImpl < CTrayWindow, CWindow, CControlWinTraits >,
     public ITrayWindow,
-    public IShellDesktopTray
+    public IShellDesktopTray,
+    public IOleWindow,
+    public IContextMenu
 {
     CStartButton m_StartButton;
 
     CComPtr<IMenuBand>  m_StartMenuBand;
     CComPtr<IMenuPopup> m_StartMenuPopup;
 
+    CComPtr<IDeskBand> m_TaskBand;
+    CComPtr<IContextMenu> m_ContextMenu;
     HTHEME m_Theme;
 
-    HFONT m_CaptionFont;
     HFONT m_Font;
 
     HWND m_DesktopWnd;
@@ -449,7 +254,6 @@ public:
     CTrayWindow() :
         m_StartButton(),
         m_Theme(NULL),
-        m_CaptionFont(NULL),
         m_Font(NULL),
         m_DesktopWnd(NULL),
         m_Rebar(NULL),
@@ -480,12 +284,6 @@ public:
             m_ShellServices = NULL;
         }
 
-        if (m_CaptionFont != NULL)
-        {
-            DeleteObject(m_CaptionFont);
-            m_CaptionFont = NULL;
-        }
-
         if (m_Font != NULL)
         {
             DeleteObject(m_Font);
@@ -498,8 +296,7 @@ public:
             m_Theme = NULL;
         }
 
-        if (InterlockedDecrement(&TrayWndCount) == 0)
-            PostQuitMessage(0);
+        PostQuitMessage(0);
     }
 
 
@@ -724,6 +521,7 @@ public:
             break;
 
         case ID_SHELL_CMD_CUST_NOTIF:
+            ShowCustomizeNotifyIcons(hExplorerInstance, m_hWnd);
             break;
 
         case ID_SHELL_CMD_ADJUST_DAT:
@@ -946,28 +744,35 @@ public:
      *    ##### moving and sizing handling #####
      */
 
-    BOOL UpdateNonClientMetrics()
+    void UpdateFonts()
     {
-        NONCLIENTMETRICS ncm;
-        ncm.cbSize = sizeof(ncm);
-        if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, 0))
-        {
-            if (m_Font != NULL)
-                DeleteObject(m_Font);
+        /* There is nothing to do if themes are not enabled */
+        if (m_Theme)
+            return;
 
-            m_Font = CreateFontIndirect(&ncm.lfMessageFont);
-            return TRUE;
+        m_StartButton.UpdateFont();
+
+        NONCLIENTMETRICS ncm = {sizeof(ncm)};
+        if (!SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, FALSE))
+        {
+            ERR("SPI_GETNONCLIENTMETRICS failed\n");
+            return;
         }
 
-        return FALSE;
-    }
+        if (m_Font != NULL)
+            DeleteObject(m_Font);
 
-    VOID SetWindowsFont()
-    {
-        if (m_TrayNotify != NULL)
+        ncm.lfCaptionFont.lfWeight = FW_NORMAL;
+        m_Font = CreateFontIndirect(&ncm.lfCaptionFont);
+        if (!m_Font)
         {
-            SendMessage(m_TrayNotify, WM_SETFONT, (WPARAM) m_Font, TRUE);
+            ERR("CreateFontIndirect failed\n");
+            return;
         }
+
+        SendMessage(m_Rebar, WM_SETFONT, (WPARAM) m_Font, TRUE);
+        SendMessage(m_TaskSwitch, WM_SETFONT, (WPARAM) m_Font, TRUE);
+        SendMessage(m_TrayNotify, WM_SETFONT, (WPARAM) m_Font, TRUE);
     }
 
     HMONITOR GetScreenRectFromRect(
@@ -1060,6 +865,35 @@ GetPrimaryRect:
         return hMon;
     }
 
+    VOID AdjustSizerRect(RECT *rc, DWORD pos)
+    {
+        int iSizerPart[4] = {TBP_SIZINGBARLEFT, TBP_SIZINGBARTOP, TBP_SIZINGBARRIGHT, TBP_SIZINGBARBOTTOM};
+        SIZE size;
+
+        if (pos > ABE_BOTTOM)
+            pos = ABE_BOTTOM;
+
+        HRESULT hr = GetThemePartSize(m_Theme, NULL, iSizerPart[pos], 0, NULL, TS_TRUE, &size);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return;
+
+        switch (pos)
+        {
+            case ABE_TOP:
+                rc->bottom -= size.cy;
+                break;
+            case ABE_BOTTOM:
+                rc->top += size.cy;
+                break;
+            case ABE_LEFT:
+                rc->right -= size.cx;
+                break;
+            case ABE_RIGHT:
+                rc->left += size.cx;
+                break;
+        }
+    }
+
     VOID MakeTrayRectWithSize(IN DWORD Position,
                               IN const SIZE *pTraySize,
                               IN OUT RECT *pRect)
@@ -1095,10 +929,13 @@ GetPrimaryRect:
 
         *pRect = *pScreen;
 
-        /* Move the border outside of the screen */
-        InflateRect(pRect,
-                    GetSystemMetrics(SM_CXEDGE),
-                    GetSystemMetrics(SM_CYEDGE));
+        if(!m_Theme)
+        {
+            /* Move the border outside of the screen */
+            InflateRect(pRect,
+                        GetSystemMetrics(SM_CXEDGE),
+                        GetSystemMetrics(SM_CYEDGE));
+        }
 
         MakeTrayRectWithSize(Position, pTraySize, pRect);
     }
@@ -1507,6 +1344,16 @@ ChangePos:
             rcTray.bottom += m_AutoHideOffset.cy;
         }
 
+        IUnknown_Exec(m_TrayBandSite,
+                      IID_IDeskBand,
+                      DBID_BANDINFOCHANGED,
+                      0,
+                      NULL,
+                      NULL);
+
+        FitToRebar(&rcTray);
+        m_TrayRects[m_Position] = rcTray;
+
         /* Move the tray window */
         SetWindowPos(NULL,
                      rcTray.left,
@@ -1587,8 +1434,18 @@ ChangePos:
                entire window size, not just the client size. However, we
                use a thinner border than a standard thick border, so that
                the start button and bands are not stuck to the screen border. */
-            sr.Size.cx = StartBtnSize.cx + (2 * (EdgeSize.cx + DlgFrameSize.cx));
-            sr.Size.cy = StartBtnSize.cy + (2 * (EdgeSize.cy + DlgFrameSize.cy));
+            if(!m_Theme)
+            {
+                sr.Size.cx = StartBtnSize.cx + (2 * (EdgeSize.cx + DlgFrameSize.cx));
+                sr.Size.cy = StartBtnSize.cy + (2 * (EdgeSize.cy + DlgFrameSize.cy));
+            }
+            else
+            {
+                sr.Size.cx = StartBtnSize.cx - EdgeSize.cx;
+                sr.Size.cy = StartBtnSize.cy - EdgeSize.cy;
+                if(!Locked)
+                    sr.Size.cy += GetSystemMetrics(SM_CYSIZEFRAME);
+            }
 
             /* Use the primary screen by default */
             rcScreen.left = 0;
@@ -1615,8 +1472,16 @@ ChangePos:
            loaded from the registry are at least. The windows explorer behaves
            the same way, it allows the user to save a zero width vertical tray
            window, but not a zero height horizontal tray window. */
-        WndSize.cx = 2 * (EdgeSize.cx + DlgFrameSize.cx);
-        WndSize.cy = StartBtnSize.cy + (2 * (EdgeSize.cy + DlgFrameSize.cy));
+        if(!m_Theme)
+        {
+            WndSize.cx = 2 * (EdgeSize.cx + DlgFrameSize.cx);
+            WndSize.cy = StartBtnSize.cy + (2 * (EdgeSize.cy + DlgFrameSize.cy));
+        }
+        else
+        {
+            WndSize.cx = StartBtnSize.cx;
+            WndSize.cy = StartBtnSize.cy - EdgeSize.cx;
+        }
 
         if (WndSize.cx < sr.Size.cx)
             WndSize.cx = sr.Size.cx;
@@ -1667,6 +1532,13 @@ ChangePos:
 
         Horizontal = IsPosHorizontal();
 
+        IUnknown_Exec(m_TrayBandSite,
+                      IID_IDeskBand,
+                      DBID_BANDINFOCHANGED,
+                      0,
+                      NULL,
+                      NULL);
+
         /* We're about to resize/move the start button, the rebar control and
            the tray notification control */
         dwp = BeginDeferWindowPos(3);
@@ -1680,6 +1552,16 @@ ChangePos:
         StartSize = m_StartButton.GetSize();
         if (StartSize.cx > rcClient.right)
             StartSize.cx = rcClient.right;
+
+        if (!m_Theme)
+        {
+            HWND hwndTaskToolbar = ::GetWindow(m_TaskSwitch, GW_CHILD);
+            if (hwndTaskToolbar)
+            {
+                DWORD size = SendMessageW(hwndTaskToolbar, TB_GETBUTTONSIZE, 0, 0);
+                StartSize.cy = HIWORD(size);
+            }
+        }
 
         if (m_StartButton.m_hWnd != NULL)
         {
@@ -1776,6 +1658,48 @@ ChangePos:
             /* Update the task switch window configuration */
             SendMessage(m_TaskSwitch, TSWM_UPDATETASKBARPOS, 0, 0);
         }
+    }
+
+    void FitToRebar(PRECT pRect)
+    {
+        /* Get the rect of the rebar */
+        RECT rebarRect, taskbarRect, clientRect;
+        ::GetWindowRect(m_Rebar, &rebarRect);
+        ::GetWindowRect(m_hWnd, &taskbarRect);
+        ::GetClientRect(m_hWnd, &clientRect);
+        OffsetRect(&rebarRect, -taskbarRect.left, -taskbarRect.top);
+
+        /* Calculate the difference of size of the taskbar and the rebar */
+        SIZE margins;
+        margins.cx = taskbarRect.right - taskbarRect.left - clientRect.right + clientRect.left;
+        margins.cy = taskbarRect.bottom - taskbarRect.top - clientRect.bottom + clientRect.top;
+
+        /* Calculate the new size of the rebar and make it resize, then change the new taskbar size */
+        switch (m_Position)
+        {
+        case ABE_TOP:
+            rebarRect.bottom = rebarRect.top + pRect->bottom - pRect->top - margins.cy;
+            ::SendMessageW(m_Rebar, RB_SIZETORECT, RBSTR_CHANGERECT,  (LPARAM)&rebarRect);
+            pRect->bottom = pRect->top + rebarRect.bottom - rebarRect.top + margins.cy;
+            break;
+        case ABE_BOTTOM:
+            rebarRect.top = rebarRect.bottom - (pRect->bottom - pRect->top - margins.cy);
+            ::SendMessageW(m_Rebar, RB_SIZETORECT, RBSTR_CHANGERECT,  (LPARAM)&rebarRect);
+            pRect->top = pRect->bottom - (rebarRect.bottom - rebarRect.top + margins.cy);
+            break;
+        case ABE_LEFT:
+            rebarRect.right = rebarRect.left + (pRect->right - pRect->left - margins.cx);
+            ::SendMessageW(m_Rebar, RB_SIZETORECT, RBSTR_CHANGERECT,  (LPARAM)&rebarRect);
+            pRect->right = pRect->left + (rebarRect.right - rebarRect.left + margins.cx);
+            break;
+        case ABE_RIGHT:
+            rebarRect.left = rebarRect.right - (pRect->right - pRect->left - margins.cx);
+            ::SendMessageW(m_Rebar, RB_SIZETORECT, RBSTR_CHANGERECT,  (LPARAM)&rebarRect);
+            pRect->left = pRect->right - (rebarRect.right - rebarRect.left + margins.cx);
+            break;
+        }
+
+        CalculateValidSize(m_Position, pRect);
     }
 
     void PopupStartMenu()
@@ -2002,72 +1926,55 @@ ChangePos:
     LRESULT EraseBackgroundWithTheme(HDC hdc)
     {
         RECT rect;
-        int partId;
-        HRESULT res;
+        int iSBkgndPart[4] = {TBP_BACKGROUNDLEFT, TBP_BACKGROUNDTOP, TBP_BACKGROUNDRIGHT, TBP_BACKGROUNDBOTTOM};
 
-        GetClientRect(&rect);
+        ASSERT(m_Position <= ABE_BOTTOM);
 
         if (m_Theme)
         {
             GetClientRect(&rect);
-            switch (m_Position)
-            {
-            case ABE_LEFT:
-                partId = TBP_BACKGROUNDLEFT;
-                break;
-            case ABE_TOP:
-                partId = TBP_BACKGROUNDTOP;
-                break;
-            case ABE_RIGHT:
-                partId = TBP_BACKGROUNDRIGHT;
-                break;
-            case ABE_BOTTOM:
-            default:
-                partId = TBP_BACKGROUNDBOTTOM;
-                break;
-            }
-            res = DrawThemeBackground(m_Theme, hdc, partId, 0, &rect, 0);
+            DrawThemeBackground(m_Theme, hdc, iSBkgndPart[m_Position], 0, &rect, 0);
         }
 
-        return res;
+        return 0;
     }
 
     int DrawSizerWithTheme(IN HRGN hRgn)
     {
         HDC hdc;
         RECT rect;
-        int backgroundPart;
+        int iSizerPart[4] = {TBP_SIZINGBARLEFT, TBP_SIZINGBARTOP, TBP_SIZINGBARRIGHT, TBP_SIZINGBARBOTTOM};
+        SIZE size;
+
+        ASSERT(m_Position <= ABE_BOTTOM);
+
+        HRESULT hr = GetThemePartSize(m_Theme, NULL, iSizerPart[m_Position], 0, NULL, TS_TRUE, &size);
+        if (FAILED_UNEXPECTEDLY(hr))
+            return 0;
 
         GetWindowRect(&rect);
         OffsetRect(&rect, -rect.left, -rect.top);
 
-        hdc = GetDCEx(hRgn, DCX_WINDOW | DCX_INTERSECTRGN | DCX_PARENTCLIP);
+        hdc = GetWindowDC();
 
         switch (m_Position)
         {
         case ABE_LEFT:
-            backgroundPart = TBP_SIZINGBARLEFT;
-            rect.left = rect.right - GetSystemMetrics(SM_CXSIZEFRAME);
+            rect.left = rect.right - size.cx;
             break;
         case ABE_TOP:
-            backgroundPart = TBP_SIZINGBARTOP;
-            rect.top = rect.bottom - GetSystemMetrics(SM_CYSIZEFRAME);
+            rect.top = rect.bottom - size.cy;
             break;
         case ABE_RIGHT:
-            backgroundPart = TBP_SIZINGBARRIGHT;
-            rect.right = rect.left + GetSystemMetrics(SM_CXSIZEFRAME);
+            rect.right = rect.left + size.cx;
             break;
         case ABE_BOTTOM:
         default:
-            backgroundPart = TBP_SIZINGBARBOTTOM;
-            rect.bottom = rect.top + GetSystemMetrics(SM_CYSIZEFRAME);
+            rect.bottom = rect.top + size.cy;
             break;
         }
-        if (IsThemeBackgroundPartiallyTransparent(m_Theme, backgroundPart, 0))
-        {
-            DrawThemeParentBackground(m_hWnd, hdc, &rect);
-        }
-        DrawThemeBackground(m_Theme, hdc, backgroundPart, 0, &rect, 0);
+
+        DrawThemeBackground(m_Theme, hdc, iSizerPart[m_Position], 0, &rect, 0);
 
         ReleaseDC(hdc);
         return 0;
@@ -2088,13 +1995,6 @@ ChangePos:
            If it was somehow destroyed just create a new tray window. */
         if (m_hWnd != NULL && IsWindow())
         {
-            if (!IsWindowVisible())
-            {
-                CheckTrayWndPosition();
-
-                ShowWindow(SW_SHOW);
-            }
-
             return S_OK;
         }
 
@@ -2102,8 +2002,11 @@ ChangePos:
         if (AlwaysOnTop)
             dwExStyle |= WS_EX_TOPMOST;
 
-        DWORD dwStyle = WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN |
-            WS_BORDER | WS_THICKFRAME;
+        DWORD dwStyle = WS_POPUP | WS_VISIBLE | WS_CLIPSIBLINGS | WS_CLIPCHILDREN;
+        if(!m_Theme)
+        {
+            dwStyle |= WS_THICKFRAME | WS_BORDER;
+        }
 
         ZeroMemory(&rcWnd, sizeof(rcWnd));
         if (m_Position != (DWORD) -1)
@@ -2111,6 +2014,12 @@ ChangePos:
 
         if (!Create(NULL, rcWnd, NULL, dwStyle, dwExStyle))
             return E_FAIL;
+
+        /* Align all controls on the tray window */
+        AlignControls(NULL);
+
+        /* Move the tray window to the right position and resize it if necessary */
+        CheckTrayWndPosition();
 
         return S_OK;
     }
@@ -2144,14 +2053,6 @@ ChangePos:
         return IsPosHorizontal();
     }
 
-    HFONT STDMETHODCALLTYPE GetCaptionFonts(OUT HFONT *phBoldCaption OPTIONAL)
-    {
-        if (phBoldCaption != NULL)
-            *phBoldCaption = m_StartButton.GetFont();
-
-        return m_CaptionFont;
-    }
-
     BOOL STDMETHODCALLTYPE Lock(IN BOOL bLock)
     {
         BOOL bPrevLock = Locked;
@@ -2170,24 +2071,77 @@ ChangePos:
                 }
             }
 
-            if (Locked && m_Theme)
+            if (m_Theme)
             {
-                SetWindowStyle(m_hWnd, WS_THICKFRAME | WS_BORDER, 0);
-            }
-            else
-            {
-                SetWindowStyle(m_hWnd, WS_THICKFRAME | WS_BORDER, WS_THICKFRAME | WS_BORDER);
-            }
-            SetWindowPos(NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER);
+                /* Update cached tray sizes */
+                for(DWORD Pos = ABE_LEFT; Pos <= ABE_BOTTOM; Pos++)
+                {
+                    RECT rcGripper = {0};
+                    AdjustSizerRect(&rcGripper, Pos);
 
+                    if(Locked)
+                    {
+                        m_TrayRects[Pos].top += rcGripper.top;
+                        m_TrayRects[Pos].left += rcGripper.left;
+                        m_TrayRects[Pos].bottom += rcGripper.bottom;
+                        m_TrayRects[Pos].right += rcGripper.right;
+                    }
+                    else
+                    {
+                        m_TrayRects[Pos].top -= rcGripper.top;
+                        m_TrayRects[Pos].left -= rcGripper.left;
+                        m_TrayRects[Pos].bottom -= rcGripper.bottom;
+                        m_TrayRects[Pos].right -= rcGripper.right;
+                    }
+                }
+            }
+            SetWindowPos(NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOZORDER | SWP_NOOWNERZORDER);
+            ResizeWorkArea();
+            ApplyClipping(TRUE);
         }
 
         return bPrevLock;
     }
 
 
+    /*
+     *  IContextMenu
+     */
+    HRESULT STDMETHODCALLTYPE QueryContextMenu(HMENU hPopup,
+                                               UINT indexMenu,
+                                               UINT idCmdFirst,
+                                               UINT idCmdLast,
+                                               UINT uFlags)
+    {
+        if (!m_ContextMenu)
+        {
+            HRESULT hr = TrayWindowCtxMenuCreator(this, m_hWnd, &m_ContextMenu);
+            if (FAILED_UNEXPECTEDLY(hr))
+                return hr;
+        }
 
+        return m_ContextMenu->QueryContextMenu(hPopup, indexMenu, idCmdFirst, idCmdLast, uFlags);
+    }
 
+    HRESULT STDMETHODCALLTYPE InvokeCommand(LPCMINVOKECOMMANDINFO lpici)
+    {
+        if (!m_ContextMenu)
+            return E_INVALIDARG;
+
+        return m_ContextMenu->InvokeCommand(lpici);
+    }
+
+    HRESULT STDMETHODCALLTYPE GetCommandString(UINT_PTR idCmd,
+                                               UINT uType,
+                                               UINT *pwReserved,
+                                               LPSTR pszName,
+                                               UINT cchMax)
+    {
+        if (!m_ContextMenu)
+            return E_INVALIDARG;
+
+        return m_ContextMenu->GetCommandString(idCmd, uType, pwReserved, pszName, cchMax);        
+    }
 
 
     /**********************************************************
@@ -2196,28 +2150,11 @@ ChangePos:
 
     LRESULT OnCreate(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
+        HRESULT hRet;
+
         ((ITrayWindow*)this)->AddRef();
 
         SetWindowTheme(m_hWnd, L"TaskBar", NULL);
-
-        InterlockedIncrement(&TrayWndCount);
-
-        if (m_CaptionFont == NULL)
-        {
-            NONCLIENTMETRICS ncm;
-
-            /* Get the system fonts, we use the caption font,
-               always bold, though. */
-            ncm.cbSize = sizeof(ncm);
-            if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS, sizeof(ncm), &ncm, FALSE))
-            {
-                if (m_CaptionFont == NULL)
-                {
-                    ncm.lfCaptionFont.lfWeight = FW_NORMAL;
-                    m_CaptionFont = CreateFontIndirect(&ncm.lfCaptionFont);
-                }
-            }
-        }
 
         /* Create the Start button */
         m_StartButton.Create(m_hWnd);
@@ -2229,23 +2166,32 @@ ChangePos:
         HBITMAP hbmBanner = LoadBitmapW(hExplorerInstance, MAKEINTRESOURCEW(IDB_STARTMENU));
         m_StartMenuPopup = CreateStartMenu(this, &m_StartMenuBand, hbmBanner, 0);
 
-        /* Load the tray band site */
-        m_TrayBandSite = CreateTrayBandSite(this, &m_Rebar, &m_TaskSwitch);
+        /* Create the task band */
+        hRet = CTaskBand_CreateInstance(this, m_StartButton.m_hWnd, IID_PPV_ARG(IDeskBand, &m_TaskBand));
+        if (FAILED_UNEXPECTEDLY(hRet))
+            return FALSE;
+
+        /* Create the rebar band site. This actually creates the rebar and the tasks toolbar. */
+        hRet = CTrayBandSite_CreateInstance(this, m_TaskBand, &m_TrayBandSite);
+        if (FAILED_UNEXPECTEDLY(hRet))
+            return FALSE;
+
+        /* Get the hwnd of the rebar */
+        hRet = IUnknown_GetWindow(m_TrayBandSite, &m_Rebar);
+        if (FAILED_UNEXPECTEDLY(hRet))
+            return FALSE;
+
+        /* Get the hwnd of the tasks toolbar */
+        hRet = IUnknown_GetWindow(m_TaskBand, &m_TaskSwitch);
+        if (FAILED_UNEXPECTEDLY(hRet))
+            return FALSE;
+
         SetWindowTheme(m_Rebar, L"TaskBar", NULL);
 
         /* Create the tray notification window */
         m_TrayNotify = CreateTrayNotifyWnd(this, HideClock, &m_TrayNotifyInstance);
 
-        if (UpdateNonClientMetrics())
-        {
-            SetWindowsFont();
-        }
-
-        /* Move the tray window to the right position and resize it if necessary */
-        CheckTrayWndPosition();
-
-        /* Align all controls on the tray window */
-        AlignControls(NULL);
+        UpdateFonts();
 
         InitShellServices(&m_ShellServices);
 
@@ -2276,12 +2222,9 @@ ChangePos:
         if (m_Theme)
             CloseThemeData(m_Theme);
 
-        if (IsThemeActive())
-            m_Theme = OpenThemeData(m_hWnd, L"TaskBar");
-        else
-            m_Theme = NULL;
+        m_Theme = OpenThemeData(m_hWnd, L"TaskBar");
 
-        if (Locked && m_Theme)
+        if (m_Theme)
         {
             SetWindowStyle(m_hWnd, WS_THICKFRAME | WS_BORDER, 0);
         }
@@ -2292,6 +2235,20 @@ ChangePos:
         SetWindowPos(NULL, 0, 0, 0, 0, SWP_FRAMECHANGED | SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER);
 
         return TRUE;
+    }
+
+    LRESULT OnSettingChanged(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        if (wParam == SPI_SETNONCLIENTMETRICS)
+        {
+            SendMessage(m_TrayNotify, uMsg, wParam, lParam);
+            SendMessage(m_TaskSwitch, uMsg, wParam, lParam);
+            UpdateFonts();
+            AlignControls(NULL);
+            CheckTrayWndPosition();
+        }
+
+        return 0;
     }
 
     LRESULT OnEraseBackground(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
@@ -2314,9 +2271,6 @@ ChangePos:
 
         /* Move the tray window to the right position and resize it if necessary */
         CheckTrayWndPosition();
-
-        /* Align all controls on the tray window */
-        AlignControls(NULL);
 
         return TRUE;
     }
@@ -2438,37 +2392,7 @@ ChangePos:
 
         if (!Locked)
         {
-            /* Get the rect of the rebar */
-            RECT rebarRect, taskbarRect;
-            ::GetWindowRect(m_Rebar, &rebarRect);
-            ::GetWindowRect(m_hWnd, &taskbarRect);
-            OffsetRect(&rebarRect, -taskbarRect.left, -taskbarRect.top);
-
-            /* Calculate the difference of size of the taskbar and the rebar */
-            SIZE margins;
-            margins.cx = taskbarRect.right - taskbarRect.left - rebarRect.right + rebarRect.left;
-            margins.cy = taskbarRect.bottom - taskbarRect.top - rebarRect.bottom + rebarRect.top;
-
-            /* Calculate the new size of the rebar and make it resize, then change the new taskbar size */
-            switch (m_Position)
-            {
-            case ABE_TOP:
-                rebarRect.bottom = rebarRect.top + pRect->bottom - pRect->top - margins.cy;
-                ::SendMessageW(m_Rebar, RB_SIZETORECT, RBSTR_CHANGERECT,  (LPARAM)&rebarRect);
-                pRect->bottom = pRect->top + rebarRect.bottom - rebarRect.top + margins.cy;
-                break;
-            case ABE_BOTTOM:
-                rebarRect.top = rebarRect.bottom - (pRect->bottom - pRect->top - margins.cy);
-                ::SendMessageW(m_Rebar, RB_SIZETORECT, RBSTR_CHANGERECT,  (LPARAM)&rebarRect);
-                pRect->top = pRect->bottom - (rebarRect.bottom - rebarRect.top + margins.cy);
-                break;
-            case ABE_LEFT:
-            case ABE_RIGHT:
-                /* FIXME: what to do here? */
-                break;
-            }
-
-            CalculateValidSize(m_Position, pRect);
+            FitToRebar(pRect);
         }
         else
         {
@@ -2494,7 +2418,6 @@ ChangePos:
     LRESULT OnSize(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
     {
         RECT rcClient;
-        InvalidateRect(NULL, TRUE);
         if (wParam == SIZE_RESTORED && lParam == 0)
         {
             ResizeWorkArea();
@@ -2535,6 +2458,8 @@ ChangePos:
         InSizeMove = FALSE;
         if (!Locked)
         {
+            FitToRebar(&m_TrayRects[m_Position]);
+
             /* Apply clipping */
             PostMessage(WM_SIZE, SIZE_RESTORED, 0);
         }
@@ -2602,6 +2527,63 @@ ChangePos:
             bHandled = FALSE;
         }
         return TRUE;
+    }
+
+    LRESULT OnNcLButtonDown(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        /* This handler implements the trick that makes  the start button to 
+           get pressed when the user clicked left or below the button */
+
+        POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
+        WINDOWINFO wi = {sizeof(WINDOWINFO)};
+        RECT rcStartBtn;
+
+        bHandled = FALSE;
+
+        m_StartButton.GetWindowRect(&rcStartBtn);
+        GetWindowInfo(m_hWnd, &wi);
+
+        switch (m_Position)
+        {
+            case ABE_TOP:
+            case ABE_LEFT:
+            {
+                if (pt.x > rcStartBtn.right || pt.y > rcStartBtn.bottom)
+                    return 0;
+                break;
+            }
+            case ABE_RIGHT:
+            {
+                if (pt.x < rcStartBtn.left || pt.y > rcStartBtn.bottom)
+                    return 0;
+
+                if (rcStartBtn.right + (int)wi.cxWindowBorders * 2 + 1 < wi.rcWindow.right &&
+                    pt.x > rcStartBtn.right)
+                {
+                    return 0;
+                }
+                break;
+            }
+            case ABE_BOTTOM:
+            {
+                if (pt.x > rcStartBtn.right || pt.y < rcStartBtn.top)
+                {
+                    return 0;
+                }
+
+                if (rcStartBtn.bottom + (int)wi.cyWindowBorders * 2 + 1 < wi.rcWindow.bottom &&
+                    pt.y > rcStartBtn.bottom)
+                {
+                    return 0;
+                }
+
+                break;
+            }
+        }
+
+        bHandled = TRUE;
+        PopupStartMenu();
+        return 0;
     }
 
     LRESULT OnNcRButtonUp(UINT uMsg, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
@@ -2676,9 +2658,7 @@ ChangePos:
             {
 HandleTrayContextMenu:
                 /* Tray the default tray window context menu */
-                CComPtr<IContextMenu> ctxMenu;
-                TrayWindowCtxMenuCreator(this, m_hWnd, &ctxMenu);
-                TrackCtxMenu(ctxMenu, ppt, NULL, FALSE, this);
+                TrackCtxMenu(this, ppt, NULL, FALSE, this);
             }
         }
         return Ret;
@@ -2797,7 +2777,6 @@ HandleTrayContextMenu:
 
         if ((HWND) lParam == m_StartButton.m_hWnd)
         {
-            PopupStartMenu();
             return FALSE;
         }
 
@@ -2831,6 +2810,35 @@ HandleTrayContextMenu:
 
         bHandled = FALSE;
         return TRUE;
+    }
+
+    LRESULT OnNcCalcSize(INT code, WPARAM wParam, LPARAM lParam, BOOL& bHandled)
+    {
+        RECT *rc = NULL;
+        /* Ignore WM_NCCALCSIZE if we are not themed or locked */
+        if(!m_Theme || Locked)
+        {
+            bHandled = FALSE;
+            return 0;
+        }
+        if(!wParam)
+        {
+            rc = (RECT*)wParam;
+        }
+        else
+        {
+            NCCALCSIZE_PARAMS *prms = (NCCALCSIZE_PARAMS*)lParam;
+            if(prms->lppos->flags & SWP_NOSENDCHANGING)
+            {
+                bHandled = FALSE;
+                return 0;
+            }
+            rc = &prms->rgrc[0];
+        }
+
+        AdjustSizerRect(rc, m_Position);
+
+        return 0;
     }
 
     LRESULT OnRebarAutoSize(INT code, LPNMHDR nmhdr, BOOL& bHandled)
@@ -2906,6 +2914,7 @@ HandleTrayContextMenu:
             lParam = Msg.lParam;
         }
         MESSAGE_HANDLER(WM_THEMECHANGED, OnThemeChanged)
+        MESSAGE_HANDLER(WM_SETTINGCHANGE, OnSettingChanged)
         NOTIFY_CODE_HANDLER(RBN_AUTOSIZE, OnRebarAutoSize) // Doesn't quite work ;P
         MESSAGE_HANDLER(WM_ERASEBKGND, OnEraseBackground)
         MESSAGE_HANDLER(WM_SIZE, OnSize)
@@ -2926,6 +2935,7 @@ HandleTrayContextMenu:
         MESSAGE_HANDLER(WM_WINDOWPOSCHANGING, OnWindowPosChange)
         MESSAGE_HANDLER(WM_ENTERSIZEMOVE, OnEnterSizeMove)
         MESSAGE_HANDLER(WM_EXITSIZEMOVE, OnExitSizeMove)
+        MESSAGE_HANDLER(WM_NCLBUTTONDOWN, OnNcLButtonDown)
         MESSAGE_HANDLER(WM_SYSCHAR, OnSysChar)
         MESSAGE_HANDLER(WM_NCRBUTTONUP, OnNcRButtonUp)
         MESSAGE_HANDLER(WM_NCLBUTTONDBLCLK, OnNcLButtonDblClick)
@@ -2936,6 +2946,7 @@ HandleTrayContextMenu:
         MESSAGE_HANDLER(TWM_DOEXITWINDOWS, OnDoExitWindows)
         MESSAGE_HANDLER(WM_CLOSE, OnDoExitWindows)
         MESSAGE_HANDLER(WM_HOTKEY, OnHotkey)
+        MESSAGE_HANDLER(WM_NCCALCSIZE, OnNcCalcSize)
     ALT_MSG_MAP(1)
     END_MSG_MAP()
 
@@ -3028,6 +3039,19 @@ HandleTrayContextMenu:
         return S_OK;
     }
 
+    HRESULT WINAPI GetWindow(HWND* phwnd)
+    {
+        if (!phwnd)
+            return E_INVALIDARG;
+        *phwnd = m_hWnd;
+        return S_OK;
+    }
+
+    HRESULT WINAPI ContextSensitiveHelp(BOOL fEnterMode)
+    {
+        return E_NOTIMPL;
+    }
+
     void _Init()
     {
         m_Position = (DWORD) -1;
@@ -3039,6 +3063,8 @@ HandleTrayContextMenu:
     BEGIN_COM_MAP(CTrayWindow)
         /*COM_INTERFACE_ENTRY_IID(IID_ITrayWindow, ITrayWindow)*/
         COM_INTERFACE_ENTRY_IID(IID_IShellDesktopTray, IShellDesktopTray)
+        COM_INTERFACE_ENTRY_IID(IID_IOleWindow, IOleWindow)
+        COM_INTERFACE_ENTRY_IID(IID_IContextMenu, IContextMenu)
     END_COM_MAP()
 };
 
@@ -3050,12 +3076,14 @@ class CTrayWindowCtxMenu :
     HWND hWndOwner;
     CComPtr<CTrayWindow> TrayWnd;
     CComPtr<IContextMenu> pcm;
+    UINT m_idCmdCmFirst;
 
 public:
     HRESULT Initialize(ITrayWindow * pTrayWnd, IN HWND hWndOwner)
     {
         this->TrayWnd = (CTrayWindow *) pTrayWnd;
         this->hWndOwner = hWndOwner;
+        this->m_idCmdCmFirst = 0;
         return S_OK;
     }
 
@@ -3067,32 +3095,8 @@ public:
                          UINT uFlags)
     {
         HMENU menubase = LoadPopupMenu(hExplorerInstance, MAKEINTRESOURCEW(IDM_TRAYWND));
-
         if (!menubase)
             return HRESULT_FROM_WIN32(GetLastError());
-
-        int count = ::GetMenuItemCount(menubase);
-
-        for (int i = 0; i < count; i++)
-        {
-            WCHAR label[128];
-
-            MENUITEMINFOW mii = { 0 };
-            mii.cbSize = sizeof(mii);
-            mii.fMask = MIIM_STATE | MIIM_ID | MIIM_SUBMENU | MIIM_CHECKMARKS 
-                | MIIM_DATA | MIIM_STRING | MIIM_BITMAP | MIIM_FTYPE;
-            mii.dwTypeData = label;
-            mii.cch = _countof(label);
-            ::GetMenuItemInfoW(menubase, i, TRUE, &mii);
-
-            TRACE("Adding item %d label %S type %d\n", mii.wID, mii.dwTypeData, mii.fType);
-
-            mii.fType |= MFT_RADIOCHECK;
-
-            ::InsertMenuItemW(hPopup, i + 1, TRUE, &mii);
-        }
-
-        ::DestroyMenu(menubase);
 
         if (SHRestricted(REST_CLASSICSHELL) != 0)
         {
@@ -3105,13 +3109,19 @@ public:
                       ID_LOCKTASKBAR,
                       MF_BYCOMMAND | (TrayWnd->Locked ? MF_CHECKED : MF_UNCHECKED));
 
+        UINT idCmdNext;
+        idCmdNext = Shell_MergeMenus(hPopup, menubase, indexMenu, idCmdFirst, idCmdLast, MM_SUBMENUSHAVEIDS | MM_ADDSEPARATOR);
+        m_idCmdCmFirst = idCmdNext - idCmdFirst;
+
+        ::DestroyMenu(menubase);
+
         if (TrayWnd->m_TrayBandSite != NULL)
         {
             if (FAILED(TrayWnd->m_TrayBandSite->AddContextMenus(
                 hPopup,
-                0,
-                ID_SHELL_CMD_FIRST,
-                ID_SHELL_CMD_LAST,
+                indexMenu,
+                idCmdNext,
+                idCmdLast,
                 CMF_NORMAL,
                 &pcm)))
             {
@@ -3129,7 +3139,7 @@ public:
         UINT uiCmdId = (UINT) lpici->lpVerb;
         if (uiCmdId != 0)
         {
-            if (uiCmdId >= ID_SHELL_CMD_FIRST && uiCmdId <= ID_SHELL_CMD_LAST)
+            if (uiCmdId >= m_idCmdCmFirst)
             {
                 CMINVOKECOMMANDINFO cmici = { 0 };
 
@@ -3138,7 +3148,7 @@ public:
                     /* Setup and invoke the shell command */
                     cmici.cbSize = sizeof(cmici);
                     cmici.hwnd = hWndOwner;
-                    cmici.lpVerb = (LPCSTR) MAKEINTRESOURCEW(uiCmdId - ID_SHELL_CMD_FIRST);
+                    cmici.lpVerb = (LPCSTR) MAKEINTRESOURCEW(uiCmdId - m_idCmdCmFirst);
                     cmici.nShow = SW_NORMAL;
 
                     pcm->InvokeCommand(&cmici);

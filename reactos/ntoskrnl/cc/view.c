@@ -607,6 +607,7 @@ CcRosMapVacb(
     {
         PFN_NUMBER PageFrameNumber;
 
+        MI_SET_USAGE(MI_USAGE_CACHE);
         Status = MmRequestPageMemoryConsumer(MC_CACHE, TRUE, &PageFrameNumber);
         if (PageFrameNumber == 0)
         {
@@ -646,7 +647,7 @@ CcRosCreateVacb (
 
     DPRINT("CcRosCreateVacb()\n");
 
-    if (FileOffset >= SharedCacheMap->FileSize.QuadPart)
+    if (FileOffset >= SharedCacheMap->SectionSize.QuadPart)
     {
         *Vacb = NULL;
         return STATUS_INVALID_PARAMETER;
@@ -741,8 +742,15 @@ CcRosCreateVacb (
         PWCHAR pos = NULL;
         ULONG len = 0;
         pos = wcsrchr(SharedCacheMap->FileObject->FileName.Buffer, '\\');
-        len = wcslen(pos) * sizeof(WCHAR);
-        if (pos) snprintf(MI_PFN_CURRENT_PROCESS_NAME, min(16, len), "%S", pos);
+        if (pos)
+        {
+            len = wcslen(pos) * sizeof(WCHAR);
+            snprintf(MI_PFN_CURRENT_PROCESS_NAME, min(16, len), "%S", pos);
+        }
+        else
+        {
+            snprintf(MI_PFN_CURRENT_PROCESS_NAME, min(16, len), "%wZ", &SharedCacheMap->FileObject->FileName);
+        }
     }
 #endif
 
@@ -982,14 +990,14 @@ CcRosDeleteFileCache (
 
     ASSERT(SharedCacheMap);
 
-    SharedCacheMap->RefCount++;
+    SharedCacheMap->OpenCount++;
     KeReleaseGuardedMutex(&ViewLock);
 
     CcFlushCache(FileObject->SectionObjectPointer, NULL, 0, NULL);
 
     KeAcquireGuardedMutex(&ViewLock);
-    SharedCacheMap->RefCount--;
-    if (SharedCacheMap->RefCount == 0)
+    SharedCacheMap->OpenCount--;
+    if (SharedCacheMap->OpenCount == 0)
     {
         FileObject->SectionObjectPointer->SharedCacheMap = NULL;
 
@@ -1040,8 +1048,8 @@ CcRosReferenceCache (
     KeAcquireGuardedMutex(&ViewLock);
     SharedCacheMap = FileObject->SectionObjectPointer->SharedCacheMap;
     ASSERT(SharedCacheMap);
-    ASSERT(SharedCacheMap->RefCount != 0);
-    SharedCacheMap->RefCount++;
+    ASSERT(SharedCacheMap->OpenCount != 0);
+    SharedCacheMap->OpenCount++;
     KeReleaseGuardedMutex(&ViewLock);
 }
 
@@ -1054,7 +1062,7 @@ CcRosRemoveIfClosed (
     DPRINT("CcRosRemoveIfClosed()\n");
     KeAcquireGuardedMutex(&ViewLock);
     SharedCacheMap = SectionObjectPointer->SharedCacheMap;
-    if (SharedCacheMap && SharedCacheMap->RefCount == 0)
+    if (SharedCacheMap && SharedCacheMap->OpenCount == 0)
     {
         CcRosDeleteFileCache(SharedCacheMap->FileObject, SharedCacheMap);
     }
@@ -1071,10 +1079,10 @@ CcRosDereferenceCache (
     KeAcquireGuardedMutex(&ViewLock);
     SharedCacheMap = FileObject->SectionObjectPointer->SharedCacheMap;
     ASSERT(SharedCacheMap);
-    if (SharedCacheMap->RefCount > 0)
+    if (SharedCacheMap->OpenCount > 0)
     {
-        SharedCacheMap->RefCount--;
-        if (SharedCacheMap->RefCount == 0)
+        SharedCacheMap->OpenCount--;
+        if (SharedCacheMap->OpenCount == 0)
         {
             MmFreeSectionSegments(SharedCacheMap->FileObject);
             CcRosDeleteFileCache(FileObject, SharedCacheMap);
@@ -1102,10 +1110,10 @@ CcRosReleaseFileCache (
         if (FileObject->PrivateCacheMap != NULL)
         {
             FileObject->PrivateCacheMap = NULL;
-            if (SharedCacheMap->RefCount > 0)
+            if (SharedCacheMap->OpenCount > 0)
             {
-                SharedCacheMap->RefCount--;
-                if (SharedCacheMap->RefCount == 0)
+                SharedCacheMap->OpenCount--;
+                if (SharedCacheMap->OpenCount == 0)
                 {
                     MmFreeSectionSegments(SharedCacheMap->FileObject);
                     CcRosDeleteFileCache(FileObject, SharedCacheMap);
@@ -1138,7 +1146,7 @@ CcTryToInitializeFileCache (
         if (FileObject->PrivateCacheMap == NULL)
         {
             FileObject->PrivateCacheMap = SharedCacheMap;
-            SharedCacheMap->RefCount++;
+            SharedCacheMap->OpenCount++;
         }
         Status = STATUS_SUCCESS;
     }
@@ -1193,7 +1201,7 @@ CcRosInitializeFileCache (
     if (FileObject->PrivateCacheMap == NULL)
     {
         FileObject->PrivateCacheMap = SharedCacheMap;
-        SharedCacheMap->RefCount++;
+        SharedCacheMap->OpenCount++;
     }
     KeReleaseGuardedMutex(&ViewLock);
 

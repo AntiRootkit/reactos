@@ -2,6 +2,7 @@
 include_directories(${REACTOS_SOURCE_DIR}/win32ss)
 
 list(APPEND SOURCE
+    AddFontMemResourceEx.c
     AddFontResource.c
     AddFontResourceEx.c
     BeginPath.c
@@ -44,6 +45,7 @@ list(APPEND SOURCE
     GetCurrentObject.c
     GetDIBColorTable.c
     GetDIBits.c
+    GetFontResourceInfoW.c
     GetGlyphIndices.c
     GetObject.c
     GetRandomRgn.c
@@ -77,4 +79,4 @@ add_executable(gdi32_apitest ${SOURCE} resource.rc)
 target_link_libraries(gdi32_apitest ${PSEH_LIB} win32ksys)
 set_module_type(gdi32_apitest win32cui)
 add_importlibs(gdi32_apitest gdi32 user32 msvcrt kernel32 ntdll)
-add_cd_file(TARGET gdi32_apitest DESTINATION reactos/bin FOR all)
+add_rostests_file(TARGET gdi32_apitest)

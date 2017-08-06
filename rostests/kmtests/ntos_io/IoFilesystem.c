@@ -115,13 +115,24 @@ TestAllInformation(VOID)
     ok_eq_size(Length, (ULONG_PTR)0x5555555555555555);
     if (FileAllInfo)
         KmtFreeGuarded(FileAllInfo);
+
+    /* No space for the name -- fastfat handles this gracefully, ntfs doesn't.
+     * But the Io manager makes it fail on checked builds, so it's
+     * technically illegal
+     */
+    Length = FIELD_OFFSET(FILE_ALL_INFORMATION, NameInformation.FileName);
+    Status = QueryFileInfo(FileHandle, (PVOID*)&FileAllInfo, &Length, FileAllInformation);
+    ok_eq_hex(Status, STATUS_INFO_LENGTH_MISMATCH);
+    ok_eq_size(Length, (ULONG_PTR)0x5555555555555555);
+    if (FileAllInfo)
+        KmtFreeGuarded(FileAllInfo);
     }
 
     /* The minimum allowed */
-    Length = FIELD_OFFSET(FILE_ALL_INFORMATION, NameInformation.FileName);
+    Length = sizeof(FILE_ALL_INFORMATION);
     Status = QueryFileInfo(FileHandle, (PVOID*)&FileAllInfo, &Length, FileAllInformation);
     ok_eq_hex(Status, STATUS_BUFFER_OVERFLOW);
-    ok_eq_size(Length, FIELD_OFFSET(FILE_ALL_INFORMATION, NameInformation.FileName));
+    ok_eq_size(Length, sizeof(FILE_ALL_INFORMATION));
     if (FileAllInfo)
         KmtFreeGuarded(FileAllInfo);
 
@@ -516,7 +527,8 @@ TestRelativeNames(VOID)
                "[%lu] Status = %lx, expected STATUS_SUCCESS\n", i, Status);
         else if (Tests[i].Status == STATUS_OBJECT_NAME_INVALID && Tests[i].IsDrive)
             ok(Status == STATUS_OBJECT_NAME_INVALID,
-               "[%lu] Status = %lx, expected STATUS_OBJECT_NAME_INVALID\n", i, Status);else if (Tests[i].IsDrive)
+               "[%lu] Status = %lx, expected STATUS_OBJECT_NAME_INVALID\n", i, Status);
+        else if (Tests[i].IsDrive)
             ok(Status == STATUS_ACCESS_DENIED,
                "[%lu] Status = %lx, expected STATUS_ACCESS_DENIED\n", i, Status);
         else if (Tests[i].Status == STATUS_SUCCESS)

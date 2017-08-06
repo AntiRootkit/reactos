@@ -1,4 +1,4 @@
-/* @(#)schily.h	1.120 16/09/28 Copyright 1985-2016 J. Schilling */
+/* @(#)schily.h	1.122 16/12/18 Copyright 1985-2016 J. Schilling */
 /*
  *	Definitions for libschily
  *
@@ -46,6 +46,9 @@
 #endif
 #ifndef _SCHILY_CCOMDEFS_H
 #include <schily/ccomdefs.h>
+#endif
+#ifndef _SCHILY_STDINT_H
+#include <schily/stdint.h>
 #endif
 
 #ifdef	__cplusplus
@@ -416,6 +419,7 @@ extern	int	printf __PR((const char *, ...)) __printflike__(1, 2);
 #endif
 #ifdef	FOUND_SIZE_T
 extern	char	*movebytes __PR((const void *, void *, ssize_t));
+extern	char	*movecbytes __PR((const void *, void *, int, size_t));
 #endif
 
 extern	void	save_args __PR((int, char **));
@@ -463,12 +467,12 @@ extern	size_t	wcslcatl __PR((wchar_t *, size_t, ...));
 extern	int	wcseql __PR((const wchar_t *, const wchar_t *));
 #endif
 #ifdef	va_arg
-extern	int	format __PR((void (*)(char, long), long, const char *,
+extern	int	format __PR((void (*)(char, intptr_t), intptr_t, const char *,
 							va_list));
-extern	int	fprformat __PR((long, const char *, va_list));
+extern	int	fprformat __PR((intptr_t, const char *, va_list));
 #else
-extern	int	format __PR((void (*)(char, long), long, const char *, void *));
-extern	int	fprformat __PR((long, const char *, void *));
+extern	int	format __PR((void (*)(char, intptr_t), intptr_t, const char *, void *));
+extern	int	fprformat __PR((intptr_t, const char *, void *));
 #endif
 
 extern	int	ftoes __PR((char *, double, int, int));
@@ -542,7 +546,7 @@ extern	int	_openfd64	__PR((const char *, int));
 #ifdef	__never__
 #undef	error
 #define	error		js_error
-#endif
+#endif	/* __never__ */
 #undef	dprintf
 #define	dprintf		js_dprintf
 #undef	fprintf
@@ -557,9 +561,9 @@ extern	int	_openfd64	__PR((const char *, int));
 #ifndef	HAVE_SNPRINTF
 #undef	snprintf
 #define	snprintf	js_snprintf
-#endif
-#endif
-#endif
+#endif	/* HAVE_SNPRINTF */
+#endif	/* SCHILY_PRINT */
+#endif	/* NO_SCHILY_PRINT */
 
 #ifndef	NO_SCHILY_GETLINE	/* Define to disable *getline() redirect */
 #undef	getline

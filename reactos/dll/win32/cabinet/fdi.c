@@ -2039,11 +2039,24 @@ static int fdi_decomp(const struct fdi_file *fi, int savemode, fdi_decomp_state 
             fullpath[0] = '\0';
             if (pathlen) {
               strcpy(fullpath, userpath);
+#ifndef __REACTOS__
               if (fullpath[pathlen - 1] != '\\')
                 strcat(fullpath, "\\");
+#else
+              if (fullpath[pathlen - 1] == '\\')
+                fullpath[pathlen - 1] = '\0';
+#endif
             }
+#ifndef __REACTOS__
             if (filenamelen)
+#else
+            if (filenamelen) {
+              strcat(fullpath, "\\");
+#endif
               strcat(fullpath, cab->mii.nextname);
+#ifdef __REACTOS__
+            }
+#endif
 
             TRACE("full cab path/file name: %s\n", debugstr_a(fullpath));
 
@@ -2629,6 +2642,7 @@ BOOL __cdecl FDICopy(
       fdin.date = file->date;
       fdin.time = file->time;
       fdin.attribs = file->attribs;
+      fdin.iFolder = file->index;
       if ((filehf = ((*pfnfdin)(fdintCOPY_FILE, &fdin))) == -1) {
         set_error( fdi, FDIERROR_USER_ABORT, 0 );
         filehf = 0;
@@ -2754,6 +2768,7 @@ BOOL __cdecl FDICopy(
       fdin.date = file->date;
       fdin.time = file->time;
       fdin.attribs = file->attribs; /* FIXME: filter _A_EXEC? */
+      fdin.iFolder = file->index;
       ((*pfnfdin)(fdintCLOSE_FILE_INFO, &fdin));
       filehf = 0;
 

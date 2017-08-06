@@ -135,7 +135,9 @@ typedef struct tagGLOBALS
 VOID SchemeSetMetric(COLOR_SCHEME *scheme, int id, int value);
 int SchemeGetMetric(COLOR_SCHEME *scheme, int id);
 PLOGFONTW SchemeGetFont(COLOR_SCHEME *scheme, int id);
+PTHEME LoadTheme(IN LPCWSTR pszThemeFileName,IN LPCWSTR pszThemeName);
 PTHEME LoadThemes(VOID);
+BOOL FindOrAppendTheme(IN PTHEME pThemeList, IN LPCWSTR pwszThemeFileName, IN LPCWSTR pwszColorBuff, IN LPCWSTR pwszSizeBuff, OUT PTHEME_SELECTION pSelectedTheme);
 BOOL GetActiveTheme(PTHEME pThemeList, PTHEME_SELECTION pSelectedTheme);
 BOOL GetActiveClassicTheme(PTHEME pThemeList, PTHEME_SELECTION pSelectedTheme);
 BOOL LoadCurrentScheme(PCOLOR_SCHEME scheme);
@@ -145,6 +147,7 @@ VOID ApplyScheme(PCOLOR_SCHEME scheme, PTHEME_SELECTION pSelectedTheme);
 BOOL ActivateTheme(PTHEME_SELECTION pSelectedTheme);
 void CleanupThemes(IN PTHEME pThemeList);
 BOOL DrawThemePreview(HDC hdcMem, PCOLOR_SCHEME scheme, PTHEME_SELECTION pSelectedTheme, PRECT prcWindow);
+BOOL ActivateThemeFile(LPCWSTR pwszFile);
 
 /* prototypes for appearance.c */
 INT_PTR CALLBACK AppearancePageProc(HWND hwndDlg, UINT uMsg, WPARAM wParam, LPARAM lParam);

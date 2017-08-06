@@ -229,15 +229,13 @@ static void ref_count_test(LPCWSTR type_lib)
 
 static void test_TypeComp(void)
 {
+    ITypeComp *pTypeComp, *tcomp, *pTypeComp_tmp;
+    ITypeInfo *pTypeInfo, *ti, *pFontTypeInfo;
     ITypeLib *pTypeLib;
-    ITypeComp *pTypeComp;
     HRESULT hr;
     ULONG ulHash;
     DESCKIND desckind;
     BINDPTR bindptr;
-    ITypeInfo *pTypeInfo;
-    ITypeInfo *pFontTypeInfo;
-    ITypeComp *pTypeComp_tmp;
     static WCHAR wszStdFunctions[] = {'S','t','d','F','u','n','c','t','i','o','n','s',0};
     static WCHAR wszSavePicture[] = {'S','a','v','e','P','i','c','t','u','r','e',0};
     static WCHAR wszOLE_TRISTATE[] = {'O','L','E','_','T','R','I','S','T','A','T','E',0};
@@ -437,6 +435,17 @@ static void test_TypeComp(void)
 
     hr = ITypeInfo_GetTypeComp(pFontTypeInfo, &pTypeComp);
     ok_ole_success(hr, ITypeLib_GetTypeComp);
+
+    hr = ITypeInfo_QueryInterface(pFontTypeInfo, &IID_ITypeComp, (void**)&tcomp);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(tcomp == pTypeComp, "got %p, was %p\n", tcomp, pTypeComp);
+
+    hr = ITypeComp_QueryInterface(tcomp, &IID_ITypeInfo, (void**)&ti);
+    ok(hr == S_OK, "got %08x\n", hr);
+    ok(ti == pFontTypeInfo, "got %p, was %p\n", ti, pFontTypeInfo);
+    ITypeInfo_Release(ti);
+
+    ITypeComp_Release(tcomp);
 
     ulHash = LHashValOfNameSys(SYS_WIN32, LOCALE_NEUTRAL, wszClone);
     hr = ITypeComp_Bind(pTypeComp, wszClone, ulHash, 0, &pTypeInfo, &desckind, &bindptr);
@@ -1077,11 +1086,41 @@ static HRESULT WINAPI ret_false_func(void)
     return S_FALSE;
 }
 
-static const void *vtable[] = { NULL, NULL, NULL, inst_func };
+static const WCHAR testW[] = { 'T','e','s','t',0 };
+
+static void WINAPI variant_func2(VARIANT *ret, VARIANT v1, VARIANT v2)
+{
+    ok(V_VT(&v1) == VT_I4, "unexpected %d\n", V_VT(&v1));
+    ok(V_I4(&v1) == 2, "unexpected %d\n", V_I4(&v1));
+    ok(V_VT(&v2) == VT_BSTR, "unexpected %d\n", V_VT(&v2));
+    ok(lstrcmpW(V_BSTR(&v2), testW) == 0, "unexpected %s\n", wine_dbgstr_w(V_BSTR(&v2)));
+
+    V_VT(ret) = VT_UI4;
+    V_I4(ret) = 4321;
+}
+
+static void WINAPI inst_func2(void *inst, VARIANT *ret, VARIANT v1, VARIANT v2)
+{
+    ok( (*(void ***)inst)[3] == inst_func2, "wrong ptr %p\n", inst );
+
+    ok(V_VT(ret) == VT_I4 || broken(V_VT(ret) == VT_VARIANT) /* win64 */, "unexpected %d\n", V_VT(ret));
+    ok(V_I4(ret) == 1234, "unexpected %d\n", V_I4(ret));
+
+    ok(V_VT(&v1) == VT_I4, "unexpected %d\n", V_VT(&v1));
+    ok(V_I4(&v1) == 2, "unexpected %d\n", V_I4(&v1));
+    ok(V_VT(&v2) == VT_BSTR, "unexpected %d\n", V_VT(&v2));
+    ok(lstrcmpW(V_BSTR(&v2), testW) == 0, "unexpected %s\n", wine_dbgstr_w(V_BSTR(&v2)));
+
+    V_VT(ret) = VT_UI4;
+    V_I4(ret) = 4321;
+}
+
+static void *vtable[] = { NULL, NULL, NULL, inst_func };
+static void *vtable2[] = { NULL, NULL, NULL, inst_func2 };
 
 static void test_DispCallFunc(void)
 {
-    const void **inst = vtable;
+    void **inst;
     HRESULT res;
     VARIANT result, args[5];
     VARIANTARG *pargs[5];
@@ -1089,6 +1128,30 @@ static void test_DispCallFunc(void)
     int i;
 
     for (i = 0; i < 5; i++) pargs[i] = &args[i];
+
+    memset( args, 0x55, sizeof(args) );
+
+    types[0] = VT_VARIANT;
+    V_VT(&args[0]) = VT_I4;
+    V_I4(&args[0]) = 2;
+    types[1] = VT_VARIANT;
+    V_VT(&args[1]) = VT_BSTR;
+    V_BSTR(&args[1]) = SysAllocString(testW);
+    memset( &result, 0xcc, sizeof(result) );
+    res = DispCallFunc(NULL, (ULONG_PTR)variant_func2, CC_STDCALL, VT_VARIANT, 2, types, pargs, &result);
+    ok(res == S_OK, "DispCallFunc error %#x\n", res);
+    ok(V_VT(&result) == VT_UI4, "wrong result type %d\n", V_VT(&result));
+    ok(V_UI4(&result) == 4321, "wrong result %u\n", V_UI4(&result));
+
+    V_VT(&result) = VT_I4;
+    V_UI4(&result) = 1234;
+    inst = vtable2;
+    res = DispCallFunc(&inst, 3 * sizeof(void *), CC_STDCALL, VT_VARIANT, 2, types, pargs, &result);
+    ok(res == S_OK, "DispCallFunc error %#x\n", res);
+    ok(V_VT(&result) == VT_UI4, "wrong result type %d\n", V_VT(&result));
+    ok(V_UI4(&result) == 4321, "wrong result %u\n", V_UI4(&result));
+
+    VariantClear(&args[1]);
 
     memset( args, 0x55, sizeof(args) );
     types[0] = VT_UI4;
@@ -1188,6 +1251,7 @@ static void test_DispCallFunc(void)
     types[0] = VT_I4;
     V_I4(&args[0]) = 3;
     memset( &result, 0xcc, sizeof(result) );
+    inst = vtable;
     res = DispCallFunc( &inst, 3 * sizeof(void*), CC_STDCALL, VT_I4, 1, types, pargs, &result );
     ok( res == S_OK, "DispCallFunc failed %x\n", res );
     ok( V_VT(&result) == VT_I4, "wrong result type %d\n", V_VT(&result) );
@@ -1686,7 +1750,7 @@ static void test_CreateTypeLib(SYSKIND sys) {
     ITypeInfo *interface1, *interface2, *dual, *unknown, *dispatch, *ti;
     ITypeInfo *tinfos[2];
     ITypeInfo2 *ti2;
-    ITypeComp *tcomp;
+    ITypeComp *tcomp, *tcomp2;
     MEMBERID memids[2];
     FUNCDESC funcdesc, *pfuncdesc;
     ELEMDESC elemdesc[5], *edesc;
@@ -2026,6 +2090,8 @@ static void test_CreateTypeLib(SYSKIND sys) {
     funcdesc.lprgelemdescParam = NULL;
     funcdesc.invkind = INVOKE_FUNC;
     funcdesc.cParams = 0;
+    funcdesc.cScodes = 1;
+    funcdesc.lprgscode = NULL;
     hres = ICreateTypeInfo_AddFuncDesc(createti, 1, &funcdesc);
     ok(hres == S_OK, "got %08x\n", hres);
 
@@ -3600,6 +3666,11 @@ static void test_CreateTypeLib(SYSKIND sys) {
 
     hres = ITypeInfo_GetTypeComp(ti, &tcomp);
     ok(hres == S_OK, "got %08x\n", hres);
+
+    hres = ITypeInfo_QueryInterface(ti, &IID_ITypeComp, (void**)&tcomp2);
+    ok(hres == S_OK, "got %08x\n", hres);
+    ok(tcomp == tcomp2, "got %p, was %p\n", tcomp2, tcomp);
+    ITypeComp_Release(tcomp2);
 
     hres = ITypeComp_Bind(tcomp, invokeW, 0, INVOKE_FUNC, &interface1, &desckind, &bindptr);
     ok(hres == S_OK, "got %08x\n", hres);
@@ -5182,6 +5253,7 @@ static void test_SetFuncAndParamNames(void)
     ok(infos[0] && !infos[1] && !infos[2], "got wrong typeinfo\n");
     ok(memids[0] == 0, "got wrong memid[0]\n");
     ok(memids[1] == 0xdeadbeef && memids[2] == 0xdeadbeef, "got wrong memids\n");
+    ITypeInfo_Release(infos[0]);
 
     found = 3;
     memset(infos, 0, sizeof(infos));
@@ -5194,6 +5266,8 @@ static void test_SetFuncAndParamNames(void)
     ok(infos[0] && infos[1] && infos[0] != infos[1], "got same typeinfo\n");
     ok(memids[0] == 0, "got wrong memid[0]\n");
     ok(memids[1] == 0, "got wrong memid[1]\n");
+    ITypeInfo_Release(infos[0]);
+    ITypeInfo_Release(infos[1]);
 
     ITypeLib_Release(tl);
     ICreateTypeLib2_Release(ctl);

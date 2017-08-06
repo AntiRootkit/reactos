@@ -14,6 +14,9 @@
 
 #include "mswhelper.h"
 
+#define NDEBUG
+#include <debug.h>
+
 #define NSP_CALLID_DNS 0x0001
 #define NSP_CALLID_HOSTNAME 0x0002
 #define NSP_CALLID_HOSTBYNAME 0x0003
@@ -103,7 +106,7 @@ NSP_LookupServiceBeginW(
 INT
 NSP_LookupServiceNextW(
   _In_ PWSHANDLEINTERN data,
-  _In_ DWORD CallID,
+  _In_ DWORD dwControlFlags,
   _Inout_ LPWSAQUERYSETW lpRes,
   _Inout_ LPDWORD lpResLen);
 
@@ -113,14 +116,14 @@ NSP_GetHostNameHeapAllocW(
 
 INT
 NSP_GetHostByNameHeapAllocW(
-  _In_ WCHAR* name,
-  _In_ GUID* lpProviderId,
+  _In_ PWSHANDLEINTERN data,
+  _In_ DWORD dwControlFlags,
   _Out_ PWSHOSTINFOINTERN hostinfo);
 
 INT
 NSP_GetServiceByNameHeapAllocW(
-  _In_ WCHAR* nameW,
-  _In_ GUID* lpProviderId,
+  _In_ PWSHANDLEINTERN data,
+  _In_ DWORD dwControlFlags,
   _Out_ PWSHOSTINFOINTERN hostinfo);
 
 /* Implementations - Internal */
@@ -300,7 +303,7 @@ mwsNSPLookupServiceNext(_In_ HANDLE hLookup,
     lpqsResults->dwSize = sizeof(*lpqsResults);
 
     wsaErr = NSP_LookupServiceNextW(pLook,
-                                    pLook->CallID,
+                                    dwControlFlags,
                                     lpqsResults,
                                     lpdwBufferLength);
 
@@ -461,35 +464,42 @@ NSP_GetHostNameHeapAllocW(_Out_ WCHAR** hostname)
 }
 
 INT
-NSP_GetHostByNameHeapAllocW(_In_ WCHAR* name,
-                            _In_ GUID* lpProviderId,
+NSP_GetHostByNameHeapAllocW(_In_ PWSHANDLEINTERN data,
+                            _In_ DWORD dwControlFlags,
                             _Out_ PWSHOSTINFOINTERN hostinfo)
 {
     HANDLE hHeap = GetProcessHeap();
-    DNS_STATUS dns_status = {0};
+    DNS_STATUS dns_status = { 0 };
     /* include/WinDNS.h -- look up DNS_RECORD on MSDN */
-    PDNS_RECORD dp;
-    PDNS_RECORD curr;
+    PDNS_RECORDW dp;
+    PDNS_RECORDW curr;
     INT result = ERROR_SUCCESS;
+    DWORD dwQueryFlags = DNS_QUERY_STANDARD;
+    PWCHAR Aliases[WS2_INTERNAL_MAX_ALIAS] = { 0 };
+    int AliasIndex = 0;
 
     /* needed to be cleaned up if != NULL */
     dp = NULL;
 
-    if (name == NULL)
+    if (data->hostnameW == NULL)
     {
         result = ERROR_INVALID_PARAMETER;
         goto cleanup;
     }
 
+    if ((data->dwControlFlags & LUP_DEEP) == 0)
+    {
+        dwQueryFlags |= DNS_QUERY_NO_RECURSION;
+    }
+
     /* DNS_TYPE_A: include/WinDNS.h */
     /* DnsQuery -- lib/dnsapi/dnsapi/query.c */
-    dns_status = DnsQuery(name,
-                          DNS_TYPE_A,
-                          DNS_QUERY_STANDARD,
-                          /* extra dns servers */ 0,
-                          &dp,
-                          0);
-
+    dns_status = DnsQuery_W(data->hostnameW,
+                            DNS_TYPE_A,
+                            dwQueryFlags,
+                            NULL /* extra dns servers */,
+                            &dp,
+                            NULL);
     if (dns_status == ERROR_INVALID_NAME)
     {
         WSASetLastError(WSAEFAULT);
@@ -508,6 +518,10 @@ NSP_GetHostByNameHeapAllocW(_In_ WCHAR* name,
     curr = dp;
     while ((curr->pNext != NULL) || (curr->wType != DNS_TYPE_A))
     {
+        if (curr->wType == DNS_TYPE_CNAME)
+        {
+            Aliases[AliasIndex++] = curr->Data.Cname.pNameHost;
+        }
         curr = curr->pNext;
     }
 
@@ -516,9 +530,12 @@ NSP_GetHostByNameHeapAllocW(_In_ WCHAR* name,
         result = WSASERVICE_NOT_FOUND;
         goto cleanup;
     }
-
     hostinfo->hostnameW = StrCpyHeapAllocW(hHeap, curr->pName);
     hostinfo->addr4 = curr->Data.A.IpAddress;
+    if (AliasIndex)
+    {
+        hostinfo->servaliasesA = StrAryCpyHeapAllocWToA(hHeap, (WCHAR**)&Aliases);
+    }
     result = ERROR_SUCCESS;
 
 cleanup:
@@ -681,8 +698,8 @@ OpenNetworkDatabase(_In_ LPCWSTR Name)
 }
 
 INT
-NSP_GetServiceByNameHeapAllocW(_In_ WCHAR* nameW,
-                               _In_ GUID* lpProviderId,
+NSP_GetServiceByNameHeapAllocW(_In_ PWSHANDLEINTERN data,
+                               _In_ DWORD dwControlFlags,
                                _Out_ PWSHOSTINFOINTERN hostinfo)
 {
     BOOL Found = FALSE;
@@ -700,14 +717,14 @@ NSP_GetServiceByNameHeapAllocW(_In_ WCHAR* nameW,
     PCHAR nameProtoA = NULL;
     INT res = WSANO_RECOVERY;
     
-    if (!nameW)
+    if (!data->hostnameW)
     {
         res = WSANO_RECOVERY;
         goto End;
     }
 
     hHeap = GetProcessHeap();
-    nameA = StrW2AHeapAlloc(hHeap, nameW);
+    nameA = StrW2AHeapAlloc(hHeap, data->hostnameW);
 
     /* nameA has the form <service-name>/<protocol>
        we split these now */
@@ -834,7 +851,7 @@ End:
 
 INT
 NSP_LookupServiceNextW(_In_ PWSHANDLEINTERN data,
-                       _In_ DWORD CallID,
+                       _In_ DWORD dwControlFlags,
                        _Inout_ LPWSAQUERYSETW lpRes,
                        _Inout_ LPDWORD lpResLen)
 {
@@ -857,9 +874,9 @@ NSP_LookupServiceNextW(_In_ PWSHANDLEINTERN data,
     lpRes->dwSize = sizeof(*lpRes);
     lpRes->dwNameSpace = NS_DNS;
 
-    if ((CallID == NSP_CALLID_HOSTNAME) ||
-        (CallID == NSP_CALLID_HOSTBYNAME) ||
-        (CallID == NSP_CALLID_SERVICEBYNAME))
+    if ((data->CallID == NSP_CALLID_HOSTNAME) ||
+        (data->CallID == NSP_CALLID_HOSTBYNAME) ||
+        (data->CallID == NSP_CALLID_SERVICEBYNAME))
     {
         if (data->CallIDCounter >= 1)
         {
@@ -874,7 +891,7 @@ NSP_LookupServiceNextW(_In_ PWSHANDLEINTERN data,
     }
     data->CallIDCounter++;
 
-    if (CallID == NSP_CALLID_HOSTNAME)
+    if (data->CallID == NSP_CALLID_HOSTNAME)
     {
         result = NSP_GetHostNameHeapAllocW(&hostinfo.hostnameW);
 
@@ -883,32 +900,28 @@ NSP_LookupServiceNextW(_In_ PWSHANDLEINTERN data,
 
         hostinfo.addr4 = 0;
     }
-    else if (CallID == NSP_CALLID_HOSTBYNAME)
+    else if (data->CallID == NSP_CALLID_HOSTBYNAME)
     {
-        result = NSP_GetHostByNameHeapAllocW(data->hostnameW,
-                                             &data->providerId,
+        result = NSP_GetHostByNameHeapAllocW(data,
+                                             dwControlFlags,
                                              &hostinfo);
-        if (result != ERROR_SUCCESS)
-            goto End;
-    }
-    else if (CallID == NSP_CALLID_SERVICEBYNAME)
-    {
-        result = NSP_GetServiceByNameHeapAllocW(data->hostnameW,
-                                                &data->providerId,
-                                                &hostinfo);
         if (result != ERROR_SUCCESS)
             goto End;
     }
     else
     {
-        result = WSANO_RECOVERY; // Internal error!
-        goto End;
+        ASSERT(data->CallID == NSP_CALLID_SERVICEBYNAME);
+        result = NSP_GetServiceByNameHeapAllocW(data,
+                                                dwControlFlags,
+                                                &hostinfo);
+        if (result != ERROR_SUCCESS)
+            goto End;
     }
 
     if (((LUP_RETURN_BLOB & data->dwControlFlags) != 0) ||
         ((LUP_RETURN_NAME & data->dwControlFlags) != 0))
     {
-        if (CallID == NSP_CALLID_HOSTNAME || CallID == NSP_CALLID_HOSTBYNAME)
+        if (data->CallID == NSP_CALLID_HOSTNAME || data->CallID == NSP_CALLID_HOSTBYNAME)
         {
             ServiceInstanceNameW = hostinfo.hostnameW;
             ServiceInstanceNameA = StrW2AHeapAlloc(hHeap, ServiceInstanceNameW);
@@ -919,7 +932,7 @@ NSP_LookupServiceNextW(_In_ PWSHANDLEINTERN data,
 
             }
         }
-        if (CallID == NSP_CALLID_SERVICEBYNAME)
+        if (data->CallID == NSP_CALLID_SERVICEBYNAME)
         {
             ServiceInstanceNameW = hostinfo.servnameW;
             ServiceInstanceNameA = StrW2AHeapAlloc(hHeap, ServiceInstanceNameW);
@@ -951,11 +964,12 @@ NSP_LookupServiceNextW(_In_ PWSHANDLEINTERN data,
 
     if ((LUP_RETURN_BLOB & data->dwControlFlags) != 0)
     {
-        if (CallID == NSP_CALLID_HOSTBYNAME)
+        if (data->CallID == NSP_CALLID_HOSTBYNAME)
         {
             /* Write data for PBLOB (hostent) */
             if (!mswBufferAppendBlob_Hostent(&buf,
                                              lpRes,
+                                             (LUP_RETURN_ALIASES & data->dwControlFlags) != 0 ? hostinfo.servaliasesA : NULL,
                                              ServiceInstanceNameA,
                                              hostinfo.addr4))
             {
@@ -964,13 +978,13 @@ NSP_LookupServiceNextW(_In_ PWSHANDLEINTERN data,
                 goto End;
             }
         }
-        else if (CallID == NSP_CALLID_SERVICEBYNAME)
+        else if (data->CallID == NSP_CALLID_SERVICEBYNAME)
         {
             /* Write data for PBLOB (servent) */
             if (!mswBufferAppendBlob_Servent(&buf,
                                              lpRes,
                                              ServiceInstanceNameA,/* ServiceName */
-                                             hostinfo.servaliasesA,
+                                             (LUP_RETURN_ALIASES & data->dwControlFlags) != 0 ? hostinfo.servaliasesA : NULL,
                                              ServiceProtocolNameA,
                                              hostinfo.servport))
             {

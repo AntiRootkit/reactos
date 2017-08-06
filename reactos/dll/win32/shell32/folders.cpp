@@ -19,75 +19,14 @@
 
 #include "precomp.h"
 
+WINE_DEFAULT_DEBUG_CHANNEL(shell);
+
 WCHAR swShell32Name[MAX_PATH];
 
 DWORD NumIconOverlayHandlers = 0;
 IShellIconOverlayIdentifier ** Handlers = NULL;
 
-static HRESULT getIconLocationForFolder(IShellFolder * psf, LPCITEMIDLIST pidl, UINT uFlags,
-                                        LPWSTR szIconFile, UINT cchMax, int *piIndex, UINT *pwFlags)
-{
-    static const WCHAR shellClassInfo[] = { '.', 'S', 'h', 'e', 'l', 'l', 'C', 'l', 'a', 's', 's', 'I', 'n', 'f', 'o', 0 };
-    static const WCHAR iconFile[] = { 'I', 'c', 'o', 'n', 'F', 'i', 'l', 'e', 0 };
-    static const WCHAR clsid[] = { 'C', 'L', 'S', 'I', 'D', 0 };
-    static const WCHAR clsid2[] = { 'C', 'L', 'S', 'I', 'D', '2', 0 };
-    static const WCHAR iconIndex[] = { 'I', 'c', 'o', 'n', 'I', 'n', 'd', 'e', 'x', 0 };
-    static const WCHAR wszDesktopIni[] = { 'd','e','s','k','t','o','p','.','i','n','i',0 };
-    int icon_idx;
-
-    if (!(uFlags & GIL_DEFAULTICON) && (_ILGetFileAttributes(ILFindLastID(pidl), NULL, 0) & (FILE_ATTRIBUTE_SYSTEM | FILE_ATTRIBUTE_READONLY)) != 0 )
-    {
-        WCHAR wszFolderPath[MAX_PATH];
-
-        if (!ILGetDisplayNameExW(psf, pidl, wszFolderPath, 0))
-            return FALSE;
-
-        PathAppendW(wszFolderPath, wszDesktopIni);
-
-        if (PathFileExistsW(wszFolderPath))
-        {
-            WCHAR wszPath[MAX_PATH];
-            WCHAR wszCLSIDValue[CHARS_IN_GUID];
-
-            if (GetPrivateProfileStringW(shellClassInfo, iconFile, NULL, wszPath, MAX_PATH, wszFolderPath))
-            {
-                ExpandEnvironmentStringsW(wszPath, szIconFile, cchMax);
-
-                *piIndex = GetPrivateProfileIntW(shellClassInfo, iconIndex, 0, wszFolderPath);
-                return S_OK;
-            }
-            else if (GetPrivateProfileStringW(shellClassInfo, clsid, NULL, wszCLSIDValue, CHARS_IN_GUID, wszFolderPath) &&
-                HCR_GetIconW(wszCLSIDValue, szIconFile, NULL, cchMax, &icon_idx))
-            {
-                *piIndex = icon_idx;
-                return S_OK;
-            }
-            else if (GetPrivateProfileStringW(shellClassInfo, clsid2, NULL, wszCLSIDValue, CHARS_IN_GUID, wszFolderPath) &&
-                HCR_GetIconW(wszCLSIDValue, szIconFile, NULL, cchMax, &icon_idx))
-            {
-                *piIndex = icon_idx;
-                return S_OK;
-            }
-        }
-    }
-
-    static const WCHAR folder[] = { 'F', 'o', 'l', 'd', 'e', 'r', 0 };
-
-    if (!HCR_GetIconW(folder, szIconFile, NULL, cchMax, &icon_idx))
-    {
-        lstrcpynW(szIconFile, swShell32Name, cchMax);
-        icon_idx = -IDI_SHELL_FOLDER;
-    }
-
-    if (uFlags & GIL_OPENICON)
-        *piIndex = icon_idx < 0 ? icon_idx - 1 : icon_idx + 1;
-    else
-        *piIndex = icon_idx;
-
-    return S_OK;
-}
-
-void InitIconOverlays(void)
+static void InitIconOverlays(void)
 {
     HKEY hKey;
     DWORD dwIndex, dwResult, dwSize;
@@ -161,6 +100,8 @@ GetIconOverlay(LPCITEMIDLIST pidl, WCHAR * wTemp, int* pIndex)
     if(!SHGetPathFromIDListW(pidl, szPath))
         return FALSE;
 
+    if (!Handlers)
+        InitIconOverlays();
 
     HighestPriority = 101;
     IconIndex = NumIconOverlayHandlers;
@@ -190,101 +131,4 @@ GetIconOverlay(LPCITEMIDLIST pidl, WCHAR * wTemp, int* pIndex)
         return TRUE;
     else
         return FALSE;
-}
-
-HRESULT CFSExtractIcon_CreateInstance(IShellFolder * psf, LPCITEMIDLIST pidl, REFIID iid, LPVOID * ppvOut)
-{
-    CComPtr<IDefaultExtractIconInit>    initIcon;
-    HRESULT hr;
-    int icon_idx;
-    UINT flags;
-    CHAR sTemp[MAX_PATH];
-    WCHAR wTemp[MAX_PATH];
-
-    hr = SHCreateDefaultExtractIcon(IID_PPV_ARG(IDefaultExtractIconInit,&initIcon));
-    if (FAILED(hr))
-        return hr;
-
-    if (_ILIsFolder (pidl))
-    {
-        if (SUCCEEDED(getIconLocationForFolder(psf, 
-                          pidl, 0, wTemp, MAX_PATH,
-                          &icon_idx,
-                          &flags)))
-        {
-            initIcon->SetNormalIcon(wTemp, icon_idx);
-            // FIXME: if/when getIconLocationForFolder does something for 
-            //        GIL_FORSHORTCUT, code below should be uncommented. and
-            //        the following line removed.
-            initIcon->SetShortcutIcon(wTemp, icon_idx);
-        }
-        if (SUCCEEDED(getIconLocationForFolder(psf, 
-                          pidl, GIL_DEFAULTICON, wTemp, MAX_PATH,
-                          &icon_idx,
-                          &flags)))
-        {
-            initIcon->SetDefaultIcon(wTemp, icon_idx);
-        }
-        // if (SUCCEEDED(getIconLocationForFolder(psf, 
-        //                   pidl, GIL_FORSHORTCUT, wTemp, MAX_PATH,
-        //                   &icon_idx,
-        //                   &flags)))
-        // {
-        //     initIcon->SetShortcutIcon(wTemp, icon_idx);
-        // }
-        if (SUCCEEDED(getIconLocationForFolder(psf, 
-                          pidl, GIL_OPENICON, wTemp, MAX_PATH,
-                          &icon_idx,
-                          &flags)))
-        {
-            initIcon->SetOpenIcon(wTemp, icon_idx);
-        }
-    }
-    else
-    {
-        BOOL found = FALSE;
-
-        if (_ILGetExtension(pidl, sTemp, MAX_PATH))
-        {
-            if (HCR_MapTypeToValueA(sTemp, sTemp, MAX_PATH, TRUE)
-                    && HCR_GetIconA(sTemp, sTemp, NULL, MAX_PATH, &icon_idx))
-            {
-                if (!lstrcmpA("%1", sTemp)) /* icon is in the file */
-                {
-                    ILGetDisplayNameExW(psf, pidl, wTemp, 0);
-                    icon_idx = 0;
-                }
-                else
-                {
-                    MultiByteToWideChar(CP_ACP, 0, sTemp, -1, wTemp, MAX_PATH);
-                }
-
-                found = TRUE;
-            }
-            else if (!lstrcmpiA(sTemp, "lnkfile"))
-            {
-                /* extract icon from shell shortcut */
-                CComPtr<IShellLinkW>        psl;
-
-                HRESULT hr = psf->GetUIObjectOf(NULL, 1, &pidl, IID_NULL_PPV_ARG(IShellLinkW, &psl));
-
-                if (SUCCEEDED(hr))
-                {
-                    hr = psl->GetIconLocation(wTemp, MAX_PATH, &icon_idx);
-
-                    if (SUCCEEDED(hr) && *sTemp)
-                        found = TRUE;
-
-                }
-            }
-        }
-
-        if (!found)
-            /* default icon */
-            initIcon->SetNormalIcon(swShell32Name, 0);
-        else
-            initIcon->SetNormalIcon(wTemp, icon_idx);
-    }
-
-    return initIcon->QueryInterface(iid, ppvOut);
 }

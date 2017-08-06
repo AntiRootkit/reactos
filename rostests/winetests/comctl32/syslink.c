@@ -146,15 +146,14 @@ static WNDPROC syslink_oldproc;
 static LRESULT WINAPI syslink_subclass_proc(HWND hwnd, UINT message, WPARAM wParam, LPARAM lParam)
 {
     static LONG defwndproc_counter = 0;
+    struct message msg = { 0 };
     LRESULT ret;
-    struct message msg;
 
     msg.message = message;
     msg.flags = sent|wparam|lparam;
     if (defwndproc_counter) msg.flags |= defwinproc;
     msg.wParam = wParam;
     msg.lParam = lParam;
-    msg.id = 0;
     add_message(sequences, SYSLINK_SEQ_INDEX, &msg);
 
     defwndproc_counter++;
@@ -195,6 +194,7 @@ START_TEST(syslink)
     BOOL rc;
     HWND hWndSysLink;
     LONG oldstyle;
+    POINT orig_pos;
 
     if (!load_v6_module(&ctx_cookie, &hCtx))
         return;
@@ -216,6 +216,10 @@ START_TEST(syslink)
         skip("Could not register ICC_LINK_CLASS\n");
         return;
     }
+
+    /* Move the cursor off the parent window */
+    GetCursorPos(&orig_pos);
+    SetCursorPos(400, 400);
 
     init_msg_sequences(sequences, NUM_MSG_SEQUENCE);
 
@@ -254,4 +258,5 @@ START_TEST(syslink)
     DestroyWindow(hWndSysLink);
     DestroyWindow(hWndParent);
     unload_v6_module(ctx_cookie, hCtx);
+    SetCursorPos(orig_pos.x, orig_pos.y);
 }

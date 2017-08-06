@@ -18,6 +18,8 @@
 
 #include "jscript.h"
 
+#include <wine/rbtree.h>
+
 WINE_DECLARE_DEBUG_CHANNEL(jscript_disas);
 
 typedef struct _statement_ctx_t {
@@ -34,6 +36,12 @@ typedef struct _statement_ctx_t {
 } statement_ctx_t;
 
 typedef struct {
+    struct wine_rb_entry entry;
+    BSTR name;
+    int ref;
+} function_local_t;
+
+typedef struct {
     parser_ctx_t *parser;
     bytecode_t *code;
 
@@ -46,8 +54,7 @@ typedef struct {
     unsigned labels_size;
     unsigned labels_cnt;
 
-    local_ref_t *locals_buf;
-    unsigned locals_buf_size;
+    struct wine_rb_tree locals;
     unsigned locals_cnt;
 
     statement_ctx_t *stat_ctx;
@@ -55,6 +62,8 @@ typedef struct {
 
     function_expression_t *func_head;
     function_expression_t *func_tail;
+
+    heap_pool_t heap;
 } compiler_ctx_t;
 
 static const struct {
@@ -1367,24 +1376,30 @@ static HRESULT compile_forin_statement(compiler_ctx_t *ctx, forin_statement_t *s
     return S_OK;
 }
 
-static HRESULT pop_to_stat(compiler_ctx_t *ctx, BOOL var_stack, BOOL scope_stack, statement_ctx_t *stat_ctx)
+static HRESULT pop_to_stat(compiler_ctx_t *ctx, statement_ctx_t *stat_ctx)
 {
     unsigned stack_pop = 0;
     statement_ctx_t *iter;
+    HRESULT hres;
 
     for(iter = ctx->stat_ctx; iter != stat_ctx; iter = iter->next) {
-        if(scope_stack) {
-            if(iter->using_scope && !push_instr(ctx, OP_pop_scope))
-                return E_OUTOFMEMORY;
-            if(iter->using_except && !push_instr(ctx, OP_pop_except))
-                return E_OUTOFMEMORY;
+        if(iter->using_scope && !push_instr(ctx, OP_pop_scope))
+            return E_OUTOFMEMORY;
+        if(iter->using_except) {
+            if(stack_pop) {
+                hres = push_instr_uint(ctx, OP_pop, stack_pop);
+                if(FAILED(hres))
+                    return hres;
+                stack_pop = 0;
+            }
+            hres = push_instr_uint(ctx, OP_pop_except, ctx->code_off+1);
+            if(FAILED(hres))
+                return hres;
         }
         stack_pop += iter->stack_use;
     }
 
-    if(var_stack && stack_pop) {
-        HRESULT hres;
-
+    if(stack_pop) {
         hres = push_instr_uint(ctx, OP_pop, stack_pop);
         if(FAILED(hres))
             return hres;
@@ -1439,7 +1454,7 @@ static HRESULT compile_continue_statement(compiler_ctx_t *ctx, branch_statement_
         }
     }
 
-    hres = pop_to_stat(ctx, TRUE, TRUE, pop_ctx);
+    hres = pop_to_stat(ctx, pop_ctx);
     if(FAILED(hres))
         return hres;
 
@@ -1476,7 +1491,7 @@ static HRESULT compile_break_statement(compiler_ctx_t *ctx, branch_statement_t *
         }
     }
 
-    hres = pop_to_stat(ctx, TRUE, TRUE, pop_ctx->next);
+    hres = pop_to_stat(ctx, pop_ctx->next);
     if(FAILED(hres))
         return hres;
 
@@ -1493,10 +1508,6 @@ static HRESULT compile_return_statement(compiler_ctx_t *ctx, expression_statemen
         return JS_E_MISPLACED_RETURN;
     }
 
-    hres = pop_to_stat(ctx, TRUE, FALSE, NULL);
-    if(FAILED(hres))
-        return hres;
-
     if(stat->expr) {
         hres = compile_expression(ctx, stat->expr, TRUE);
         if(FAILED(hres))
@@ -1505,7 +1516,7 @@ static HRESULT compile_return_statement(compiler_ctx_t *ctx, expression_statemen
             return E_OUTOFMEMORY;
     }
 
-    hres = pop_to_stat(ctx, FALSE, TRUE, NULL);
+    hres = pop_to_stat(ctx, NULL);
     if(FAILED(hres))
         return hres;
 
@@ -1671,9 +1682,8 @@ static HRESULT compile_throw_statement(compiler_ctx_t *ctx, expression_statement
 /* ECMA-262 3rd Edition    12.14 */
 static HRESULT compile_try_statement(compiler_ctx_t *ctx, try_statement_t *stat)
 {
-    statement_ctx_t try_ctx = {0, FALSE, TRUE}, catch_ctx = {0, TRUE, FALSE};
-    statement_ctx_t finally_ctx = {2, FALSE, FALSE};
-    unsigned push_except;
+    statement_ctx_t try_ctx = {0, FALSE, TRUE}, finally_ctx = {2, FALSE, FALSE};
+    unsigned push_except, finally_off = 0, catch_off = 0, pop_except, catch_pop_except = 0;
     BSTR ident;
     HRESULT hres;
 
@@ -1689,26 +1699,25 @@ static HRESULT compile_try_statement(compiler_ctx_t *ctx, try_statement_t *stat)
         ident = NULL;
     }
 
-    instr_ptr(ctx, push_except)->u.arg[1].bstr = ident;
-
-    if(!stat->catch_block)
-        try_ctx.stack_use = 2;
-
     hres = compile_statement(ctx, &try_ctx, stat->try_statement);
     if(FAILED(hres))
         return hres;
 
-    if(!push_instr(ctx, OP_pop_except))
+    pop_except = push_instr(ctx, OP_pop_except);
+    if(!pop_except)
         return E_OUTOFMEMORY;
 
     if(stat->catch_block) {
-        unsigned jmp_finally;
+        statement_ctx_t catch_ctx = {0, TRUE, stat->finally_statement != NULL};
 
-        jmp_finally = push_instr(ctx, OP_jmp);
-        if(!jmp_finally)
-            return E_OUTOFMEMORY;
+        if(stat->finally_statement)
+            catch_ctx.using_except = TRUE;
 
-        instr_ptr(ctx, push_except)->u.arg[0].uint = ctx->code_off;
+        catch_off = ctx->code_off;
+
+        hres = push_instr_bstr(ctx, OP_enter_catch, ident);
+        if(FAILED(hres))
+            return hres;
 
         hres = compile_statement(ctx, &catch_ctx, stat->catch_block->statement);
         if(FAILED(hres))
@@ -1717,20 +1726,33 @@ static HRESULT compile_try_statement(compiler_ctx_t *ctx, try_statement_t *stat)
         if(!push_instr(ctx, OP_pop_scope))
             return E_OUTOFMEMORY;
 
-        set_arg_uint(ctx, jmp_finally, ctx->code_off);
-    }else {
-        set_arg_uint(ctx, push_except, ctx->code_off);
+        if(stat->finally_statement) {
+            catch_pop_except = push_instr(ctx, OP_pop_except);
+            if(!catch_pop_except)
+                return E_OUTOFMEMORY;
+        }
     }
 
     if(stat->finally_statement) {
-        hres = compile_statement(ctx, stat->catch_block ? NULL : &finally_ctx, stat->finally_statement);
+        /*
+         * finally block expects two elements on the stack, which may be:
+         * - (true, return_addr) set by OP_pop_except, OP_end_finally jumps back to passed addres
+         * - (false, exception_value) set when unwinding an exception, which OP_end_finally rethrows
+         */
+        finally_off = ctx->code_off;
+        hres = compile_statement(ctx, &finally_ctx, stat->finally_statement);
         if(FAILED(hres))
             return hres;
 
-        if(!stat->catch_block && !push_instr(ctx, OP_end_finally))
+        if(!push_instr(ctx, OP_end_finally))
             return E_OUTOFMEMORY;
     }
 
+    instr_ptr(ctx, pop_except)->u.arg[0].uint = ctx->code_off;
+    if(catch_pop_except)
+        instr_ptr(ctx, catch_pop_except)->u.arg[0].uint = ctx->code_off;
+    instr_ptr(ctx, push_except)->u.arg[0].uint = catch_off;
+    instr_ptr(ctx, push_except)->u.arg[1].uint = finally_off;
     return S_OK;
 }
 
@@ -1804,42 +1826,29 @@ static HRESULT compile_statement(compiler_ctx_t *ctx, statement_ctx_t *stat_ctx,
     return hres;
 }
 
-static int local_cmp(const void *key, const void *ref)
+static int function_local_cmp(const void *key, const struct wine_rb_entry *entry)
 {
-    return strcmpW((const WCHAR*)key, ((const local_ref_t*)ref)->name);
+    function_local_t *local = WINE_RB_ENTRY_VALUE(entry, function_local_t, entry);
+    return strcmpW(key, local->name);
 }
 
-static inline local_ref_t *find_local(compiler_ctx_t *ctx, const WCHAR *name)
+static inline function_local_t *find_local(compiler_ctx_t *ctx, const WCHAR *name)
 {
-    return bsearch(name, ctx->locals_buf, ctx->locals_cnt, sizeof(*ctx->locals_buf), local_cmp);
+    struct wine_rb_entry *entry = wine_rb_get(&ctx->locals, name);
+    return entry ? WINE_RB_ENTRY_VALUE(entry, function_local_t, entry) : NULL;
 }
 
 static BOOL alloc_local(compiler_ctx_t *ctx, BSTR name, int ref)
 {
-    unsigned i;
+    function_local_t *local;
 
-    if(!ctx->locals_buf_size) {
-        ctx->locals_buf = heap_alloc(4 * sizeof(*ctx->locals_buf));
-        if(!ctx->locals_buf)
-            return FALSE;
-        ctx->locals_buf_size = 4;
-    }else if(ctx->locals_buf_size == ctx->locals_cnt) {
-        local_ref_t *new_buf = heap_realloc(ctx->locals_buf, ctx->locals_buf_size * 2 * sizeof(*ctx->locals_buf));
-        if(!new_buf)
-            return FALSE;
-        ctx->locals_buf = new_buf;
-        ctx->locals_buf_size *= 2;
-    }
+    local = heap_pool_alloc(&ctx->heap, sizeof(*local));
+    if(!local)
+        return FALSE;
 
-    for(i = 0; i < ctx->locals_cnt; i++) {
-        if(strcmpW(ctx->locals_buf[i].name, name) > 0) {
-            memmove(ctx->locals_buf + i+1, ctx->locals_buf + i, (ctx->locals_cnt - i) * sizeof(*ctx->locals_buf));
-            break;
-        }
-    }
-
-    ctx->locals_buf[i].name = name;
-    ctx->locals_buf[i].ref = ref;
+    local->name = name;
+    local->ref = ref;
+    wine_rb_put(&ctx->locals, name, &local->entry);
     ctx->locals_cnt++;
     return TRUE;
 }
@@ -2256,7 +2265,8 @@ static HRESULT compile_function(compiler_ctx_t *ctx, source_elements_t *source, 
         BOOL from_eval, function_code_t *func)
 {
     function_expression_t *iter;
-    unsigned off, i, j;
+    function_local_t *local;
+    unsigned off, i;
     HRESULT hres;
 
     TRACE("\n");
@@ -2265,6 +2275,7 @@ static HRESULT compile_function(compiler_ctx_t *ctx, source_elements_t *source, 
     ctx->from_eval = from_eval;
     ctx->func = func;
     ctx->locals_cnt = 0;
+    wine_rb_init(&ctx->locals, function_local_cmp);
 
     if(func_expr) {
         parameter_t *param_iter;
@@ -2311,21 +2322,22 @@ static HRESULT compile_function(compiler_ctx_t *ctx, source_elements_t *source, 
     if(!func->locals)
         return E_OUTOFMEMORY;
     func->locals_cnt = ctx->locals_cnt;
-    memcpy(func->locals, ctx->locals_buf, func->locals_cnt * sizeof(*func->locals));
 
     func->variables = compiler_alloc(ctx->code, func->var_cnt * sizeof(*func->variables));
     if(!func->variables)
         return E_OUTOFMEMORY;
 
-    for(i = 0, j = 0; i < func->locals_cnt; i++) {
-        if(func->locals[i].ref < 0)
-            continue; /* skip arguments */
-        func->variables[func->locals[i].ref].name = func->locals[i].name;
-        func->variables[func->locals[i].ref].func_id = -1;
-        j++;
+    i = 0;
+    WINE_RB_FOR_EACH_ENTRY(local, &ctx->locals, function_local_t, entry) {
+        func->locals[i].name = local->name;
+        func->locals[i].ref = local->ref;
+        if(local->ref >= 0) {
+            func->variables[local->ref].name = local->name;
+            func->variables[local->ref].func_id = -1;
+        }
+        i++;
     }
-
-    assert(j == func->var_cnt);
+    assert(i == ctx->locals_cnt);
 
     func->funcs = compiler_alloc(ctx->code, func->func_cnt * sizeof(*func->funcs));
     if(!func->funcs)
@@ -2468,9 +2480,10 @@ HRESULT compile_script(script_ctx_t *ctx, const WCHAR *code, const WCHAR *args, 
         return hres;
     }
 
+    heap_pool_init(&compiler.heap);
     hres = compile_function(&compiler, compiler.parser->source, NULL, from_eval, &compiler.code->global_code);
+    heap_pool_free(&compiler.heap);
     parser_release(compiler.parser);
-    heap_free(compiler.locals_buf);
     if(FAILED(hres)) {
         release_bytecode(compiler.code);
         return hres;

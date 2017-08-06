@@ -5,6 +5,7 @@
  * PURPOSE:     Window procedure of the main window and all children apart from
  *              hPalWin, hToolSettings and hSelection
  * PROGRAMMERS: Benedikt Freisen
+ *              Katayama Hirofumi MZ
  */
 
 /* INCLUDES *********************************************************/
@@ -66,7 +67,13 @@ void CMainWindow::alignChildrenToMainWindow()
         h = clientRect.bottom - 3;
     }
 
-    scrollboxWindow.MoveWindow(x, y, w, ::IsWindowVisible(hStatusBar) ? h - 23 : h, TRUE);
+    RECT statusBarRect0;
+    SendMessage(hStatusBar, SB_GETRECT, 0, (LPARAM)&statusBarRect0);
+    int statusBarBorders[3];
+    SendMessage(hStatusBar, SB_GETBORDERS, 0, (LPARAM)&statusBarBorders);
+    int statusBarHeight = statusBarRect0.bottom - statusBarRect0.top + statusBarBorders[1];
+
+    scrollboxWindow.MoveWindow(x, y, w, ::IsWindowVisible(hStatusBar) ? h - statusBarHeight : h, TRUE);
     paletteWindow.MoveWindow(x, 9, 255, 32, TRUE);
 }
 
@@ -222,6 +229,8 @@ LRESULT CMainWindow::OnInitMenuPopup(UINT nMsg, WPARAM wParam, LPARAM lParam, BO
     switch (lParam)
     {
         case 0: /* File menu */
+            if ((HMENU)wParam != GetSubMenu(menu, 0))
+                break;
             EnableMenuItem(menu, IDM_FILEASWALLPAPERPLANE,     ENABLED_IF(isAFile));
             EnableMenuItem(menu, IDM_FILEASWALLPAPERCENTERED,  ENABLED_IF(isAFile));
             EnableMenuItem(menu, IDM_FILEASWALLPAPERSTRETCHED, ENABLED_IF(isAFile));
@@ -325,18 +334,33 @@ LRESULT CMainWindow::OnKeyDown(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL& bH
 {
     if (wParam == VK_ESCAPE)
     {
-        if (!imageArea.drawing)
+        HWND hwndCapture = GetCapture();
+        if (hwndCapture)
         {
-            /* Deselect */
-            if ((toolsModel.GetActiveTool() == TOOL_RECTSEL) || (toolsModel.GetActiveTool() == TOOL_FREESEL))
+            if (selectionWindow.m_hWnd == hwndCapture ||
+                imageArea.m_hWnd == hwndCapture ||
+                fullscreenWindow.m_hWnd == hwndCapture ||
+                sizeboxLeftTop.m_hWnd == hwndCapture ||
+                sizeboxCenterTop.m_hWnd == hwndCapture ||
+                sizeboxRightTop.m_hWnd == hwndCapture ||
+                sizeboxLeftCenter.m_hWnd == hwndCapture ||
+                sizeboxRightCenter.m_hWnd == hwndCapture ||
+                sizeboxLeftBottom.m_hWnd == hwndCapture ||
+                sizeboxCenterBottom.m_hWnd == hwndCapture ||
+                sizeboxRightBottom.m_hWnd == hwndCapture)
             {
-                startPaintingL(imageModel.GetDC(), 0, 0, paletteModel.GetFgColor(), paletteModel.GetBgColor());
-                whilePaintingL(imageModel.GetDC(), 0, 0, paletteModel.GetFgColor(), paletteModel.GetBgColor());
-                endPaintingL(imageModel.GetDC(), 0, 0, paletteModel.GetFgColor(), paletteModel.GetBgColor());
-                selectionWindow.ShowWindow(SW_HIDE);
+                SendMessage(hwndCapture, nMsg, wParam, lParam);
             }
         }
-        /* FIXME: also cancel current drawing underway */
+        else
+        {
+            switch (toolsModel.GetActiveTool())
+            {
+                case TOOL_SHAPE: case TOOL_BEZIER:
+                    imageArea.SendMessage(nMsg, wParam, lParam);
+                    break;
+            }
+        }
     }
     return 0;
 }
@@ -645,7 +669,7 @@ LRESULT CMainWindow::OnCommand(UINT nMsg, WPARAM wParam, LPARAM lParam, BOOL& bH
             break;
         case IDM_FORMATICONBAR:
             textEditWindow.ShowWindow(textEditWindow.IsWindowVisible() ? SW_HIDE : SW_SHOW);
-
+            break;
         case IDM_VIEWSHOWGRID:
             showGrid = !showGrid;
             imageArea.Invalidate(FALSE);

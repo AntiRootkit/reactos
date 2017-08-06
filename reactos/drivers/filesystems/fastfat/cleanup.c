@@ -24,6 +24,7 @@ VfatCleanupFile(
     PVFAT_IRP_CONTEXT IrpContext)
 {
     PVFATFCB pFcb;
+    PVFATCCB pCcb;
     PDEVICE_EXTENSION DeviceExt = IrpContext->DeviceExt;
     PFILE_OBJECT FileObject = IrpContext->FileObject;
 
@@ -35,7 +36,7 @@ VfatCleanupFile(
     if (!pFcb)
         return STATUS_SUCCESS;
 
-    if (pFcb->Flags & FCB_IS_VOLUME)
+    if (BooleanFlagOn(pFcb->Flags, FCB_IS_VOLUME))
     {
         pFcb->OpenHandleCount--;
 
@@ -58,6 +59,12 @@ VfatCleanupFile(
             return STATUS_PENDING;
         }
 
+        pCcb = FileObject->FsContext2;
+        if (BooleanFlagOn(pCcb->Flags, CCB_DELETE_ON_CLOSE))
+        {
+            pFcb->Flags |= FCB_DELETE_PENDING;
+        }
+
         /* Notify about the cleanup */
         FsRtlNotifyCleanup(IrpContext->DeviceExt->NotifySync,
                            &(IrpContext->DeviceExt->NotifyList),
@@ -76,16 +83,16 @@ VfatCleanupFile(
                                NULL);
         }
 
-        if (pFcb->Flags & FCB_IS_DIRTY)
+        if (BooleanFlagOn(pFcb->Flags, FCB_IS_DIRTY))
         {
-            VfatUpdateEntry (pFcb);
+            VfatUpdateEntry (pFcb, vfatVolumeIsFatX(DeviceExt));
         }
 
-        if (pFcb->Flags & FCB_DELETE_PENDING &&
+        if (BooleanFlagOn(pFcb->Flags, FCB_DELETE_PENDING) &&
             pFcb->OpenHandleCount == 0)
         {
             if (vfatFCBIsDirectory(pFcb) &&
-                !VfatIsDirectoryEmpty(pFcb))
+                !VfatIsDirectoryEmpty(DeviceExt, pFcb))
             {
                 pFcb->Flags &= ~FCB_DELETE_PENDING;
             }
@@ -109,7 +116,7 @@ VfatCleanupFile(
         /* Uninitialize the cache (should be done even if caching was never initialized) */
         CcUninitializeCacheMap(FileObject, &pFcb->RFCB.FileSize, NULL);
 
-        if (pFcb->Flags & FCB_DELETE_PENDING &&
+        if (BooleanFlagOn(pFcb->Flags, FCB_DELETE_PENDING) &&
             pFcb->OpenHandleCount == 0)
         {
             VfatDelEntry(DeviceExt, pFcb, NULL);
@@ -120,8 +127,8 @@ VfatCleanupFile(
                                         pFcb->PathNameU.Length - pFcb->LongNameU.Length,
                                         NULL,
                                         NULL,
-                                        ((*pFcb->Attributes & FILE_ATTRIBUTE_DIRECTORY) ?
-                                        FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME),
+                                        vfatFCBIsDirectory(pFcb) ?
+                                        FILE_NOTIFY_CHANGE_DIR_NAME : FILE_NOTIFY_CHANGE_FILE_NAME,
                                         FILE_ACTION_REMOVED,
                                         NULL);
         }
@@ -138,7 +145,7 @@ VfatCleanupFile(
     }
 
 #ifdef ENABLE_SWAPOUT
-    if (DeviceExt->Flags & VCB_DISMOUNT_PENDING)
+    if (BooleanFlagOn(DeviceExt->Flags, VCB_DISMOUNT_PENDING))
     {
         VfatCheckForDismount(DeviceExt, FALSE);
     }

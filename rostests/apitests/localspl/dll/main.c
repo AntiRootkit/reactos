@@ -2,7 +2,7 @@
  * PROJECT:     ReactOS Local Spooler API Tests Injected DLL
  * LICENSE:     GNU GPLv2 or any later version as published by the Free Software Foundation
  * PURPOSE:     Main functions
- * COPYRIGHT:   Copyright 2015 Colin Finck <colin@reactos.org>
+ * COPYRIGHT:   Copyright 2015-2016 Colin Finck <colin@reactos.org>
  */
 
 #define __ROS_LONG64__
@@ -26,11 +26,12 @@
 
 // Test list
 extern void func_fpEnumPrinters(void);
+extern void func_fpGetPrintProcessorDirectory(void);
 
 const struct test winetest_testlist[] =
 {
     { "fpEnumPrinters", func_fpEnumPrinters },
-
+    { "fpGetPrintProcessorDirectory", func_fpGetPrintProcessorDirectory },
     { 0, 0 }
 };
 
@@ -64,6 +65,22 @@ GetLocalsplFuncs(LPPRINTPROVIDOR pp)
     }
 
     return TRUE;
+}
+
+PVOID
+GetSpoolssFunc(const char* FunctionName)
+{
+    HMODULE hSpoolss;
+
+    // Get us a handle to the loaded spoolss.dll.
+    hSpoolss = GetModuleHandleW(L"spoolss");
+    if (!hSpoolss)
+    {
+        skip("GetModuleHandleW failed with error %u!\n", GetLastError());
+        return FALSE;
+    }
+
+    return GetProcAddress(hSpoolss, FunctionName);
 }
 
 // Running the tests from the injected DLL and redirecting their output to the pipe.

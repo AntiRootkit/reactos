@@ -39,8 +39,6 @@ LPITEMIDLIST ILCreateFromNetworkPlaceW(LPCWSTR lpNetworkPlace)
     wcscpy((WCHAR*)&pidl->mkid.abID[0], lpNetworkPlace);
     *(WORD*)((char*)pidl + cbData) = 0;
 
-    WNetAddConnectionW(lpNetworkPlace, NULL, NULL);
-
     return pidl;
 }
 #endif
@@ -53,12 +51,31 @@ HRESULT CNetFolderExtractIcon_CreateInstance(LPCITEMIDLIST pidl, REFIID riid, LP
 {
     CComPtr<IDefaultExtractIconInit> initIcon;
     HRESULT hr = SHCreateDefaultExtractIcon(IID_PPV_ARG(IDefaultExtractIconInit, &initIcon));
-    if (FAILED(hr))
-        return NULL;
+    if (FAILED_UNEXPECTEDLY(hr))
+        return hr;
 
     initIcon->SetNormalIcon(swShell32Name, -IDI_SHELL_NETWORK_FOLDER);
 
     return initIcon->QueryInterface(riid, ppvOut);
+}
+
+HRESULT CALLBACK NetFolderMenuCallback(IShellFolder *psf,
+                                       HWND         hwnd,
+                                       IDataObject  *pdtobj,
+                                       UINT         uMsg,
+                                       WPARAM       wParam,
+                                       LPARAM       lParam)
+{
+    switch (uMsg)
+    {
+    case DFM_MERGECONTEXTMENU:
+        return S_OK;
+    case DFM_INVOKECOMMAND:
+    case DFM_INVOKECOMMANDEX:
+    case DFM_GETDEFSTATICID: // Required for Windows 7 to pick a default
+        return S_FALSE;
+    }
+    return E_NOTIMPL;
 }
 
 class CNetFolderEnum :
@@ -77,10 +94,10 @@ class CNetFolderEnum :
 };
 
 static shvheader NetworkPlacesSFHeader[] = {
-    {IDS_SHV_COLUMN8, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 15},
-    {IDS_SHV_COLUMN13, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 10},
+    {IDS_SHV_COLUMN_NAME, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 15},
+    {IDS_SHV_COLUMN_CATEGORY, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 10},
     {IDS_SHV_COLUMN_WORKGROUP, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 15},
-    {IDS_SHV_NETWORKLOCATION, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 15}
+    {IDS_SHV_COLUMN_NETLOCATION, SHCOLSTATE_TYPE_STR | SHCOLSTATE_ONBYDEFAULT, LVCFMT_RIGHT, 15}
 };
 
 #define COLUMN_NAME          0
@@ -257,7 +274,7 @@ HRESULT WINAPI CNetFolder::ParseDisplayName(HWND hwndOwner, LPBC pbcReserved, LP
 */
 HRESULT WINAPI CNetFolder::EnumObjects(HWND hwndOwner, DWORD dwFlags, LPENUMIDLIST *ppEnumIDList)
 {
-    return ShellObjectCreatorInit<CNetFolderEnum>(hwndOwner, dwFlags, IID_IEnumIDList, ppEnumIDList);
+    return ShellObjectCreatorInit<CNetFolderEnum>(hwndOwner, dwFlags, IID_PPV_ARG(IEnumIDList, ppEnumIDList));
 }
 
 /**************************************************************************
@@ -266,31 +283,13 @@ HRESULT WINAPI CNetFolder::EnumObjects(HWND hwndOwner, DWORD dwFlags, LPENUMIDLI
 HRESULT WINAPI CNetFolder::BindToObject(PCUIDLIST_RELATIVE pidl, LPBC pbcReserved, REFIID riid, LPVOID *ppvOut)
 {
 #ifdef HACKY_UNC_PATHS
-    PITEMID_CHILD pidlChild = ILCloneFirst (pidl);
-    if (!pidlChild)
-        return E_FAIL;
+    /* Create the target folder info */
+    PERSIST_FOLDER_TARGET_INFO pfti = {0};
+    pfti.dwAttributes = -1;
+    pfti.csidl = -1;
+    StringCchCopyW(pfti.szTargetParsingName, MAX_PATH, (WCHAR*)pidl->mkid.abID);
 
-    PIDLIST_ABSOLUTE pidlAbsolute = ILCombine(pidlRoot,pidlChild);
-    if (!pidlAbsolute)
-        return E_FAIL;
-
-    CComPtr<IShellFolder> psf;
-    HRESULT hr = SHELL32_CoCreateInitSF(pidlAbsolute, 
-                                        (WCHAR*)pidl->mkid.abID, 
-                                        NULL, 
-                                        &CLSID_ShellFSFolder, 
-                                        -1, 
-                                        IID_PPV_ARG(IShellFolder, &psf));
-    ILFree(pidlChild);
-    ILFree(pidlAbsolute);
-
-    if (FAILED_UNEXPECTEDLY(hr))
-        return hr;
-
-    if (_ILIsPidlSimple (pidl))
-        return psf->QueryInterface(riid, ppvOut);
-    else
-        return psf->BindToObject(ILGetNext (pidl), pbcReserved, riid, ppvOut);
+    return SHELL32_BindToSF(pidlRoot, &pfti, pidl, &CLSID_ShellFSFolder, riid, ppvOut);
 #else
     return E_NOTIMPL;
 #endif
@@ -345,7 +344,8 @@ HRESULT WINAPI CNetFolder::CreateViewObject(HWND hwndOwner, REFIID riid, LPVOID 
     }
     else if (IsEqualIID(riid, IID_IShellView))
     {
-        hr = CDefView_Constructor(this, riid, ppvOut);
+            SFV_CREATE sfvparams = {sizeof(SFV_CREATE), this};
+            hr = SHCreateShellFolderView(&sfvparams, (IShellView**)ppvOut);
     }
     TRACE("-- (%p)->(interface=%p)\n", this, ppvOut);
     return hr;
@@ -421,7 +421,7 @@ HRESULT WINAPI CNetFolder::GetUIObjectOf(HWND hwndOwner, UINT cidl, PCUITEMID_CH
         HKEY hkey;
         UINT cKeys = 0;
         AddClassKeyToArray(L"Folder", &hkey, &cKeys);
-        hr = CDefFolderMenu_Create2(pidlRoot, hwndOwner, cidl, apidl, static_cast<IShellFolder*>(this), NULL, cKeys, &hkey, &pCm);
+        hr = CDefFolderMenu_Create2(pidlRoot, hwndOwner, cidl, apidl, this, NetFolderMenuCallback, cKeys, &hkey, &pCm);
         pObj = pCm;
     }
     else if (IsEqualIID(riid, IID_IDataObject) && (cidl >= 1))

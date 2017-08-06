@@ -2,29 +2,46 @@
  * PROJECT:     ReactOS Spooler API
  * LICENSE:     GNU LGPL v2.1 or any later version as published by the Free Software Foundation
  * PURPOSE:     Functions related to Printers and printing
- * COPYRIGHT:   Copyright 2015 Colin Finck <colin@reactos.org>
+ * COPYRIGHT:   Copyright 2015-2017 Colin Finck <colin@reactos.org>
  */
 
 #include "precomp.h"
 
-static void
-_MarshallUpPrinterInfo(PBYTE pPrinterInfo, DWORD Level)
-{
-    PPRINTER_INFO_1W pPrinterInfo1;
-    PPRINTER_INFO_2W pPrinterInfo2;
+// Local Constants
 
-    // Replace relative offset addresses in the output by absolute pointers.
-    if (Level == 1)
+/** And the award for the most confusingly named setting goes to "Device", for storing the default printer of the current user.
+    Ok, I admit that this has historical reasons. It's still not straightforward in any way though! */
+static const WCHAR wszWindowsKey[] = L"Software\\Microsoft\\Windows NT\\CurrentVersion\\Windows";
+static const WCHAR wszDeviceValue[] = L"Device";
+
+static void
+_MarshallUpPrinterInfo(PBYTE* ppPrinterInfo, DWORD Level)
+{
+    // Replace relative offset addresses in the output by absolute pointers and advance to the next structure.
+    if (Level == 0)
     {
-        pPrinterInfo1 = (PPRINTER_INFO_1W)pPrinterInfo;
+        PPRINTER_INFO_STRESS pPrinterInfo0 = (PPRINTER_INFO_STRESS)(*ppPrinterInfo);
+
+        pPrinterInfo0->pPrinterName = (PWSTR)((ULONG_PTR)pPrinterInfo0->pPrinterName + (ULONG_PTR)pPrinterInfo0);
+
+        if (pPrinterInfo0->pServerName)
+            pPrinterInfo0->pServerName = (PWSTR)((ULONG_PTR)pPrinterInfo0->pServerName + (ULONG_PTR)pPrinterInfo0);
+
+        *ppPrinterInfo += sizeof(PRINTER_INFO_STRESS);
+    }
+    else if (Level == 1)
+    {
+        PPRINTER_INFO_1W pPrinterInfo1 = (PPRINTER_INFO_1W)(*ppPrinterInfo);
 
         pPrinterInfo1->pName = (PWSTR)((ULONG_PTR)pPrinterInfo1->pName + (ULONG_PTR)pPrinterInfo1);
         pPrinterInfo1->pDescription = (PWSTR)((ULONG_PTR)pPrinterInfo1->pDescription + (ULONG_PTR)pPrinterInfo1);
         pPrinterInfo1->pComment = (PWSTR)((ULONG_PTR)pPrinterInfo1->pComment + (ULONG_PTR)pPrinterInfo1);
+
+        *ppPrinterInfo += sizeof(PRINTER_INFO_1W);
     }
     else if (Level == 2)
     {
-        pPrinterInfo2 = (PPRINTER_INFO_2W)pPrinterInfo;
+        PPRINTER_INFO_2W pPrinterInfo2 = (PPRINTER_INFO_2W)(*ppPrinterInfo);
 
         pPrinterInfo2->pPrinterName = (PWSTR)((ULONG_PTR)pPrinterInfo2->pPrinterName + (ULONG_PTR)pPrinterInfo2);
         pPrinterInfo2->pShareName = (PWSTR)((ULONG_PTR)pPrinterInfo2->pShareName + (ULONG_PTR)pPrinterInfo2);
@@ -42,7 +59,66 @@ _MarshallUpPrinterInfo(PBYTE pPrinterInfo, DWORD Level)
             pPrinterInfo2->pServerName = (PWSTR)((ULONG_PTR)pPrinterInfo2->pServerName + (ULONG_PTR)pPrinterInfo2);
 
         if (pPrinterInfo2->pSecurityDescriptor)
-            pPrinterInfo2->pSecurityDescriptor = (PWSTR)((ULONG_PTR)pPrinterInfo2->pSecurityDescriptor + (ULONG_PTR)pPrinterInfo2);
+            pPrinterInfo2->pSecurityDescriptor = (PSECURITY_DESCRIPTOR)((ULONG_PTR)pPrinterInfo2->pSecurityDescriptor + (ULONG_PTR)pPrinterInfo2);
+
+        *ppPrinterInfo += sizeof(PRINTER_INFO_2W);
+    }
+    else if (Level == 3)
+    {
+        PPRINTER_INFO_3 pPrinterInfo3 = (PPRINTER_INFO_3)(*ppPrinterInfo);
+
+        pPrinterInfo3->pSecurityDescriptor = (PSECURITY_DESCRIPTOR)((ULONG_PTR)pPrinterInfo3->pSecurityDescriptor + (ULONG_PTR)pPrinterInfo3);
+
+        *ppPrinterInfo += sizeof(PRINTER_INFO_3);
+    }
+    else if (Level == 4)
+    {
+        PPRINTER_INFO_4W pPrinterInfo4 = (PPRINTER_INFO_4W)(*ppPrinterInfo);
+
+        pPrinterInfo4->pPrinterName = (PWSTR)((ULONG_PTR)pPrinterInfo4->pPrinterName + (ULONG_PTR)pPrinterInfo4);
+
+        if (pPrinterInfo4->pServerName)
+            pPrinterInfo4->pServerName = (PWSTR)((ULONG_PTR)pPrinterInfo4->pServerName + (ULONG_PTR)pPrinterInfo4);
+
+        *ppPrinterInfo += sizeof(PRINTER_INFO_4W);
+    }
+    else if (Level == 5)
+    {
+        PPRINTER_INFO_5W pPrinterInfo5 = (PPRINTER_INFO_5W)(*ppPrinterInfo);
+
+        pPrinterInfo5->pPrinterName = (PWSTR)((ULONG_PTR)pPrinterInfo5->pPrinterName + (ULONG_PTR)pPrinterInfo5);
+        pPrinterInfo5->pPortName = (PWSTR)((ULONG_PTR)pPrinterInfo5->pPortName + (ULONG_PTR)pPrinterInfo5);
+
+        *ppPrinterInfo += sizeof(PRINTER_INFO_5W);
+    }
+    else if (Level == 6)
+    {
+        *ppPrinterInfo += sizeof(PRINTER_INFO_6);
+    }
+    else if (Level == 7)
+    {
+        PPRINTER_INFO_7W pPrinterInfo7 = (PPRINTER_INFO_7W)(*ppPrinterInfo);
+
+        if (pPrinterInfo7->pszObjectGUID)
+            pPrinterInfo7->pszObjectGUID = (PWSTR)((ULONG_PTR)pPrinterInfo7->pszObjectGUID + (ULONG_PTR)pPrinterInfo7);
+
+        *ppPrinterInfo += sizeof(PRINTER_INFO_7W);
+    }
+    else if (Level == 8)
+    {
+        PPRINTER_INFO_8W pPrinterInfo8 = (PPRINTER_INFO_8W)(*ppPrinterInfo);
+
+        pPrinterInfo8->pDevMode = (PDEVMODEW)((ULONG_PTR)pPrinterInfo8->pDevMode + (ULONG_PTR)pPrinterInfo8);
+
+        *ppPrinterInfo += sizeof(PRINTER_INFO_8W);
+    }
+    else if (Level == 9)
+    {
+        PPRINTER_INFO_9W pPrinterInfo9 = (PPRINTER_INFO_9W)(*ppPrinterInfo);
+
+        pPrinterInfo9->pDevMode = (PDEVMODEW)((ULONG_PTR)pPrinterInfo9->pDevMode + (ULONG_PTR)pPrinterInfo9);
+
+        *ppPrinterInfo += sizeof(PRINTER_INFO_9W);
     }
 }
 
@@ -76,7 +152,7 @@ _StartDocPrinterSpooled(PSPOOLER_HANDLE pHandle, PDOC_INFO_1W pDocInfo1, PADDJOB
     if (!pJobInfo1)
     {
         dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
-        ERR("HeapAlloc failed with error %lu!\n", GetLastError());
+        ERR("HeapAlloc failed!\n");
         goto Cleanup;
     }
 
@@ -159,7 +235,7 @@ ClosePrinter(HANDLE hPrinter)
     // Do the RPC call.
     RpcTryExcept
     {
-        dwErrorCode = _RpcClosePrinter(pHandle->hPrinter);
+        dwErrorCode = _RpcClosePrinter(&pHandle->hPrinter);
     }
     RpcExcept(EXCEPTION_EXECUTE_HANDLER)
     {
@@ -178,7 +254,6 @@ ClosePrinter(HANDLE hPrinter)
 Cleanup:
     SetLastError(dwErrorCode);
     return (dwErrorCode == ERROR_SUCCESS);
-
 }
 
 DWORD WINAPI
@@ -306,8 +381,16 @@ BOOL WINAPI
 EnumPrintersW(DWORD Flags, PWSTR Name, DWORD Level, PBYTE pPrinterEnum, DWORD cbBuf, PDWORD pcbNeeded, PDWORD pcReturned)
 {
     DWORD dwErrorCode;
-    DWORD i;
-    PBYTE p = pPrinterEnum;
+
+    // Dismiss invalid levels already at this point.
+    if (Level == 3 || Level > 5)
+    {
+        dwErrorCode = ERROR_INVALID_LEVEL;
+        goto Cleanup;
+    }
+
+    if (cbBuf && pPrinterEnum)
+        ZeroMemory(pPrinterEnum, cbBuf);
 
     // Do the RPC call
     RpcTryExcept
@@ -323,18 +406,14 @@ EnumPrintersW(DWORD Flags, PWSTR Name, DWORD Level, PBYTE pPrinterEnum, DWORD cb
 
     if (dwErrorCode == ERROR_SUCCESS)
     {
-        // Replace relative offset addresses in the output by absolute pointers.
-        for (i = 0; i < *pcReturned; i++)
-        {
-            _MarshallUpPrinterInfo(p, Level);
+        DWORD i;
+        PBYTE p = pPrinterEnum;
 
-            if (Level == 1)
-                p += sizeof(PRINTER_INFO_1W);
-            else if (Level == 2)
-                p += sizeof(PRINTER_INFO_2W);
-        }
+        for (i = 0; i < *pcReturned; i++)
+            _MarshallUpPrinterInfo(&p, Level);
     }
 
+Cleanup:
     SetLastError(dwErrorCode);
     return (dwErrorCode == ERROR_SUCCESS);
 }
@@ -342,13 +421,131 @@ EnumPrintersW(DWORD Flags, PWSTR Name, DWORD Level, PBYTE pPrinterEnum, DWORD cb
 BOOL WINAPI
 GetDefaultPrinterA(LPSTR pszBuffer, LPDWORD pcchBuffer)
 {
-    return FALSE;
+    DWORD dwErrorCode;
+    PWSTR pwszBuffer = NULL;
+
+    // Sanity check.
+    if (!pcchBuffer)
+    {
+        dwErrorCode = ERROR_INVALID_PARAMETER;
+        goto Cleanup;
+    }
+
+    // Check if an ANSI buffer was given and if so, allocate a Unicode buffer of the same size.
+    if (pszBuffer && *pcchBuffer)
+    {
+        pwszBuffer = HeapAlloc(hProcessHeap, 0, *pcchBuffer * sizeof(WCHAR));
+        if (!pwszBuffer)
+        {
+            dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
+            ERR("HeapAlloc failed!\n");
+            goto Cleanup;
+        }
+    }
+
+    if (!GetDefaultPrinterW(pwszBuffer, pcchBuffer))
+    {
+        dwErrorCode = GetLastError();
+        goto Cleanup;
+    }
+
+    dwErrorCode = ERROR_SUCCESS;
+
+Cleanup:
+    if (pwszBuffer)
+        HeapFree(hProcessHeap, 0, pwszBuffer);
+
+    SetLastError(dwErrorCode);
+    return (dwErrorCode == ERROR_SUCCESS);
 }
 
 BOOL WINAPI
 GetDefaultPrinterW(LPWSTR pszBuffer, LPDWORD pcchBuffer)
 {
-    return FALSE;
+    DWORD cbNeeded;
+    DWORD cchInputBuffer;
+    DWORD dwErrorCode;
+    HKEY hWindowsKey = NULL;
+    PWSTR pwszDevice = NULL;
+    PWSTR pwszComma;
+
+    // Sanity check.
+    if (!pcchBuffer)
+    {
+        dwErrorCode = ERROR_INVALID_PARAMETER;
+        goto Cleanup;
+    }
+
+    cchInputBuffer = *pcchBuffer;
+
+    // Open the registry key where the default printer for the current user is stored.
+    dwErrorCode = (DWORD)RegOpenKeyExW(HKEY_CURRENT_USER, wszWindowsKey, 0, KEY_READ, &hWindowsKey);
+    if (dwErrorCode != ERROR_SUCCESS)
+    {
+        ERR("RegOpenKeyExW failed with status %lu!\n", dwErrorCode);
+        goto Cleanup;
+    }
+
+    // Determine the size of the required buffer.
+    dwErrorCode = (DWORD)RegQueryValueExW(hWindowsKey, wszDeviceValue, NULL, NULL, NULL, &cbNeeded);
+    if (dwErrorCode != ERROR_SUCCESS)
+    {
+        ERR("RegQueryValueExW failed with status %lu!\n", dwErrorCode);
+        goto Cleanup;
+    }
+
+    // Allocate it.
+    pwszDevice = HeapAlloc(hProcessHeap, 0, cbNeeded);
+    if (!pwszDevice)
+    {
+        dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
+        ERR("HeapAlloc failed!\n");
+        goto Cleanup;
+    }
+
+    // Now get the actual value.
+    dwErrorCode = RegQueryValueExW(hWindowsKey, wszDeviceValue, NULL, NULL, (PBYTE)pwszDevice, &cbNeeded);
+    if (dwErrorCode != ERROR_SUCCESS)
+    {
+        ERR("RegQueryValueExW failed with status %lu!\n", dwErrorCode);
+        goto Cleanup;
+    }
+
+    // We get a string "<Printer Name>,winspool,<Port>:".
+    // Extract the printer name from it.
+    pwszComma = wcschr(pwszDevice, L',');
+    if (!pwszComma)
+    {
+        ERR("Found no or invalid default printer: %S!\n", pwszDevice);
+        dwErrorCode = ERROR_INVALID_NAME;
+        goto Cleanup;
+    }
+
+    // Store the length of the Printer Name (including the terminating NUL character!) in *pcchBuffer.
+    *pcchBuffer = pwszComma - pwszDevice + 1;
+
+    // Check if the supplied buffer is large enough.
+    if (cchInputBuffer < *pcchBuffer)
+    {
+        dwErrorCode = ERROR_INSUFFICIENT_BUFFER;
+        goto Cleanup;
+    }
+
+    // Copy the default printer.
+    *pwszComma = 0;
+    CopyMemory(pszBuffer, pwszDevice, *pcchBuffer * sizeof(WCHAR));
+
+    dwErrorCode = ERROR_SUCCESS;
+
+Cleanup:
+    if (hWindowsKey)
+        RegCloseKey(hWindowsKey);
+
+    if (pwszDevice)
+        HeapFree(hProcessHeap, 0, pwszDevice);
+
+    SetLastError(dwErrorCode);
+    return (dwErrorCode == ERROR_SUCCESS);
 }
 
 BOOL WINAPI
@@ -372,7 +569,39 @@ GetPrinterDriverW(HANDLE hPrinter, LPWSTR pEnvironment, DWORD Level, LPBYTE pDri
 BOOL WINAPI
 GetPrinterW(HANDLE hPrinter, DWORD Level, LPBYTE pPrinter, DWORD cbBuf, LPDWORD pcbNeeded)
 {
-    return FALSE;
+    DWORD dwErrorCode;
+
+    // Dismiss invalid levels already at this point.
+    if (Level > 9)
+    {
+        dwErrorCode = ERROR_INVALID_LEVEL;
+        goto Cleanup;
+    }
+
+    if (cbBuf && pPrinter)
+        ZeroMemory(pPrinter, cbBuf);
+
+    // Do the RPC call
+    RpcTryExcept
+    {
+        dwErrorCode = _RpcGetPrinter(hPrinter, Level, pPrinter, cbBuf, pcbNeeded);
+    }
+    RpcExcept(EXCEPTION_EXECUTE_HANDLER)
+    {
+        dwErrorCode = RpcExceptionCode();
+        ERR("_RpcGetPrinter failed with exception code %lu!\n", dwErrorCode);
+    }
+    RpcEndExcept;
+
+    if (dwErrorCode == ERROR_SUCCESS)
+    {
+        PBYTE p = pPrinter;
+        _MarshallUpPrinterInfo(&p, Level);
+    }
+
+Cleanup:
+    SetLastError(dwErrorCode);
+    return (dwErrorCode == ERROR_SUCCESS);
 }
 
 BOOL WINAPI
@@ -391,7 +620,8 @@ OpenPrinterA(LPSTR pPrinterName, LPHANDLE phPrinter, LPPRINTER_DEFAULTSA pDefaul
         pwszPrinterName = HeapAlloc(hProcessHeap, 0, (cch + 1) * sizeof(WCHAR));
         if (!pwszPrinterName)
         {
-            ERR("HeapAlloc failed for pwszPrinterName with last error %lu!\n", GetLastError());
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            ERR("HeapAlloc failed!\n");
             goto Cleanup;
         }
 
@@ -410,7 +640,8 @@ OpenPrinterA(LPSTR pPrinterName, LPHANDLE phPrinter, LPPRINTER_DEFAULTSA pDefaul
             wDefault.pDatatype = HeapAlloc(hProcessHeap, 0, (cch + 1) * sizeof(WCHAR));
             if (!wDefault.pDatatype)
             {
-                ERR("HeapAlloc failed for wDefault.pDatatype with last error %lu!\n", GetLastError());
+                SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+                ERR("HeapAlloc failed!\n");
                 goto Cleanup;
             }
 
@@ -446,6 +677,13 @@ OpenPrinterW(LPWSTR pPrinterName, LPHANDLE phPrinter, LPPRINTER_DEFAULTSW pDefau
     WINSPOOL_DEVMODE_CONTAINER DevModeContainer = { 0 };
     ACCESS_MASK AccessRequired = 0;
 
+    // Sanity check
+    if (!phPrinter)
+    {
+        dwErrorCode = ERROR_INVALID_PARAMETER;
+        goto Cleanup;
+    }
+
     // Prepare the additional parameters in the format required by _RpcOpenPrinter
     if (pDefault)
     {
@@ -474,7 +712,7 @@ OpenPrinterW(LPWSTR pPrinterName, LPHANDLE phPrinter, LPPRINTER_DEFAULTSW pDefau
         if (!pHandle)
         {
             dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
-            ERR("HeapAlloc failed with error %lu!\n", GetLastError());
+            ERR("HeapAlloc failed!\n");
             goto Cleanup;
         }
 
@@ -528,6 +766,148 @@ ResetPrinterW(HANDLE hPrinter, PPRINTER_DEFAULTSW pDefault)
 }
 
 BOOL WINAPI
+SetDefaultPrinterA(LPCSTR pszPrinter)
+{
+    BOOL bReturnValue = FALSE;
+    DWORD cch;
+    PWSTR pwszPrinter = NULL;
+
+    if (pszPrinter)
+    {
+        // Convert pszPrinter to a Unicode string pwszPrinter
+        cch = strlen(pszPrinter);
+
+        pwszPrinter = HeapAlloc(hProcessHeap, 0, (cch + 1) * sizeof(WCHAR));
+        if (!pwszPrinter)
+        {
+            SetLastError(ERROR_NOT_ENOUGH_MEMORY);
+            ERR("HeapAlloc failed!\n");
+            goto Cleanup;
+        }
+
+        MultiByteToWideChar(CP_ACP, 0, pszPrinter, -1, pwszPrinter, cch + 1);
+    }
+
+    bReturnValue = SetDefaultPrinterW(pwszPrinter);
+
+Cleanup:
+    if (pwszPrinter)
+        HeapFree(hProcessHeap, 0, pwszPrinter);
+
+    return bReturnValue;
+}
+
+BOOL WINAPI
+SetDefaultPrinterW(LPCWSTR pszPrinter)
+{
+    const WCHAR wszDevicesKey[] = L"Software\\Microsoft\\Windows NT\\CurrentVersion\\Devices";
+
+    DWORD cbDeviceValueData;
+    DWORD cbPrinterValueData = 0;
+    DWORD cchPrinter;
+    DWORD dwErrorCode;
+    HKEY hDevicesKey = NULL;
+    HKEY hWindowsKey = NULL;
+    PWSTR pwszDeviceValueData = NULL;
+    WCHAR wszPrinter[MAX_PRINTER_NAME + 1];
+
+    // Open the Devices registry key.
+    dwErrorCode = (DWORD)RegOpenKeyExW(HKEY_CURRENT_USER, wszDevicesKey, 0, KEY_READ, &hDevicesKey);
+    if (dwErrorCode != ERROR_SUCCESS)
+    {
+        ERR("RegOpenKeyExW failed with status %lu!\n", dwErrorCode);
+        goto Cleanup;
+    }
+
+    // Did the caller give us a printer to set as default?
+    if (pszPrinter && *pszPrinter)
+    {
+        // Check if the given printer exists and query the value data size.
+        dwErrorCode = (DWORD)RegQueryValueExW(hDevicesKey, pszPrinter, NULL, NULL, NULL, &cbPrinterValueData);
+        if (dwErrorCode == ERROR_FILE_NOT_FOUND)
+        {
+            dwErrorCode = ERROR_INVALID_PRINTER_NAME;
+            goto Cleanup;
+        }
+        else if (dwErrorCode != ERROR_SUCCESS)
+        {
+            ERR("RegQueryValueExW failed with status %lu!\n", dwErrorCode);
+            goto Cleanup;
+        }
+
+        cchPrinter = wcslen(pszPrinter);
+    }
+    else
+    {
+        // If there is already a default printer, we're done!
+        cchPrinter = _countof(wszPrinter);
+        if (GetDefaultPrinterW(wszPrinter, &cchPrinter))
+        {
+            dwErrorCode = ERROR_SUCCESS;
+            goto Cleanup;
+        }
+
+        // Otherwise, get us the first printer from the "Devices" key to later set it as default and query the value data size.
+        cchPrinter = _countof(wszPrinter);
+        dwErrorCode = (DWORD)RegEnumValueW(hDevicesKey, 0, wszPrinter, &cchPrinter, NULL, NULL, NULL, &cbPrinterValueData);
+        if (dwErrorCode != ERROR_MORE_DATA)
+            goto Cleanup;
+
+        pszPrinter = wszPrinter;
+    }
+
+    // We now need to query the value data, which has the format "winspool,<Port>:"
+    // and make "<Printer Name>,winspool,<Port>:" out of it.
+    // Allocate a buffer large enough for the final data.
+    cbDeviceValueData = (cchPrinter + 1) * sizeof(WCHAR) + cbPrinterValueData;
+    pwszDeviceValueData = HeapAlloc(hProcessHeap, 0, cbDeviceValueData);
+    if (!pwszDeviceValueData)
+    {
+        dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
+        ERR("HeapAlloc failed!\n");
+        goto Cleanup;
+    }
+
+    // Copy the Printer Name and a comma into it.
+    CopyMemory(pwszDeviceValueData, pszPrinter, cchPrinter * sizeof(WCHAR));
+    pwszDeviceValueData[cchPrinter] = L',';
+
+    // Append the value data, which has the format "winspool,<Port>:"
+    dwErrorCode = (DWORD)RegQueryValueExW(hDevicesKey, pszPrinter, NULL, NULL, (PBYTE)&pwszDeviceValueData[cchPrinter + 1], &cbPrinterValueData);
+    if (dwErrorCode != ERROR_SUCCESS)
+        goto Cleanup;
+
+    // Open the Windows registry key.
+    dwErrorCode = (DWORD)RegOpenKeyExW(HKEY_CURRENT_USER, wszWindowsKey, 0, KEY_SET_VALUE, &hWindowsKey);
+    if (dwErrorCode != ERROR_SUCCESS)
+    {
+        ERR("RegOpenKeyExW failed with status %lu!\n", dwErrorCode);
+        goto Cleanup;
+    }
+
+    // Store our new default printer.
+    dwErrorCode = (DWORD)RegSetValueExW(hWindowsKey, wszDeviceValue, 0, REG_SZ, (PBYTE)pwszDeviceValueData, cbDeviceValueData);
+    if (dwErrorCode != ERROR_SUCCESS)
+    {
+        ERR("RegSetValueExW failed with status %lu!\n", dwErrorCode);
+        goto Cleanup;
+    }
+
+Cleanup:
+    if (hDevicesKey)
+        RegCloseKey(hDevicesKey);
+
+    if (hWindowsKey)
+        RegCloseKey(hWindowsKey);
+
+    if (pwszDeviceValueData)
+        HeapFree(hProcessHeap, 0, pwszDeviceValueData);
+
+    SetLastError(dwErrorCode);
+    return (dwErrorCode == ERROR_SUCCESS);
+}
+
+BOOL WINAPI
 SetPrinterW(HANDLE hPrinter, DWORD Level, PBYTE pPrinter, DWORD Command)
 {
     UNIMPLEMENTED;
@@ -565,7 +945,8 @@ StartDocPrinterA(HANDLE hPrinter, DWORD Level, PBYTE pDocInfo)
         wDocInfo1.pDatatype = HeapAlloc(hProcessHeap, 0, (cch + 1) * sizeof(WCHAR));
         if (!wDocInfo1.pDatatype)
         {
-            ERR("HeapAlloc failed for wDocInfo1.pDatatype with last error %lu!\n", GetLastError());
+            dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
+            ERR("HeapAlloc failed!\n");
             goto Cleanup;
         }
 
@@ -580,7 +961,8 @@ StartDocPrinterA(HANDLE hPrinter, DWORD Level, PBYTE pDocInfo)
         wDocInfo1.pDocName = HeapAlloc(hProcessHeap, 0, (cch + 1) * sizeof(WCHAR));
         if (!wDocInfo1.pDocName)
         {
-            ERR("HeapAlloc failed for wDocInfo1.pDocName with last error %lu!\n", GetLastError());
+            dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
+            ERR("HeapAlloc failed!\n");
             goto Cleanup;
         }
 
@@ -595,7 +977,8 @@ StartDocPrinterA(HANDLE hPrinter, DWORD Level, PBYTE pDocInfo)
         wDocInfo1.pOutputFile = HeapAlloc(hProcessHeap, 0, (cch + 1) * sizeof(WCHAR));
         if (!wDocInfo1.pOutputFile)
         {
-            ERR("HeapAlloc failed for wDocInfo1.pOutputFile with last error %lu!\n", GetLastError());
+            dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
+            ERR("HeapAlloc failed!\n");
             goto Cleanup;
         }
 
@@ -669,7 +1052,7 @@ StartDocPrinterW(HANDLE hPrinter, DWORD Level, PBYTE pDocInfo)
         if (!pAddJobInfo1)
         {
             dwErrorCode = ERROR_NOT_ENOUGH_MEMORY;
-            ERR("HeapAlloc failed with error %lu!\n", GetLastError());
+            ERR("HeapAlloc failed!\n");
             goto Cleanup;
         }
 

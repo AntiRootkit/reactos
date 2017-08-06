@@ -38,8 +38,6 @@ BEGIN
         MENUITEM "", -1, MFT_SEPARATOR
         MENUITEM "Einfügen", FCIDM_SHVIEW_INSERT
         MENUITEM "Einfügen als Verweis", FCIDM_SHVIEW_INSERTLINK
-        MENUITEM "", -1, MFT_SEPARATOR
-        MENUITEM "&Eigenschaften", FCIDM_SHVIEW_PROPERTIES
     END
 END
 
@@ -434,7 +432,7 @@ BEGIN
     PUSHBUTTON "Auf a&lle Ordner anwenden", 14001, 60, 50, 90, 14, WS_TABSTOP
     PUSHBUTTON "&Alle Ordner zurücksetzen", 14002, 160, 50, 90, 14, WS_TABSTOP
     LTEXT "Erweiterte Einstellungen:", -1, 7, 80, 100, 10
-    CONTROL "", 14003, "SysListView32", LVS_REPORT | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_SHAREIMAGELISTS | WS_BORDER | WS_TABSTOP, 7, 90, 249, 140
+    CONTROL "", 14003, "SysTreeView32", WS_BORDER | WS_CHILD | WS_VISIBLE | WS_VSCROLL | WS_TABSTOP | TVS_DISABLEDRAGDROP | TVS_LINESATROOT, 7, 90, 249, 120
     PUSHBUTTON "&Wiederherstellen", 14004, 191, 235, 65, 14, WS_TABSTOP
 END
 
@@ -637,24 +635,22 @@ END
 STRINGTABLE
 BEGIN
     /* columns in the shellview */
-    IDS_SHV_COLUMN1 "Datei"
-    IDS_SHV_COLUMN2 "Größe"
-    IDS_SHV_COLUMN3 "Typ"
-    IDS_SHV_COLUMN4 "Geändert"
-    IDS_SHV_COLUMN5 "Attribute"
-    IDS_SHV_COLUMN6 "Gesamtgröße"
-    IDS_SHV_COLUMN7 "Freier Speicher"
-    IDS_SHV_COLUMN8 "Name"
-    IDS_SHV_COLUMN9 "Kommentar"
-    IDS_SHV_COLUMN10 "Besitzer"
-    IDS_SHV_COLUMN11 "Gruppe"
-    IDS_SHV_COLUMN12 "Dateinamen"
-    IDS_SHV_COLUMN13 "Kategorie"
+    IDS_SHV_COLUMN_NAME "Name"
+    IDS_SHV_COLUMN_SIZE "Größe"
+    IDS_SHV_COLUMN_TYPE "Typ"
+    IDS_SHV_COLUMN_MODIFIED "Geändert"
+    IDS_SHV_COLUMN_ATTRIBUTES "Attribute"
+    IDS_SHV_COLUMN_DISK_CAPACITY "Gesamtgröße"
+    IDS_SHV_COLUMN_DISK_AVAILABLE "Freier Speicher"
+    IDS_SHV_COLUMN_OWNER "Besitzer"
+    IDS_SHV_COLUMN_GROUP "Gruppe"
+    IDS_SHV_COLUMN_FILENAME "Dateinamen"
+    IDS_SHV_COLUMN_CATEGORY "Kategorie"
     IDS_SHV_COLUMN_DELFROM "Ursprung"
     IDS_SHV_COLUMN_DELDATE "Gelöscht am"
     IDS_SHV_COLUMN_FONTTYPE "Schriftartentyp"
     IDS_SHV_COLUMN_WORKGROUP "Arbeitsgruppe"
-    IDS_SHV_NETWORKLOCATION "Netzwerkstandort"
+    IDS_SHV_COLUMN_NETLOCATION "Netzwerkstandort"
     IDS_SHV_COLUMN_DOCUMENTS "Dokumente"
     IDS_SHV_COLUMN_STATUS "Status"
     IDS_SHV_COLUMN_COMMENTS "Kommentare"
@@ -803,6 +799,7 @@ BEGIN
     IDS_SCR_FILE "Bildschirmschoner"
     IDS_SYS_FILE "Systemdatei"
     IDS_VXD_FILE "Virtueller Gerätetreiber"
+    IDS_ANY_FILE "%s-file"
 
     IDS_OPEN_VERB "Öffnen"
     IDS_EXPLORE_VERB "Durchsuchen"
@@ -837,4 +834,24 @@ BEGIN
     IDS_MENU_EMPTY "(Leer)"
     IDS_OBJECTS "%d Objekte"
     IDS_OBJECTS_SELECTED "%d Objekte ausgewählt"
+
+    IDS_ADVANCED_FOLDER "Files and Folders"
+    IDS_ADVANCED_NET_CRAWLER "Automatically search for network folders and printers"
+    IDS_ADVANCED_FOLDER_SIZE_TIP "Display file size information in folder tips"
+    IDS_ADVANCED_FRIENDLY_TREE "Display simple folder view in Explorer's Folders list"
+    IDS_ADVANCED_WEB_VIEW_BARRICADE "Display the contents of system folders"
+    IDS_ADVANCED_SHOW_FULL_PATH_ADDRESS "Display the full path in address bar"
+    IDS_ADVANCED_SHOW_FULL_PATH "Display the full path in the title bar"
+    IDS_ADVANCED_DISABLE_THUMB_CACHE "Do not cache thumbnails"
+    IDS_ADVANCED_HIDDEN "Hidden files and folders"
+    IDS_ADVANCED_DONT_SHOW_HIDDEN "Do not show hidden files and folders"
+    IDS_ADVANCED_SHOW_HIDDEN "Show hidden files and folders"
+    IDS_ADVANCED_HIDE_FILE_EXT "Hide extensions for known file types"
+    IDS_ADVANCED_SUPER_HIDDEN "Hide protected operating system files (Recommended)"
+    IDS_ADVANCED_DESKTOP_PROCESS "Launch folder windows in a separate process"
+    IDS_ADVANCED_CLASSIC_VIEW_STATE "Remember each folder's view settings"
+    IDS_ADVANCED_PERSIST_BROWSERS "Restore previous folder windows at logon"
+    IDS_ADVANCED_CONTROL_PANEL_IN_MY_COMPUTER "Show Control Panel in My Computer"
+    IDS_ADVANCED_SHOW_COMP_COLOR "Show encrypted or compressed NTFS files in color"
+    IDS_ADVANCED_SHOW_INFO_TIP "Show pop-up description for folder and desktop items"
 END

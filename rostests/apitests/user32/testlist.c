@@ -22,8 +22,10 @@ extern void func_GetWindowPlacement(void);
 extern void func_InitializeLpkHooks(void);
 extern void func_LoadImage(void);
 extern void func_LookupIconIdFromDirectoryEx(void);
+extern void func_NextDlgItem(void);
 extern void func_RealGetWindowClass(void);
 extern void func_RegisterHotKey(void);
+extern void func_RegisterClassEx(void);
 extern void func_ScrollDC(void);
 extern void func_ScrollWindowEx(void);
 extern void func_SendMessageTimeout(void);
@@ -32,6 +34,7 @@ extern void func_SetCursorPos(void);
 extern void func_SetParent(void);
 extern void func_SetProp(void);
 extern void func_SetScrollInfo(void);
+extern void func_SetScrollRange(void);
 extern void func_SystemParametersInfo(void);
 extern void func_TrackMouseEvent(void);
 extern void func_WndProc(void);
@@ -58,8 +61,10 @@ const struct test winetest_testlist[] =
     { "InitializeLpkHooks", func_InitializeLpkHooks },
     { "LoadImage", func_LoadImage },
     { "LookupIconIdFromDirectoryEx", func_LookupIconIdFromDirectoryEx },
+    { "NextDlgItem", func_NextDlgItem },
     { "RealGetWindowClass", func_RealGetWindowClass },
     { "RegisterHotKey", func_RegisterHotKey },
+    { "RegisterClassEx", func_RegisterClassEx },
     { "ScrollDC", func_ScrollDC },
     { "ScrollWindowEx", func_ScrollWindowEx },
     { "SendMessageTimeout", func_SendMessageTimeout },
@@ -68,6 +73,7 @@ const struct test winetest_testlist[] =
     { "SetParent", func_SetParent },
     { "SetProp", func_SetProp },
     { "SetScrollInfo", func_SetScrollInfo },
+    { "SetScrollRange", func_SetScrollRange },
     { "SystemParametersInfo", func_SystemParametersInfo },
     { "TrackMouseEvent", func_TrackMouseEvent },
     { "WndProc", func_WndProc },

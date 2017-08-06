@@ -105,6 +105,7 @@ static const GUID IID_TestPS = { 0x66666666, 0x8888, 0x7777, { 0x66, 0x66, 0x55,
 
 DEFINE_GUID(CLSID_InProcFreeMarshaler, 0x0000033a,0x0000,0x0000,0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
 DEFINE_GUID(CLSID_testclsid, 0xacd014c7,0x9535,0x4fac,0x8b,0x53,0xa4,0x8c,0xa7,0xf4,0xd7,0x26);
+DEFINE_GUID(CLSID_GlobalOptions, 0x0000034b,0x0000,0x0000,0xc0,0x00,0x00,0x00,0x00,0x00,0x00,0x46);
 
 static const WCHAR stdfont[] = {'S','t','d','F','o','n','t',0};
 static const WCHAR wszNonExistent[] = {'N','o','n','E','x','i','s','t','e','n','t',0};
@@ -363,11 +364,13 @@ static void test_ProgIDFromCLSID(void)
         CoTaskMemFree(progid);
 
         /* classes without default progid, progid list is not used */
+        progid = (void *)0xdeadbeef;
         hr = ProgIDFromCLSID(&IID_Testiface5, &progid);
-        ok(hr == REGDB_E_CLASSNOTREG, "got 0x%08x\n", hr);
+        ok(hr == REGDB_E_CLASSNOTREG && progid == NULL, "got 0x%08x, progid %p\n", hr, progid);
 
+        progid = (void *)0xdeadbeef;
         hr = ProgIDFromCLSID(&IID_Testiface6, &progid);
-        ok(hr == REGDB_E_CLASSNOTREG, "got 0x%08x\n", hr);
+        ok(hr == REGDB_E_CLASSNOTREG && progid == NULL, "got 0x%08x, progid %p\n", hr, progid);
 
         pDeactivateActCtx(0, cookie);
         pReleaseActCtx(handle);
@@ -626,6 +629,26 @@ static DWORD CALLBACK ole_initialize_thread(LPVOID pv)
     return hr;
 }
 
+#define test_apt_type(t, q, t_t, t_q) _test_apt_type(t, q, t_t, t_q, __LINE__)
+static void _test_apt_type(APTTYPE expected_type, APTTYPEQUALIFIER expected_qualifier, BOOL todo_type,
+        BOOL todo_qualifier, int line)
+{
+    APTTYPEQUALIFIER qualifier = ~0u;
+    APTTYPE type = ~0u;
+    HRESULT hr;
+
+    if (!pCoGetApartmentType)
+        return;
+
+    hr = pCoGetApartmentType(&type, &qualifier);
+    ok_(__FILE__, line)(hr == S_OK || hr == CO_E_NOTINITIALIZED, "Unexpected return code: 0x%08x\n", hr);
+todo_wine_if(todo_type)
+    ok_(__FILE__, line)(type == expected_type, "Wrong apartment type %d, expected %d\n", type, expected_type);
+todo_wine_if(todo_qualifier)
+    ok_(__FILE__, line)(qualifier == expected_qualifier, "Wrong apartment qualifier %d, expected %d\n", qualifier,
+        expected_qualifier);
+}
+
 static void test_CoCreateInstance(void)
 {
     HRESULT hr;
@@ -670,6 +693,8 @@ static void test_CoCreateInstance(void)
     /* show that COM doesn't have to be initialized for multi-threaded apartments if another
        thread has already done so */
 
+    test_apt_type(APTTYPE_CURRENT, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
+
     info.wait = CreateEventA(NULL, TRUE, FALSE, NULL);
     ok(info.wait != NULL, "CreateEvent failed with error %d\n", GetLastError());
 
@@ -680,6 +705,8 @@ static void test_CoCreateInstance(void)
     ok(thread != NULL, "CreateThread failed with error %d\n", GetLastError());
 
     ok( !WaitForSingleObject(info.wait, 10000 ), "wait timed out\n" );
+
+    test_apt_type(APTTYPE_MTA, APTTYPEQUALIFIER_IMPLICIT_MTA, TRUE, TRUE);
 
     pUnk = (IUnknown *)0xdeadbeef;
     hr = CoCreateInstance(rclsid, NULL, CLSCTX_INPROC_SERVER, &IID_IUnknown, (void **)&pUnk);
@@ -696,6 +723,8 @@ static void test_CoCreateInstance(void)
     CloseHandle(thread);
     CloseHandle(info.wait);
     CloseHandle(info.stop);
+
+    test_apt_type(APTTYPE_CURRENT, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
 }
 
 static void test_CoGetClassObject(void)
@@ -722,6 +751,8 @@ static void test_CoGetClassObject(void)
     /* show that COM doesn't have to be initialized for multi-threaded apartments if another
        thread has already done so */
 
+    test_apt_type(APTTYPE_CURRENT, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
+
     info.wait = CreateEventA(NULL, TRUE, FALSE, NULL);
     ok(info.wait != NULL, "CreateEvent failed with error %d\n", GetLastError());
 
@@ -732,6 +763,8 @@ static void test_CoGetClassObject(void)
     ok(thread != NULL, "CreateThread failed with error %d\n", GetLastError());
 
     ok( !WaitForSingleObject(info.wait, 10000), "wait timed out\n" );
+
+    test_apt_type(APTTYPE_MTA, APTTYPEQUALIFIER_IMPLICIT_MTA, TRUE, TRUE);
 
     pUnk = (IUnknown *)0xdeadbeef;
     hr = CoGetClassObject(rclsid, CLSCTX_INPROC_SERVER, NULL, &IID_IUnknown, (void **)&pUnk);
@@ -753,6 +786,8 @@ static void test_CoGetClassObject(void)
     CloseHandle(thread);
     CloseHandle(info.wait);
     CloseHandle(info.stop);
+
+    test_apt_type(APTTYPE_CURRENT, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
 
     if (!pRegOverridePredefKey)
     {
@@ -1807,6 +1842,8 @@ static void test_CoGetObjectContext(void)
     /* show that COM doesn't have to be initialized for multi-threaded apartments if another
        thread has already done so */
 
+    test_apt_type(APTTYPE_CURRENT, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
+
     info.wait = CreateEventA(NULL, TRUE, FALSE, NULL);
     ok(info.wait != NULL, "CreateEvent failed with error %d\n", GetLastError());
 
@@ -1817,6 +1854,8 @@ static void test_CoGetObjectContext(void)
     ok(thread != NULL, "CreateThread failed with error %d\n", GetLastError());
 
     ok( !WaitForSingleObject(info.wait, 10000), "wait timed out\n" );
+
+    test_apt_type(APTTYPE_MTA, APTTYPEQUALIFIER_IMPLICIT_MTA, TRUE, TRUE);
 
     pComThreadingInfo = NULL;
     hr = pCoGetObjectContext(&IID_IComThreadingInfo, (void **)&pComThreadingInfo);
@@ -1851,7 +1890,11 @@ static void test_CoGetObjectContext(void)
     CloseHandle(info.wait);
     CloseHandle(info.stop);
 
+    test_apt_type(APTTYPE_CURRENT, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
+
     pCoInitializeEx(NULL, COINIT_APARTMENTTHREADED);
+
+    test_apt_type(APTTYPE_MAINSTA, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
 
     hr = pCoGetObjectContext(&IID_IComThreadingInfo, (void **)&pComThreadingInfo);
     ok_ole_success(hr, "CoGetObjectContext");
@@ -2037,6 +2080,8 @@ static void test_CoGetContextToken(void)
     /* show that COM doesn't have to be initialized for multi-threaded apartments if another
        thread has already done so */
 
+    test_apt_type(APTTYPE_CURRENT, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
+
     info.wait = CreateEventA(NULL, TRUE, FALSE, NULL);
     ok(info.wait != NULL, "CreateEvent failed with error %d\n", GetLastError());
 
@@ -2047,6 +2092,8 @@ static void test_CoGetContextToken(void)
     ok(thread != NULL, "CreateThread failed with error %d\n", GetLastError());
 
     ok( !WaitForSingleObject(info.wait, 10000), "wait timed out\n" );
+
+    test_apt_type(APTTYPE_MTA, APTTYPEQUALIFIER_IMPLICIT_MTA, TRUE, TRUE);
 
     token = 0;
     hr = pCoGetContextToken(&token);
@@ -2068,7 +2115,11 @@ static void test_CoGetContextToken(void)
     CloseHandle(info.wait);
     CloseHandle(info.stop);
 
+    test_apt_type(APTTYPE_CURRENT, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
+
     CoInitialize(NULL);
+
+    test_apt_type(APTTYPE_MAINSTA, APTTYPEQUALIFIER_NONE, FALSE, FALSE);
 
     hr = pCoGetContextToken(NULL);
     ok(hr == E_POINTER, "Expected E_POINTER, got 0x%08x\n", hr);
@@ -2888,10 +2939,8 @@ static void test_CoGetMalloc(void)
     IMalloc *imalloc;
     HRESULT hr;
 
-if (0) /* crashes on native */
-{
-    hr = CoGetMalloc(0, NULL);
-}
+    if (0) /* crashes on native */
+        hr = CoGetMalloc(0, NULL);
 
     imalloc = (void*)0xdeadbeef;
     hr = CoGetMalloc(0, &imalloc);
@@ -3521,6 +3570,32 @@ todo_wine {
     CoUninitialize();
 }
 
+static void test_GlobalOptions(void)
+{
+    IGlobalOptions *global_options;
+    HRESULT hres;
+
+    CoInitialize(NULL);
+
+    hres = CoCreateInstance(&CLSID_GlobalOptions, NULL, CLSCTX_INPROC_SERVER,
+            &IID_IGlobalOptions, (void**)&global_options);
+    ok(hres == S_OK || broken(hres == E_NOINTERFACE), "CoCreateInstance(CLSID_GlobalOptions) failed: %08x\n", hres);
+    if(FAILED(hres))
+    {
+        win_skip("CLSID_GlobalOptions not available\n");
+        CoUninitialize();
+        return;
+    }
+
+    IGlobalOptions_Release(global_options);
+
+    hres = CoCreateInstance(&CLSID_GlobalOptions, (IUnknown*)0xdeadbeef, CLSCTX_INPROC_SERVER,
+            &IID_IGlobalOptions, (void**)&global_options);
+    ok(hres == E_INVALIDARG, "CoCreateInstance(CLSID_GlobalOptions) failed: %08x\n", hres);
+
+    CoUninitialize();
+}
+
 static void init_funcs(void)
 {
     HMODULE hOle32 = GetModuleHandleA("ole32");
@@ -3592,4 +3667,5 @@ START_TEST(compobj)
     test_CoGetCurrentLogicalThreadId();
     test_IInitializeSpy();
     test_CoGetInstanceFromFile();
+    test_GlobalOptions();
 }

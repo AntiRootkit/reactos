@@ -5,6 +5,7 @@ include_directories(include)
 # subdirectories containing special-purpose drivers
 #
 add_subdirectory(example)
+add_subdirectory(hidparse)
 add_subdirectory(kernel32)
 add_subdirectory(ntos_cc)
 add_subdirectory(ntos_io)
@@ -20,6 +21,7 @@ list(APPEND COMMON_SOURCE
     rtl/RtlMemory.c
     rtl/RtlRegistry.c
     rtl/RtlSplayTree.c
+    rtl/RtlStack.c
     rtl/RtlUnicodeString.c)
 
 #
@@ -101,7 +103,7 @@ add_importlibs(kmtest_drv ntoskrnl hal)
 add_dependencies(kmtest_drv bugcodes xdk)
 add_target_compile_definitions(kmtest_drv KMT_KERNEL_MODE NTDDI_VERSION=NTDDI_WS03SP1)
 #add_pch(kmtest_drv include/kmt_test.h)
-add_cd_file(TARGET kmtest_drv DESTINATION reactos/bin FOR all)
+add_rostests_file(TARGET kmtest_drv)
 
 add_library(kmtest_printf
     kmtest_drv/printf_stubs.c
@@ -122,11 +124,14 @@ list(APPEND KMTEST_SOURCE
     kmtest/testlist.c
 
     example/Example_user.c
+    hidparse/HidP_user.c
+    kernel32/FileAttributes_user.c
     kernel32/FindFile_user.c
     ntos_cc/CcCopyRead_user.c
     ntos_io/IoCreateFile_user.c
     ntos_io/IoDeviceObject_user.c
     ntos_io/IoReadWrite_user.c
+    ntos_mm/MmMapLockedPagesSpecifyCache_user.c
     ntos_mm/NtCreateSection_user.c
     ntos_po/PoIrp_user.c
     tcpip/TcpIp_user.c
@@ -141,6 +146,7 @@ add_importlibs(kmtest advapi32 ws2_32 msvcrt kernel32 ntdll)
 add_target_compile_definitions(kmtest KMT_USER_MODE)
 #add_pch(kmtest include/kmt_test.h)
 set_target_properties(kmtest PROPERTIES OUTPUT_NAME "kmtest_")
+#add_rostests_file(TARGET kmtest)
 add_cd_file(TARGET kmtest DESTINATION reactos/bin FOR all)
 
 #
@@ -150,11 +156,13 @@ add_custom_target(kmtest_drivers)
 add_dependencies(kmtest_drivers
     kmtest_drv
     example_drv
-    findfile_drv
+    hidp_drv
     iocreatefile_drv
     iodeviceobject_drv
     iohelper_drv
     ioreadwrite_drv
+    kernel32_drv
+    mmmaplockedpagesspecifycache_drv
     ntcreatesection_drv
     poirp_drv
     tcpip_drv

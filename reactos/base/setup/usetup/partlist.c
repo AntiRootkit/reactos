@@ -1935,6 +1935,27 @@ DrawPartitionList(
             LastLine++;
         }
 
+        if (CurrentPartLineFound == FALSE)
+        {
+            Entry2 = DiskEntry->LogicalPartListHead.Flink;
+            while (Entry2 != &DiskEntry->LogicalPartListHead)
+            {
+                PartEntry = CONTAINING_RECORD(Entry2, PARTENTRY, ListEntry);
+                if (PartEntry == List->CurrentPartition)
+                {
+                    CurrentPartLineFound = TRUE;
+                }
+
+                Entry2 = Entry2->Flink;
+                if (CurrentPartLineFound == FALSE)
+                {
+                    CurrentPartLine++;
+                }
+
+                LastLine++;
+            }
+        }
+
         if (DiskEntry == List->CurrentDisk)
         {
             CurrentDiskLineFound = TRUE;
@@ -3024,6 +3045,13 @@ DeleteCurrentPartition(
         return;
     }
 
+    /* Clear the system disk and partition pointers if the system partition will be deleted */
+    if (List->SystemPartition == List->CurrentPartition)
+    {
+        List->SystemDisk = NULL;
+        List->SystemPartition = NULL;
+    }
+
     DiskEntry = List->CurrentDisk;
     PartEntry = List->CurrentPartition;
 
@@ -3522,8 +3550,8 @@ PrimaryPartitionCreationChecks(
     if (PartEntry->IsPartitioned == TRUE)
         return ERROR_NEW_PARTITION;
 
-    /* Fail if there are more than 4 partitions in the list */
-    if (GetPrimaryPartitionCount(DiskEntry) > 4)
+    /* Fail if there are already 4 primary partitions in the list */
+    if (GetPrimaryPartitionCount(DiskEntry) >= 4)
         return ERROR_PARTITION_TABLE_FULL;
 
     return ERROR_SUCCESS;
@@ -3544,8 +3572,8 @@ ExtendedPartitionCreationChecks(
     if (PartEntry->IsPartitioned == TRUE)
         return ERROR_NEW_PARTITION;
 
-    /* Fail if there are more than 4 partitions in the list */
-    if (GetPrimaryPartitionCount(DiskEntry) > 4)
+    /* Fail if there are already 4 primary partitions in the list */
+    if (GetPrimaryPartitionCount(DiskEntry) >= 4)
         return ERROR_PARTITION_TABLE_FULL;
 
     /* Fail if there is another extended partition in the list */

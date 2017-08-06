@@ -190,6 +190,7 @@ static HRESULT abort_hres;
 static BOOL have_IHttpNegotiate2, use_bscex, is_async_prot;
 static BOOL test_redirect, use_cache_file, callback_read, no_callback, test_abort;
 static WCHAR cache_file_name[MAX_PATH];
+static WCHAR http_cache_file[MAX_PATH];
 static BOOL only_check_prot_args = FALSE;
 static BOOL invalid_cn_accepted = FALSE;
 static BOOL abort_start = FALSE;
@@ -1935,6 +1936,14 @@ static HRESULT WINAPI statusclb_OnStopBinding(IBindStatusCallbackEx *iface, HRES
             ok( WaitForSingleObject(complete_event2, 90000) == WAIT_OBJECT_0, "wait timed out\n" );
     }
 
+    if(test_protocol == HTTP_TEST && !emulate_protocol && http_cache_file[0]) {
+        HANDLE file = CreateFileW(http_cache_file, DELETE, FILE_SHARE_DELETE, NULL,
+                                  OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        ok(file == INVALID_HANDLE_VALUE, "expected INVALID_HANDLE_VALUE, got %p\n", file);
+        ok(GetLastError() == ERROR_SHARING_VIOLATION, "expected ERROR_SHARING_VIOLATION, got %u\n", GetLastError());
+        http_cache_file[0] = 0;
+    }
+
     return S_OK;
 }
 
@@ -1955,6 +1964,31 @@ static HRESULT WINAPI statusclb_GetBindInfo(IBindStatusCallbackEx *iface, DWORD 
     pbindinfo->cbSize = cbSize;
 
     return S_OK;
+}
+
+static void test_stream_seek(IStream *stream)
+{
+    ULARGE_INTEGER new_pos;
+    LARGE_INTEGER pos;
+    HRESULT hres;
+
+    pos.QuadPart = 0;
+    new_pos.QuadPart = 0xdeadbeef;
+    hres = IStream_Seek(stream, pos, STREAM_SEEK_SET, &new_pos);
+    ok(hres == S_OK, "Seek failed: %08x\n", hres);
+    ok(!new_pos.QuadPart, "new_pos.QuadPart != 0\n");
+
+    pos.QuadPart = 0;
+    new_pos.QuadPart = 0xdeadbeef;
+    hres = IStream_Seek(stream, pos, STREAM_SEEK_END, &new_pos);
+    ok(hres == S_OK, "Seek failed: %08x\n", hres);
+    ok(new_pos.QuadPart, "new_pos.QuadPart = 0\n");
+
+    pos.QuadPart = 0;
+    new_pos.QuadPart = 0xdeadbeef;
+    hres = IStream_Seek(stream, pos, 100, &new_pos);
+    ok(hres == E_FAIL, "Seek failed: %08x\n", hres);
+    ok(new_pos.QuadPart == 0xdeadbeef, "unexpected new_pos.QuadPart\n");
 }
 
 static HRESULT WINAPI statusclb_OnDataAvailable(IBindStatusCallbackEx *iface, DWORD grfBSCF,
@@ -2003,24 +2037,28 @@ static HRESULT WINAPI statusclb_OnDataAvailable(IBindStatusCallbackEx *iface, DW
     ok(pstgmed->pUnkForRelease != NULL, "pUnkForRelease == NULL\n");
 
     switch(pstgmed->tymed) {
-    case TYMED_ISTREAM:
+    case TYMED_ISTREAM: {
+        IStream *stream = U(*pstgmed).pstm;
+
+        ok(stream != NULL, "U(*pstgmed).pstm == NULL\n");
+
         if(grfBSCF & BSCF_FIRSTDATANOTIFICATION) {
             STATSTG stat;
 
-            hres = IStream_Write(U(*pstgmed).pstm, buf, 10, NULL);
+            hres = IStream_Write(stream, buf, 10, NULL);
             ok(hres == STG_E_ACCESSDENIED,
                "Write failed: %08x, expected STG_E_ACCESSDENIED\n", hres);
 
-            hres = IStream_Commit(U(*pstgmed).pstm, 0);
+            hres = IStream_Commit(stream, 0);
             ok(hres == E_NOTIMPL, "Commit failed: %08x, expected E_NOTIMPL\n", hres);
 
-            hres = IStream_Revert(U(*pstgmed).pstm);
+            hres = IStream_Revert(stream);
             ok(hres == E_NOTIMPL, "Revert failed: %08x, expected E_NOTIMPL\n", hres);
 
-            hres = IStream_Stat(U(*pstgmed).pstm, NULL, STATFLAG_NONAME);
+            hres = IStream_Stat(stream, NULL, STATFLAG_NONAME);
             ok(hres == E_FAIL, "hres = %x\n", hres);
             if(use_cache_file && emulate_protocol) {
-                hres = IStream_Stat(U(*pstgmed).pstm, &stat, STATFLAG_DEFAULT);
+                hres = IStream_Stat(stream, &stat, STATFLAG_DEFAULT);
                 ok(hres == S_OK, "hres = %x\n", hres);
                 ok(!lstrcmpW(stat.pwcsName, cache_file_name),
                         "stat.pwcsName = %s, cache_file_name = %s\n",
@@ -2029,7 +2067,7 @@ static HRESULT WINAPI statusclb_OnDataAvailable(IBindStatusCallbackEx *iface, DW
                 ok(U(stat.cbSize).LowPart == (bindf&BINDF_ASYNCHRONOUS?0:6500),
                         "stat.cbSize.LowPart = %u\n", U(stat.cbSize).LowPart);
             } else {
-                hres = IStream_Stat(U(*pstgmed).pstm, &stat, STATFLAG_NONAME);
+                hres = IStream_Stat(stream, &stat, STATFLAG_NONAME);
                 ok(hres == S_OK, "hres = %x\n", hres);
                 ok(!stat.pwcsName || broken(stat.pwcsName!=NULL),
                         "stat.pwcsName = %s\n", wine_dbgstr_w(stat.pwcsName));
@@ -2042,17 +2080,19 @@ static HRESULT WINAPI statusclb_OnDataAvailable(IBindStatusCallbackEx *iface, DW
             ok(stat.reserved == 0, "stat.reserved = %x\n", stat.reserved);
         }
 
-        ok(U(*pstgmed).pstm != NULL, "U(*pstgmed).pstm == NULL\n");
         if(callback_read) {
             do {
-                hres = IStream_Read(U(*pstgmed).pstm, buf, 512, &readed);
+                hres = IStream_Read(stream, buf, 512, &readed);
                 if(test_protocol == HTTP_TEST && emulate_protocol && readed)
                     ok(buf[0] == (use_cache_file && !(bindf&BINDF_ASYNCHRONOUS) ? 'X' : '?'), "buf[0] = '%c'\n", buf[0]);
             }while(hres == S_OK);
             ok(hres == S_FALSE || hres == E_PENDING, "IStream_Read returned %08x\n", hres);
         }
-        break;
 
+        if(use_cache_file && (grfBSCF & BSCF_FIRSTDATANOTIFICATION) && !(bindf & BINDF_PULLDATA))
+            test_stream_seek(stream);
+        break;
+    }
     case TYMED_FILE:
         if(test_protocol == FILE_TEST)
             ok(!lstrcmpW(pstgmed->u.lpszFileName, file_url+7),
@@ -2060,6 +2100,8 @@ static HRESULT WINAPI statusclb_OnDataAvailable(IBindStatusCallbackEx *iface, DW
         else if(emulate_protocol)
             ok(!lstrcmpW(pstgmed->u.lpszFileName, cache_fileW),
                "unexpected file name %s\n", wine_dbgstr_w(pstgmed->u.lpszFileName));
+        else if(test_protocol == HTTP_TEST)
+            lstrcpyW(http_cache_file, pstgmed->u.lpszFileName);
         else
             ok(pstgmed->u.lpszFileName != NULL, "lpszFileName == NULL\n");
     }
@@ -3418,10 +3460,7 @@ static void test_BindToObject(int protocol, DWORD flags, HRESULT exhres)
     }
 
     ok(IMoniker_Release(mon) == 0, "mon should be destroyed here\n");
-    if(test_protocol != HTTP_TEST || emulate_protocol || !(bindf & BINDF_ASYNCHRONOUS))
-        ok(IBindCtx_Release(bctx) == 0, "bctx should be destroyed here\n");
-    else
-        IBindCtx_Release(bctx);
+    IBindCtx_Release(bctx);
 
     if(emulate_protocol)
         CoRevokeClassObject(regid);

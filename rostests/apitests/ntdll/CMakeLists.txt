@@ -1,6 +1,7 @@
 
 list(APPEND SOURCE
     LdrEnumResources.c
+    NtAcceptConnectPort.c
     NtAllocateVirtualMemory.c
     NtApphelpCacheControl.c
     NtContinue.c
@@ -9,6 +10,7 @@ list(APPEND SOURCE
     NtCreateThread.c
     NtDeleteKey.c
     NtFreeVirtualMemory.c
+    NtLoadUnloadKey.c
     NtMapViewOfSection.c
     NtMutant.c
     NtOpenProcessToken.c
@@ -28,6 +30,7 @@ list(APPEND SOURCE
     RtlDeleteAce.c
     RtlDetermineDosPathNameType.c
     RtlDoesFileExists.c
+    RtlDosApplyFileIsolationRedirection_Ustr.c
     RtlDosPathNameToNtPathName_U.c
     RtlDosSearchPath_U.c
     RtlDosSearchPath_Ustr.c
@@ -38,10 +41,13 @@ list(APPEND SOURCE
     RtlGetFullPathName_UstrEx.c
     RtlGetLengthWithoutTrailingPathSeperators.c
     RtlGetLongestNtPathLength.c
+    RtlHandle.c
     RtlImageRvaToVa.c
     RtlInitializeBitMap.c
     RtlIsNameLegalDOS8Dot3.c
     RtlMemoryStream.c
+    RtlNtPathNameToDosPathName.c
+    RtlpEnsureBufferSize.c
     RtlReAllocateHeap.c
     RtlUpcaseUnicodeStringToCountedOemString.c
     StackOverflow.c
@@ -62,4 +68,9 @@ if(NOT MSVC)
     set_source_files_properties(RtlGetFullPathName_UstrEx.c PROPERTIES COMPILE_FLAGS "-Wno-format")
 endif()
 
-add_cd_file(TARGET ntdll_apitest DESTINATION reactos/bin FOR all)
+add_rostests_file(TARGET ntdll_apitest)
+add_rostests_file(TARGET ntdll_apitest SUBDIR testdata)
+# These are empty files
+add_rostests_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/ntdll_apitest.exe.local" SUBDIR testdata)
+add_rostests_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/shell32.dll" SUBDIR testdata)
+add_rostests_file(FILE "${CMAKE_CURRENT_SOURCE_DIR}/test.dll" SUBDIR testdata)
